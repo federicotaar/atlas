@@ -45,6 +45,34 @@ jobs:
         working-directory: desktop
         run: npx --yes @tauri-apps/cli@^2 build
 
+      - name: Smoke test - avvio e render su Xvfb (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb imagemagick x11-utils
+          APPIMAGE=$(readlink -f "$(ls desktop/target/release/bundle/appimage/*.AppImage | head -1)")
+          chmod +x "$APPIMAGE"
+          cd /tmp && "$APPIMAGE" --appimage-extract >/dev/null
+          Xvfb :99 -screen 0 1280x800x24 &
+          sleep 2
+          DISPLAY=:99 /tmp/squashfs-root/AppRun &
+          APP_PID=$!
+          sleep 25
+          echo "--- finestre aperte:"
+          DISPLAY=:99 xwininfo -root -children | grep -i atlas || echo "NESSUNA FINESTRA ATLAS"
+          DISPLAY=:99 import -window root /tmp/atlas-desktop-smoke.png
+          echo "--- statistiche pixel (stddev > 0 = render non vuoto):"
+          identify -format "mean=%[mean] stddev=%[standard-deviation] size=%wx%h\n" /tmp/atlas-desktop-smoke.png
+          kill $APP_PID || true
+
+      - name: Artifact smoke screenshot
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: atlas-desktop-smoke-linux
+          path: /tmp/atlas-desktop-smoke.png
+          if-no-files-found: error
+
       - name: Artifact Linux
         if: runner.os == 'Linux'
         uses: actions/upload-artifact@v4
