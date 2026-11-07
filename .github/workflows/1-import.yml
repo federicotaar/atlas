@@ -1,0 +1,25 @@
+name: import
+on:
+  push:
+    paths:
+      - '*.zip'
+permissions:
+  contents: write
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Import zip
+        run: |
+          ZIP="$(ls ./*.zip | head -n1)"
+          unzip -o "$ZIP" -d .
+          rm -f "$ZIP"
+          rm -f .github/workflows/1-import.yml
+      - name: Commit
+        run: |
+          git config user.name "atlas-import"
+          git config user.email "import@localhost"
+          git add -A
+          git commit -m "Import ATLAS phase-0 source"
+          git push
