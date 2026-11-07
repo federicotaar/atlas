@@ -59,10 +59,78 @@ def db_user(db_session):
     return user
 
 
+TEST_CODE = "123456"
+
+
+@pytest.fixture(autouse=True)
+def fake_codes_worker(monkeypatch):
+    """Worker codici finto: nessuna rete, firma Ed25519 reale.
+
+    Ogni test riceve una coppia di chiavi fresca; la pubblica va in settings
+    (come in produzione) e _post e' sostituito con l'implementazione in
+    memoria: richiesta codice (codice fisso 123456), verifica con consumo
+    atomico e attestazione firmata.
+    """
+    import base64
+    import json
+    import time
+    import uuid as _uuid
+
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+    from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
+
+    from app.config import get_settings
+    from app.services import codes as codes_svc
+
+    priv = Ed25519PrivateKey.generate()
+    pub_raw = priv.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw)
+    def b64u(b):
+        return base64.urlsafe_b64encode(b).rstrip(b"=").decode()
+
+    state: dict = {}
+
+    def sign(email: str, purpose: str, ttl: int = 300) -> str:
+        now = int(time.time())
+        payload = json.dumps({
+            "iss": "atlas-codes", "email": email, "purpose": purpose,
+            "iat": now, "exp": now + ttl, "jti": _uuid.uuid4().hex,
+        }).encode()
+        return b64u(payload) + "." + b64u(priv.sign(payload))
+
+    def fake_post(path: str, payload: dict):
+        email = str(payload.get("email", "")).lower()
+        purpose = payload.get("purpose")
+        if purpose not in ("register", "login"):
+            return 400, {"error": "bad_purpose"}
+        if path.endswith("/request"):
+            state[(email, purpose)] = {"code": TEST_CODE, "consumed": False}
+            return 200, {"ok": True, "ttl_seconds": 600}
+        row = state.get((email, purpose))
+        if not row:
+            return 400, {"ok": False, "error": "no_code"}
+        if row["consumed"]:
+            return 400, {"ok": False, "error": "already_used"}
+        if payload.get("code") != row["code"]:
+            return 400, {"ok": False, "error": "wrong_code"}
+        row["consumed"] = True
+        return 200, {"ok": True, "attestation": sign(email, purpose)}
+
+    monkeypatch.setattr(get_settings(), "codes_api_url", "https://codes.test")
+    monkeypatch.setattr(get_settings(), "codes_public_key", b64u(pub_raw))
+    monkeypatch.setattr(codes_svc, "_post", fake_post)
+    state["sign"] = sign
+    state["priv"] = priv
+    return state
+
+
 def make_user(client: TestClient, prefix: str = "user") -> dict:
     """Registra un utente e ritorna header auth + email."""
     email = f"{prefix}-{uuid.uuid4().hex[:10]}@example.com"
-    r = client.post("/auth/register", json={"email": email, "password": "password-segreta-1"})
+    client.post("/auth/codes/request", json={"email": email, "purpose": "register"})
+    r = client.post("/auth/codes/check", json={"email": email, "code": TEST_CODE})
+    assert r.status_code == 200, r.text
+    signup_token = r.json()["signup_token"]
+    r = client.post("/auth/register", json={"email": email, "password": "password-segreta-1", "signup_token": signup_token})
     assert r.status_code == 201, r.text
     token = r.json()["token"]
     return {"headers": {"Authorization": f"Bearer {token}"}, "email": email, "token": token}

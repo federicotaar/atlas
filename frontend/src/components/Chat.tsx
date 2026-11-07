@@ -7,7 +7,7 @@ interface Turn {
   response: AskResponse;
 }
 
-export default function Chat({ onLogout }: { onLogout: () => void }) {
+export default function Chat() {
   const [turns, setTurns] = useState<Turn[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -33,25 +33,44 @@ export default function Chat({ onLogout }: { onLogout: () => void }) {
   }
 
   return (
-    <div>
-      {turns.map((t, i) => (
-        <div className="msg" key={i}>
-          <div><strong>Tu:</strong> {t.question}</div>
-          <div style={{ marginTop: "0.5rem", whiteSpace: "pre-wrap" }}><strong>ATLAS:</strong> {t.response.answer}</div>
-          {t.response.citations.length > 0 && (
-            <ul className="cits">
-              {t.response.citations.map((c) => <li key={c.memory_id}>{formatCitation(c)}</li>)}
-            </ul>
-          )}
+    <div className="chat">
+      {turns.length === 0 && (
+        <div className="empty-chat">
+          <img src="/atlas-logo.png" alt="" />
+          <div className="hello">Come posso aiutarti?</div>
+          <div className="hint">Fai una domanda, oppure scrivi "ricorda che ..." per salvare una memoria.</div>
         </div>
-      ))}
+      )}
+      {turns.length > 0 && (
+        <div className="turns">
+          {turns.map((t, i) => (
+            <div className="turn" key={i}>
+              <div className="bubble user">
+                <div className="bubble-label">Tu</div>
+                {t.question}
+              </div>
+              <div className="bubble atlas">
+                <div className="bubble-label">
+                  <img className="avatar" src="/atlas-logo.png" alt="" />
+                  ATLAS
+                </div>
+                <div className="answer">{t.response.answer}</div>
+                {t.response.citations.length > 0 && (
+                  <ul className="cits">
+                    {t.response.citations.map((c) => <li key={c.memory_id}>{formatCitation(c)}</li>)}
+                  </ul>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
       {error && <div className="err">{error}</div>}
-      <form onSubmit={send}>
+      <form className="composer" onSubmit={send}>
         <input value={input} onChange={(e) => setInput(e.target.value)}
                placeholder='Chiedi qualcosa, oppure "ricorda che ..."' />
-        <button disabled={busy}>{busy ? "..." : "Invia"}</button>
+        <button className="primary" disabled={busy}>{busy ? "..." : "Invia"}</button>
       </form>
-      <button style={{ marginTop: "1rem", background: "#374151" }} onClick={onLogout}>Esci</button>
     </div>
   );
 }

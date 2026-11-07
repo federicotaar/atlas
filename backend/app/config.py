@@ -12,6 +12,12 @@ class Settings(BaseSettings):
     jwt_secret: str = "dev-secret-change-me"
     jwt_ttl_minutes: int = 60 * 24
 
+    # API codici email (worker Cloudflare). La chiave pubblica Ed25519 NON e'
+    # un segreto: serve solo a verificare le attestazioni firmate dal worker.
+    codes_api_url: str = "https://atlas.federicotaranu.site"
+    codes_public_key: str = ""  # base64url della chiave pubblica Ed25519 (x del JWK)
+    codes_timeout_s: float = 10.0
+
     ollama_base_url: str = "http://localhost:11434"
     ollama_embed_model: str = "nomic-embed-text"
     ollama_llm_model: str = "llama3.2"
