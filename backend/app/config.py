@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     # API codici email (worker Cloudflare). La chiave pubblica Ed25519 NON e'
     # un segreto: serve solo a verificare le attestazioni firmate dal worker.
     codes_api_url: str = "https://atlas.federicotaranu.site"
-    codes_public_key: str = ""  # base64url della chiave pubblica Ed25519 (x del JWK)
+    codes_public_key: str = "fuF-owcEmKTrOHw-nlBa4qDxruzoCLw8JGSGctua0FA"  # base64url della chiave pubblica Ed25519 (x del JWK)
     codes_timeout_s: float = 10.0
 
     ollama_base_url: str = "http://localhost:11434"
