@@ -15,10 +15,13 @@ jobs:
           ZIP="$(ls ./*.zip | sort -V | tail -n1)"
           unzip -o "$ZIP" -d .
           rm -f ./*.zip
+          rm -rf frontend/node_modules backend/.venv
       - name: Commit
         run: |
           git config user.name "atlas-import"
           git config user.email "import@localhost"
+          MSG="$(cat COMMIT_MSG.txt 2>/dev/null || echo 'Import ATLAS source update')"
+          rm -f COMMIT_MSG.txt
           git add -A
-          git commit -m "Import ATLAS source update"
+          git commit -m "$MSG"
           git push
