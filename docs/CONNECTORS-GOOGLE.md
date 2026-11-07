@@ -1,19 +1,32 @@
-# Connettori Google reali (calendario read-only, bozze Gmail)
+# Connettori Google reali (opzionali: calendario read-only, bozze Gmail)
 
 Fase 4 della specifica: "Primo connettore di sola lettura (calendario), poi
 bozze email." I connettori fittizi restano per i test; quelli reali usano
 OAuth gratuito e token cifrati (spec sicurezza: mai in chiaro, mai nei log).
 
+**Opzionali.** ATLAS funziona senza account Google: i connettori reali si
+attivano solo se chi installa ATLAS collega il PROPRIO account Google,
+seguendo il setup qui sotto sulla propria macchina. Nessun account viene
+collegato dall'installazione di base.
+
 ## Cosa fa (e cosa non fa)
 
 - `google_calendar`: SOLA LETTURA (scope `calendar.readonly`), livello 0.
 - `google_gmail`: crea BOZZE (scope `gmail.compose`), livello 1; annullare
-  l'azione elimina la bozza. **Non esiste alcuna operazione di invio.**
+  l'azione elimina la bozza. **Non esiste alcuna operazione di invio nel
+  codice.** Nota sul permesso: lo scope Google `gmail.compose` e definito
+  da Google come "Gestisci bozze e invia email", quindi il consenso OAuth
+  mostra anche l'invio; ATLAS non lo usa mai (nessuna chiamata di invio
+  esiste nel codice e i test lo verificano).
 - I token (access + refresh) sono cifrati con Fernet in
   `connector_credentials` usando `ATLAS_CREDENTIALS_KEY`. Senza chiave il
   salvataggio fallisce chiuso (503): niente credenziali in chiaro, mai.
 
-## Setup (gratuito, circa 10 minuti, un passaggio richiede l'account di Fred)
+## Setup (opzionale, gratuito, circa 10 minuti, sul tuo account Google)
+
+Chi installa ATLAS e vuole i connettori reali esegue questi passaggi con il
+proprio account Google, sulla propria macchina. Client ID e secret restano
+nel `.env` locale: non vanno mai in chat, nel repo o in un sito pubblico.
 
 1. Google Cloud Console (console.cloud.google.com) -> nuovo progetto
    (gratuito, nessuna carta richiesta).
@@ -22,7 +35,7 @@ OAuth gratuito e token cifrati (spec sicurezza: mai in chiaro, mai nei log).
    (gratuita, max 100 utenti di test) con la tua email tra i test user.
 4. Credenziali -> "Crea ID client OAuth" -> **Applicazione web**, URI di
    reindirizzamento: `http://127.0.0.1:8000/connectors/google/callback`.
-5. Nel `.env` di ATLAS:
+5. Nel `.env` di ATLAS (solo sulla tua macchina):
    ```
    ATLAS_GOOGLE_CLIENT_ID=...apps.googleusercontent.com
    ATLAS_GOOGLE_CLIENT_SECRET=...
@@ -44,6 +57,6 @@ OAuth gratuito e token cifrati (spec sicurezza: mai in chiaro, mai nei log).
 I test (`tests/test_google_connectors.py`, 14 test) coprono OAuth (state
 firmato, scadenza, fail-closed senza chiave), cifratura round-trip e chiave
 sbagliata, mapping eventi, bozza + annullamento, isolamento utenti, 401/403.
-Le chiamate Google sono sostituite con monkeypatch: nessun account reale
-viene toccato in CI. La validazione con account reale richiede il consenso
-di Fred al passaggio 4-5: e l'unico passaggio non automatizzabile.
+Le chiamate Google sono sostituite con monkeypatch e fixture sintetiche:
+nessun account reale viene toccato in CI. La validazione con account reale
+resta un passaggio manuale e volontario di chi installa ATLAS.
