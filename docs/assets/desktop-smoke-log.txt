@@ -1,0 +1,14 @@
+esito: finestra-trovata
+pixel: mean=0 stddev=0 size=1280x800
+--- finestre X (xwininfo -root -children):
+
+xwininfo: Window id: 0x21f (the root window) (has no name)
+
+  Root window id: 0x21f (the root window) (has no name)
+  Parent window id: 0x0 (none)
+     1 child:
+     0x200001 "atlas-desktop": ("atlas-desktop" "Atlas-desktop")  10x10+10+10  +10+10
+
+--- processi app/webkit:
+runner      7836  0.4  0.5 696000 97960 ?        Sl   14:10   0:00 atlas-desktop
+--- log app (stdout+stderr):
