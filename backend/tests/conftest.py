@@ -115,8 +115,11 @@ def fake_codes_worker(monkeypatch):
         row["consumed"] = True
         return 200, {"ok": True, "attestation": sign(email, purpose)}
 
-    monkeypatch.setattr(get_settings(), "codes_api_url", "https://codes.test")
-    monkeypatch.setattr(get_settings(), "codes_public_key", b64u(pub_raw))
+    # Via env + cache_clear: i valori sopravvivono ai get_settings.cache_clear()
+    # che alcuni test (es. connettori Google) fanno per iniettare la propria config.
+    monkeypatch.setenv("ATLAS_CODES_API_URL", "https://codes.test")
+    monkeypatch.setenv("ATLAS_CODES_PUBLIC_KEY", b64u(pub_raw))
+    get_settings.cache_clear()
     monkeypatch.setattr(codes_svc, "_post", fake_post)
     state["sign"] = sign
     state["priv"] = priv
