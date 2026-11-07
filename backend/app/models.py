@@ -95,3 +95,66 @@ class ActionLog(Base):
     action: Mapped[str] = mapped_column(Text, nullable=False)
     detail: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
+
+
+class Entity(Base):
+    """Knowledge Graph fase 1 (spec 5C): persone, luoghi, progetti, concetti.
+    L'estrazione automatica crea proposte 'pending': diventano reali solo con
+    conferma esplicita (spec: 'parte come proposta da confermare')."""
+
+    __tablename__ = "entities"
+    __table_args__ = (
+        CheckConstraint("kind IN ('person','place','project','concept')", name="entities_kind_check"),
+        CheckConstraint("status IN ('pending','confirmed','rejected')", name="entities_status_check"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    kind: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(Text, nullable=False, default="pending")
+    memory_id: Mapped[uuid.UUID | None] = mapped_column(PGUUID(as_uuid=True), ForeignKey("memories.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
+
+
+class Relationship(Base):
+    __tablename__ = "relationships"
+    __table_args__ = (
+        CheckConstraint("status IN ('pending','confirmed','rejected')", name="relationships_status_check"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    from_entity_id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("entities.id"), nullable=False)
+    to_entity_id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("entities.id"), nullable=False)
+    relation: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(Text, nullable=False, default="pending")
+    source_id: Mapped[uuid.UUID | None] = mapped_column(PGUUID(as_uuid=True), ForeignKey("sources.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
+
+    from_entity: Mapped[Entity] = relationship("Entity", foreign_keys=[from_entity_id], lazy="joined")
+    to_entity: Mapped[Entity] = relationship("Entity", foreign_keys=[to_entity_id], lazy="joined")
+
+
+class Conversation(Base):
+    """Conversazioni salvate (fase 1): ogni scambio /ask persiste i due turni."""
+
+    __tablename__ = "conversations"
+
+    id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
+
+
+class Message(Base):
+    __tablename__ = "messages"
+    __table_args__ = (
+        CheckConstraint("role IN ('user','assistant')", name="messages_role_check"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    conversation_id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("conversations.id"), nullable=False)
+    role: Mapped[str] = mapped_column(Text, nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())

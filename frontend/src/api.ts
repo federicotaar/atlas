@@ -48,6 +48,7 @@ export interface AskResponse {
   answer: string;
   citations: Citation[];
   saved_memory: { id: string; content: string } | null;
+  conversation_id: string | null;
 }
 
 export const api = {
@@ -55,5 +56,9 @@ export const api = {
     req<{ token: string }>("/auth/register", { method: "POST", body: JSON.stringify({ email, password }) }),
   login: (email: string, password: string) =>
     req<{ token: string }>("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
-  ask: (text: string) => req<AskResponse>("/ask", { method: "POST", body: JSON.stringify({ text }) }),
+  ask: (text: string, conversationId?: string) =>
+    req<AskResponse>("/ask", {
+      method: "POST",
+      body: JSON.stringify(conversationId ? { text, conversation_id: conversationId } : { text }),
+    }),
 };

@@ -7,8 +7,9 @@ from ..config import get_settings
 from ..db import get_db
 from ..errors import AtlasError
 from ..models import Memory, User
-from ..schemas import MemoryCreatedOut, MemoryIn, MemoryOut, SearchHitOut, SearchIn
+from ..schemas import ContradictionPairOut, MemoryCreatedOut, MemoryIn, MemoryOut, SearchHitOut, SearchIn
 from ..security import get_current_user
+from ..services.contradictions import find_contradictions_for, find_open_contradictions
 from ..services.memory import create_memory, log_action
 from ..services.retrieval import search_memories
 from ..services.router import ModelRouter
@@ -26,11 +27,30 @@ def create(body: MemoryIn, db: Session = Depends(get_db),
         db, settings, user.id, body.content, body.kind, body.origin, body.source_id,
         body.event_at, body.confidence, body.supersedes, embedding,
     )
+    contradictions = find_contradictions_for(db, settings, user.id, body.content,
+                                             exclude_id=memory.id)
     log_action(db, user.id, "memory.create", {"memory_id": str(memory.id), "embedder": model_used})
     return MemoryCreatedOut(
         memory=MemoryOut.model_validate(memory),
         possible_duplicates=[MemoryOut.model_validate(d) for d in duplicates],
+        possible_contradictions=[MemoryOut.model_validate(m) for m, _ in contradictions],
     )
+
+
+@router.get("/contradictions", response_model=list[ContradictionPairOut])
+def open_contradictions(db: Session = Depends(get_db),
+                        user: User = Depends(get_current_user)) -> list[ContradictionPairOut]:
+    """Vista on-demand: coppie di memorie attive in possibile contraddizione."""
+    settings = get_settings()
+    pairs = find_open_contradictions(db, settings, user.id)
+    return [
+        ContradictionPairOut(
+            memory=MemoryOut.model_validate(a),
+            conflicts_with=MemoryOut.model_validate(b),
+            shared_terms=shared,
+        )
+        for a, b, shared in pairs
+    ]
 
 
 @router.get("/{memory_id}", response_model=MemoryOut)

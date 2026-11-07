@@ -12,6 +12,7 @@ export default function Chat({ onLogout }: { onLogout: () => void }) {
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [conversationId, setConversationId] = useState<string | null>(null);
 
   async function send(e: React.FormEvent) {
     e.preventDefault();
@@ -20,7 +21,8 @@ export default function Chat({ onLogout }: { onLogout: () => void }) {
     setBusy(true);
     setError(null);
     try {
-      const response = await api.ask(text);
+      const response = await api.ask(text, conversationId ?? undefined);
+      if (response.conversation_id) setConversationId(response.conversation_id);
       setTurns((t) => [...t, { question: text, response }]);
       setInput("");
     } catch (err) {

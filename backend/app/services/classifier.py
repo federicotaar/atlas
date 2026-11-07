@@ -1,6 +1,6 @@
 """Classificatore di richieste fase 0 (spec 5A passo 1), basato su regole.
 
-Tipi: question | new_info | action_request | analysis
+Tipi: question | new_info | action_request | analysis | project_status
 Le action_request non vengono eseguite: le azioni sono fase 4 della roadmap e
 richiedono l'Action Engine con permessi. Fase 0 risponde spiegandolo.
 """
@@ -22,6 +22,10 @@ SAVE_HINTS = (
 ANALYSIS_HINTS = (
     "analizza", "riassumi", "riepilogo", "sintetizza", "analize", "summarize", "riepiloga",
 )
+PROJECT_STATUS_HINTS = (
+    "a che punto", "stato del progetto", "come va il progetto", "come procede",
+    "aggiornamento sul progetto", "aggiornamenti sul progetto",
+)
 
 
 def classify(text: str) -> str:
@@ -30,6 +34,8 @@ def classify(text: str) -> str:
         return "action_request"
     if any(t.startswith(k) or f" {k}" in t for k in SAVE_HINTS):
         return "new_info"
+    if any(k in t for k in PROJECT_STATUS_HINTS):
+        return "project_status"
     if any(k in t for k in ANALYSIS_HINTS):
         return "analysis"
     if "?" in t or any(t.startswith(k) for k in QUESTION_HINTS):

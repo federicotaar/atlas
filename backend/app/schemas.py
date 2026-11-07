@@ -104,6 +104,7 @@ class MemoryOut(BaseModel):
 class MemoryCreatedOut(BaseModel):
     memory: MemoryOut
     possible_duplicates: list[MemoryOut] = []
+    possible_contradictions: list[MemoryOut] = []
 
 
 class SearchIn(BaseModel):
@@ -132,6 +133,7 @@ class CitationOut(BaseModel):
 
 class AskIn(BaseModel):
     text: str = Field(min_length=1)
+    conversation_id: uuid.UUID | None = None
 
 
 class AskOut(BaseModel):
@@ -140,6 +142,7 @@ class AskOut(BaseModel):
     citations: list[CitationOut] = []
     saved_memory: MemoryOut | None = None
     model: str | None = None
+    conversation_id: uuid.UUID | None = None
 
 
 class ExportOut(BaseModel):
@@ -148,3 +151,72 @@ class ExportOut(BaseModel):
     projects: list[ProjectOut]
     events: list[EventOut]
     memories: list[MemoryOut]
+
+
+class EntityOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    name: str
+    kind: str
+    status: str
+    memory_id: uuid.UUID | None
+    created_at: datetime
+
+
+class RelationshipOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    from_entity_id: uuid.UUID
+    to_entity_id: uuid.UUID
+    relation: str
+    status: str
+    source_id: uuid.UUID | None
+    created_at: datetime
+
+
+class RelationshipDetailOut(BaseModel):
+    id: uuid.UUID
+    from_entity: EntityOut
+    to_entity: EntityOut
+    relation: str
+    status: str
+    created_at: datetime
+
+
+class ExtractIn(BaseModel):
+    text: str | None = None
+    memory_id: uuid.UUID | None = None
+
+
+class ExtractOut(BaseModel):
+    entities: list[EntityOut]
+    relationships: list[RelationshipOut]
+
+
+class ConversationOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    title: str
+    created_at: datetime
+    message_count: int = 0
+
+
+class MessageOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    role: str
+    content: str
+    created_at: datetime
+
+
+class ConversationDetailOut(BaseModel):
+    id: uuid.UUID
+    title: str
+    created_at: datetime
+    messages: list[MessageOut]
+
+
+class ContradictionPairOut(BaseModel):
+    memory: MemoryOut
+    conflicts_with: MemoryOut
+    shared_terms: list[str]

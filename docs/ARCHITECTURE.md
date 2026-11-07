@@ -63,3 +63,27 @@ registra in `action_logs` (modello, durata, token stimati, costo).
 Ogni query filtra per `user_id`. `tests/test_isolation.py` verifica che
 l'utente B non possa leggere, cercare, citare, sostituire o esportare dati
 dell'utente A.
+
+## Fase 1
+
+- **Contraddizioni** (`app/services/contradictions.py`): euristica conservativa.
+  Due memorie attive sono possibili contraddizioni se condividono >= 2 parole
+  di contenuto (soggetto) ma assegnano valori disgiunti nella stessa categoria
+  (numeri, giorni della settimana, mesi). Le proposte compaiono in
+  `possible_contradictions` alla scrittura e nella vista
+  `GET /memories/contradictions`. La risoluzione è sempre dell'utente, via
+  sostituzione (`supersedes`).
+- **Knowledge Graph** (`app/services/entities.py`, router `/graph/*`): tabelle
+  `entities` e `relationships` con stato `pending|confirmed|rejected`.
+  L'estrazione da testo è rule-based (nomi capitalizzati, pochi pattern
+  relazionali espliciti) e crea solo proposte: niente scrittura diretta nel
+  grafo. Conferma/rifiuto via API. `GET /graph/project-links` elenca i
+  collegamenti confermati che coinvolgono progetti.
+- **Conversazioni** (`conversations`, `messages`): ogni `/ask` salva il turno
+  utente e la risposta; il client può continuare una conversazione passando
+  `conversation_id`.
+- **Orchestratore** (`app/services/orchestrator.py`): punto unico del flusso
+  /ask (classifica -> memoria/stato progetto/rifiuto azione -> persistenza
+  turno). Gli agenti di fase 2 si agganceranno qui.
+- **Stato progetto**: classificatore riconosce "a che punto sono con ...";
+  la risposta elenca solo eventi e date realmente registrati.

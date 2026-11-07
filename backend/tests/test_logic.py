@@ -45,7 +45,7 @@ def test_empty_text_zero_vector():
 
 def test_classify_questions():
     assert classify("Quale database usa il progetto?") == "question"
-    assert classify("a che punto sono?") == "question"
+    assert classify("a che punto sono?") == "project_status"
     assert classify("When is the deadline?") == "question"
 
 
