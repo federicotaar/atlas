@@ -55,6 +55,8 @@ PROBE = r"""
     text: document.body.innerText.slice(0, 300),
     btns, inputs,
     tsIframe: !!document.querySelector('iframe[src*="challenges.cloudflare.com"]'),
+    tsLib: !!window.turnstile,
+    tsBox: (document.querySelector('.auth-turnstile') || {}).childElementCount,
   });
 })()
 """
@@ -105,7 +107,10 @@ wait_for("chooser caricato", lambda st: any(b["t"] == "Non ho un account" for b 
 js_click("Non ho un account")
 wait_for("form registrazione", lambda st: any(i["p"] == "email" for i in st["inputs"]))
 js_set_input("email", "webkit.e2e@example.com")
-wait_for("turnstile iframe presente", lambda st: st["tsIframe"])
+# La prova di completamento e' il bottone abilitato dal token: con le chiavi
+# dummy di test Cloudflare puo' completare senza creare l'iframe del challenge.
+st = probe()
+steps.append(f"INFO widget: iframe={st['tsIframe']} lib={st.get('tsLib')} box={st.get('tsBox')}")
 wait_for(
     "turnstile COMPLETATO in WebKitGTK (Invia codice abilitato dal token)",
     lambda st: any(b["t"] == "Invia codice" and not b["d"] for b in st["btns"]),
