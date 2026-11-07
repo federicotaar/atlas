@@ -102,27 +102,9 @@ async function sendCodeEmail(env, email, purpose, code) {
   if (!res.ok) throw new Error(`brevo ${res.status}`);
 }
 
-// Turnstile: requisito pre-produzione anti-abuso sull'endpoint pubblico di richiesta.
-// FAIL-CLOSED: secret mancante = rifiuta sempre (mai bypass silenzioso in produzione).
-// La seam di test esiste solo con il valore esplicito "test-local" (mai in produzione).
-async function turnstileOk(env, request, token) {
-  const secret = env.TURNSTILE_SECRET || "";
-  if (!secret) return false; // fail-closed: nessun segreto configurato -> niente invii
-  if (secret === "test-local") return token === "test-token";
-  const ip = request.headers.get("CF-Connecting-IP") || "";
-  const res = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({ secret, response: String(token || ""), remoteip: ip }),
-  });
-  if (!res.ok) return false;
-  const data = await res.json();
-  return data.success === true;
-}
-
 // Budget giornaliero applicato PRIMA dell'invio: fail-safe (meglio rifiutare che sforare).
 // Protegge la quota Brevo condivisa; NON e' prevenzione abusi completa (un attaccante
-// puo' comunque consumare il budget del giorno: mitigazione futura = Turnstile).
+// puo' comunque consumare il budget del giorno. (Turnstile rimosso su richiesta del proprietario in v2.0.1.)
 async function dailyBudgetExceeded(env) {
   const max = parseInt(env.DAILY_SEND_MAX || String(DAILY_SEND_MAX_DEFAULT), 10);
   const day = new Date().toISOString().slice(0, 10);
@@ -157,9 +139,6 @@ async function requestCode(request, env) {
   const email = String(body.email || "").trim().toLowerCase();
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return json(env, origin, 400, { error: "bad_email" });
   const ip = request.headers.get("CF-Connecting-IP") || "unknown";
-  if (!(await turnstileOk(env, request, body.turnstile_token))) {
-    return json(env, origin, 400, { error: "turnstile_failed" });
-  }
   if (await hitRateLimits(env, email, ip)) return json(env, origin, 429, { error: "rate_limited" });
   if (await dailyBudgetExceeded(env)) return json(env, origin, 429, { error: "daily_cap" });
 
