@@ -254,3 +254,29 @@ class PredictionOut(BaseModel):
     brier: float | None
     verified_at: datetime | None
     created_at: datetime
+
+
+class ConnectorOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    kind: str
+    status: str
+    authorized_at: datetime | None
+    created_at: datetime
+
+
+class ActionOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    connector_id: uuid.UUID | None
+    level: int
+    kind: str
+    payload: dict
+    idempotency_key: str
+    status: str
+    preview: dict
+    result: dict
+    created_at: datetime
+    confirmed_at: datetime | None
+    executed_at: datetime | None
+    cancelled_at: datetime | None

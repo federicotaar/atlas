@@ -68,7 +68,7 @@ subordina a un bisogno concreto con test.
 - L'estrazione di entità/relazioni è rule-based e richiede sempre conferma
   umana; il grafo non si popola da solo.
 - La classificazione delle richieste è a regole, non a modello.
-- Le azioni (fase 4) non esistono ancora: `/ask` le riconosce e le rifiuta.
+- La fase 4 usa solo connettori fittizi (calendario sintetico, bozze email): nessun account reale, nessun invio. Connettori reali non ancora implementati.
 
 ## Uscita fase 3 (dalla specifica) e stato
 
@@ -82,3 +82,19 @@ subordina a un bisogno concreto con test.
 Metodo dichiarato: la stima automatica usa solo la velocita di completamento
 delle attivita (attivita chiuse per settimana ISO); non usa modelli
 linguistici. Le verifiche sono oneste anche quando l'esito e sfavorevole.
+
+## Uscita fase 4 (dalla specifica) e stato
+
+- [x] Action Engine come unica porta: i kind di azione vivono solo qui, gli agenti non eseguono mai direttamente
+- [x] Permesso una volta per connettore (livello 0): connettori `calendar_mock` e `email_mock`, stati pending/authorized/revoked
+- [x] Livello 1 (modifiche reversibili su dati propri): `calendar.create_event` e `tasks.add` eseguono e riportano; annullabili via `POST /actions/{id}/cancel`
+- [x] Livello 2 (riguarda altre persone): `email.create_draft` richiede anteprima esatta e conferma esplicita (`pending_confirm` -> `confirm`) ogni volta
+- [x] Una bozza non e un invio: non esiste alcun kind di invio; `email.send` e rifiutato
+- [x] Chiave di idempotenza per azione: stessa chiave, stessa azione, nessuna doppia esecuzione
+- [x] Esito registrato (`result`, `executed_at`) solo dopo esecuzione verificata; annullamento quando tecnicamente possibile (bozza eliminata, evento annullato, attivita rimossa)
+- [x] Test di sicurezza: nessuna esecuzione senza connettore autorizzato, senza conferma, o tra utenti diversi
+
+Metodo dichiarato: connettori fittizi con dati sintetici. Il meccanismo
+(permessi, anteprima, conferma, idempotenza, annullamento) e reale e
+testato; connettori veri (Google Calendar, Gmail) richiederebbero account
+reali e consensi espliciti, e non sono implementati.

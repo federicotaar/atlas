@@ -6,7 +6,7 @@
 
 **Un sistema di intelligenza personale che ricorda, ragiona e prevede, con fonti verificabili, limiti dichiarati e zero costi.**
 
-![status](https://img.shields.io/badge/status-fase%203%20di%206-orange)
+![status](https://img.shields.io/badge/status-fase%204%20di%206-orange)
 ![cost](https://img.shields.io/badge/costo-0%E2%82%AC%20tutto%20locale-brightgreen)
 ![tests](https://img.shields.io/badge/test-114%20verdi-brightgreen)
 
@@ -33,12 +33,14 @@ esce dalla macchina senza permesso.
 - **Knowledge Graph assistito**: entità e relazioni proposte dal testo nascono `pending` e diventano reali solo dopo conferma.
 - **Agenti Researcher / Planner / Critic**: messaggi strutturati, limiti di passi, timeout e budget applicati (non solo registrati), ogni esecuzione tracciata. *Baseline rule-based dichiarata, non prova di capacità generale.*
 - **Prediction Engine**: stime a intervallo dalla velocità reale di completamento, rifiuto esplicito quando i dati sono troppo pochi, confronto con l'esito alla data di verifica (`GET /predictions/due` elenca le scadenze; `POST /predictions/evaluate-due` verifica automaticamente le stime automatiche misurando lo stato reale delle attività, mentre le stime manuali restano da verificare a mano), errore e punteggio di Brier, metriche di calibrazione. La verifica automatica è un meccanismo su dati sintetici: l'accuratezza longitudinale reale si misura solo con mesi di utilizzo reale.
+- **Action Engine**: unica porta per le azioni (gli agenti non eseguono mai direttamente). Livelli 0/1/2: lettura con permesso per connettore, modifiche reversibili eseguite e annullabili, azioni verso altri con anteprima esatta e conferma esplicita ogni volta. Chiave di idempotenza contro doppie esecuzioni, esito registrato, annullamento quando possibile. Connettori solo fittizi in questa fase (calendario sintetico, bozze email): una bozza non è un invio e non esiste alcuna operazione di invio.
 - **Interfacce**: API FastAPI, chat web React, CLI `atlas`, Docker Compose.
 
 Lo stato onesto di ogni fase è in
-[`docs/ROADMAP-STATUS.md`](docs/ROADMAP-STATUS.md): le fasi 0–3 sono
-implementate e testate in CI; connettori/azioni (fase 4), time machine e
-dashboard (fase 5) e il Counterfactual Engine **non sono ancora implementati**.
+[`docs/ROADMAP-STATUS.md`](docs/ROADMAP-STATUS.md): le fasi 0–4 sono
+implementate e testate in CI (la 4 con connettori fittizi, nessun account
+reale); time machine e dashboard (fase 5) e il Counterfactual Engine
+**non sono ancora implementati**.
 
 ## Avvio rapido (Docker Compose)
 

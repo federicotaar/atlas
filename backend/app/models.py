@@ -214,3 +214,85 @@ class Prediction(Base):
     brier: Mapped[float | None] = mapped_column(nullable=True)
     verified_at: Mapped[datetime | None] = mapped_column(nullable=True)
     created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
+
+
+class Connector(Base):
+    """Connettore (fase 4, spec 5F): permesso una volta per connettore.
+    Solo connettori fittizi in questa fase: calendar_mock ed email_mock,
+    nessun account reale."""
+
+    __tablename__ = "connectors"
+    __table_args__ = (
+        CheckConstraint("kind IN ('calendar_mock','email_mock')", name="connectors_kind_check"),
+        CheckConstraint("status IN ('pending','authorized','revoked')", name="connectors_status_check"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    kind: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(Text, nullable=False, default="pending")
+    authorized_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
+
+
+class EngineAction(Base):
+    """Action Engine (fase 4, spec 5F): ogni azione ha livello, anteprima
+    esatta, conferma esplicita per il livello 2, esito registrato,
+    annullamento quando possibile e chiave di idempotenza."""
+
+    __tablename__ = "engine_actions"
+    __table_args__ = (
+        CheckConstraint("level IN (0,1,2)", name="engine_actions_level_check"),
+        CheckConstraint(
+            "status IN ('previewed','pending_confirm','executed','failed','cancelled')",
+            name="engine_actions_status_check"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    connector_id: Mapped[uuid.UUID | None] = mapped_column(PGUUID(as_uuid=True),
+                                                           ForeignKey("connectors.id"), nullable=True)
+    level: Mapped[int] = mapped_column(nullable=False)
+    kind: Mapped[str] = mapped_column(Text, nullable=False)
+    payload: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    idempotency_key: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(Text, nullable=False, default="previewed")
+    preview: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    result: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
+    confirmed_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    executed_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    cancelled_at: Mapped[datetime | None] = mapped_column(nullable=True)
+
+
+class MockCalendarEvent(Base):
+    """Eventi fittizi del connettore calendar_mock: dati sintetici, mai un
+    calendario reale."""
+
+    __tablename__ = "mock_calendar_events"
+
+    id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    starts_at: Mapped[datetime] = mapped_column(nullable=False)
+    ends_at: Mapped[datetime] = mapped_column(nullable=False)
+    source: Mapped[str] = mapped_column(Text, nullable=False, default="fixture")  # fixture | created
+    cancelled: Mapped[bool] = mapped_column(nullable=False, default=False)
+    created_action_id: Mapped[uuid.UUID | None] = mapped_column(PGUUID(as_uuid=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
+
+
+class MockEmailDraft(Base):
+    """Bozze fittizie del connettore email_mock (fase 4): una bozza non e un
+    invio. Non esiste alcuna operazione di invio."""
+
+    __tablename__ = "mock_email_drafts"
+
+    id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    to_addr: Mapped[str] = mapped_column(Text, nullable=False)
+    subject: Mapped[str] = mapped_column(Text, nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(Text, nullable=False, default="draft")  # draft | discarded
+    created_action_id: Mapped[uuid.UUID | None] = mapped_column(PGUUID(as_uuid=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
