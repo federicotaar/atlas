@@ -1,5 +1,8 @@
 name: desktop
 
+permissions:
+  contents: write
+
 on:
   workflow_dispatch:
   push:
@@ -64,6 +67,17 @@ jobs:
           echo "--- statistiche pixel (stddev > 0 = render non vuoto):"
           identify -format "mean=%[mean] stddev=%[standard-deviation] size=%wx%h\n" /tmp/atlas-desktop-smoke.png
           kill $APP_PID || true
+
+      - name: Salva lo screenshot smoke in docs/ (evidenza render nel repo)
+        if: runner.os == 'Linux'
+        run: |
+          mkdir -p docs/assets
+          cp /tmp/atlas-desktop-smoke.png docs/assets/desktop-smoke-linux.png
+          git config user.name "atlas-ci"
+          git config user.email "ci@fredrichlabs.invalid"
+          git add docs/assets/desktop-smoke-linux.png
+          git commit -m "ci: screenshot smoke desktop (render Xvfb) [skip ci]" || echo "nessuna modifica"
+          git push
 
       - name: Artifact smoke screenshot
         if: runner.os == 'Linux'
