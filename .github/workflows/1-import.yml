@@ -5,6 +5,7 @@ on:
       - '*.zip'
 permissions:
   contents: write
+  workflows: write
 jobs:
   import:
     runs-on: ubuntu-latest
