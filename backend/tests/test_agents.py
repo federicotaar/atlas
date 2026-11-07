@@ -2,6 +2,7 @@
 individua errori inseriti di proposito (gate di uscita della specifica)."""
 from app.agents import core
 from app.agents.schemas import CriticInput, PlanTask
+
 from .conftest import make_memory, make_source, make_user
 
 
