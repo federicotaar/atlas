@@ -4,7 +4,7 @@
 
 <img src="assets/atlas-logo.png" alt="ATLAS logo" width="180">
 
-**Un sistema di intelligenza personale che ricorda, ragiona e prevede — con fonti verificabili, limiti dichiarati e zero costi.**
+**Un sistema di intelligenza personale che ricorda, ragiona e prevede, con fonti verificabili, limiti dichiarati e zero costi.**
 
 ![status](https://img.shields.io/badge/status-fase%203%20di%206-orange)
 ![cost](https://img.shields.io/badge/costo-0%E2%82%AC%20tutto%20locale-brightgreen)
@@ -16,23 +16,23 @@
 
 ATLAS conserva le informazioni autorizzate in una memoria dove **ogni dato ha
 una fonte**, distingue ciò che è dichiarato da ciò che è dedotto, recupera
-per significato e risponde **citando le memorie usate** — oppure dice
+per significato e risponde **citando le memorie usate**, oppure dice
 «Non lo so». Gli eventi sono **append-only**: le correzioni sono nuove
 memorie che sostituiscono le precedenti, niente viene riscritto.
 
 Su questa base ATLAS costruisce un grafo di entità e relazioni (con conferma
 esplicita), una pipeline di agenti con limiti applicati e un motore di
-previsioni che stima con intervalli e si verifica da solo alla scadenza.
-Tutto gira in locale: nessuna chiamata a pagamento, nessun dato che esce
-dalla macchina senza permesso.
+previsioni che stima con intervalli e registra l'esito reale alla data di
+verifica. Tutto gira in locale: nessuna chiamata a pagamento, nessun dato che
+esce dalla macchina senza permesso.
 
 ## Cosa fa oggi
 
 - **Memoria verificabile**: fonti, confidenza, date, sostituzioni invece di sovrascritture; rilevamento di contraddizioni.
-- **Recupero ibrido**: ricerca semantica + testuale + recenza + confidenza, con pesi calibrati su un benchmark ripetibile (88% con provider integrato, 100% con Ollama).
+- **Recupero ibrido**: ricerca per similarità + testuale + recenza + confidenza, con pesi calibrati su un benchmark ripetibile. Sul set sintetico di 8 domande in `scripts/benchmark.py`: 88% (7/8) con il provider lessicale integrato (hash n-gram, baseline), 100% (8/8) con Ollama (embeddings semantici reali). Set piccolo e sintetico: indica che il meccanismo funziona, non l'accuratezza su dati reali.
 - **Knowledge Graph assistito**: entità e relazioni proposte dal testo nascono `pending` e diventano reali solo dopo conferma.
 - **Agenti Researcher / Planner / Critic**: messaggi strutturati, limiti di passi, timeout e budget applicati (non solo registrati), ogni esecuzione tracciata. *Baseline rule-based dichiarata, non prova di capacità generale.*
-- **Prediction Engine**: stime a intervallo dalla velocità reale di completamento, rifiuto esplicito quando i dati sono troppo pochi, verifica alla scadenza con errore e punteggio di Brier, metriche di calibrazione.
+- **Prediction Engine**: stime a intervallo dalla velocità reale di completamento, rifiuto esplicito quando i dati sono troppo pochi, registrazione dell'esito alla data di verifica (verifica manuale via API in questa fase) con errore e punteggio di Brier, metriche di calibrazione.
 - **Interfacce**: API FastAPI, chat web React, CLI `atlas`, Docker Compose.
 
 Lo stato onesto di ogni fase è in
