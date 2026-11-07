@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from ..config import get_settings
 from ..db import get_db
 from ..errors import AtlasError
 from ..models import Connector, EngineAction, User
@@ -121,3 +122,26 @@ def cancel(action_id: uuid.UUID, db: Session = Depends(get_db),
     action = cancel_action(db, _get_action(db, user, action_id))
     log_action(db, user.id, "action.cancelled", {"kind": action.kind})
     return ActionOut.model_validate(action)
+
+
+
+@router.get("/connectors/google/auth-url")
+def google_auth_url(scope_set: str, user: User = Depends(get_current_user)) -> dict:
+    """URL di consenso OAuth Google (gratuito). scope_set: calendar | gmail.
+    L'utente apre l'URL nel browser e concede l'accesso; i token tornano al
+    callback e vengono salvati cifrati."""
+    from ..services.google_connectors import build_auth_url
+    url = build_auth_url(get_settings(), user.id, scope_set)
+    return {"auth_url": url,
+            "note": "Apri l'URL nel browser per autorizzare. Sola lettura per "
+                    "calendar; sole bozze (mai invii) per gmail."}
+
+
+@router.get("/connectors/google/callback", response_model=ConnectorOut)
+def google_callback(code: str, state: str, db: Session = Depends(get_db)) -> ConnectorOut:
+    """Redirect OAuth da Google. Nessuna sessione richiesta: lo state firmato
+    (HMAC) lega il callback all'utente e allo scope, con scadenza breve."""
+    from ..services.google_connectors import handle_callback
+    conn = handle_callback(db, get_settings(), code, state)
+    log_action(db, conn.user_id, "connector.authorized", {"kind": conn.kind, "via": "oauth"})
+    return ConnectorOut.model_validate(conn)

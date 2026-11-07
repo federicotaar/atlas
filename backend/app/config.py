@@ -37,6 +37,16 @@ class Settings(BaseSettings):
     # origini dell'involucro desktop Tauri; il browser resta same-origin.
     cors_origins: str = "http://tauri.localhost,tauri://localhost"
 
+    # Connettori Google reali (OAuth gratuito; setup in docs/CONNECTORS-GOOGLE.md).
+    # Vuoti = non configurato: gli endpoint OAuth rispondono 503 chiaro.
+    google_client_id: str = ""
+    google_client_secret: str = ""
+    google_redirect_uri: str = "http://127.0.0.1:8000/connectors/google/callback"
+    # Chiave Fernet per cifrare i token dei connettori (mai in chiaro, spec sicurezza).
+    # Generare con: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    # Senza chiave le credenziali NON vengono salvate (fail-closed).
+    credentials_key: str = ""
+
 
 @lru_cache
 def get_settings() -> Settings:

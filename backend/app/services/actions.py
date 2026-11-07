@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 from ..errors import AtlasError
 from ..models import Connector, EngineAction, Memory, MockCalendarEvent, MockEmailDraft, Source
 
-CONNECTOR_KINDS = {"calendar_mock", "email_mock"}
+CONNECTOR_KINDS = {"calendar_mock", "email_mock", "google_calendar", "google_gmail"}
 
 # kind -> (livello, connettore richiesto o None)
 ACTION_KINDS: dict[str, tuple[int, str | None]] = {
@@ -23,6 +23,10 @@ ACTION_KINDS: dict[str, tuple[int, str | None]] = {
     "calendar.create_event": (1, "calendar_mock"),
     "tasks.add": (1, None),
     "email.create_draft": (2, "email_mock"),
+    # Connettori Google reali (OAuth): calendario in sola lettura (livello 0),
+    # bozze Gmail (livello 1, reversibili: annullare elimina la bozza).
+    "google_calendar.list_events": (0, "google_calendar"),
+    "google_gmail.create_draft": (1, "google_gmail"),
 }
 
 FIXTURE_EVENTS = [
@@ -53,6 +57,12 @@ def get_or_create_connector(db: Session, user_id: uuid.UUID, kind: str) -> Conne
 def authorize_connector(db: Session, conn: Connector) -> Connector:
     """Consenso una tantum per connettore. Sul connettore calendario fittizio
     semina eventi sintetici; nessun dato reale viene toccato."""
+    if conn.kind.startswith("google_"):
+        raise AtlasError(
+            "oauth_required",
+            "I connettori Google si autorizzano via OAuth: chiama "
+            "GET /connectors/google/auth-url?scope_set=calendar|gmail e apri "
+            "l'URL restituito nel browser.")
     conn.status = "authorized"
     conn.authorized_at = datetime.now(timezone.utc)
     if conn.kind == "calendar_mock":
@@ -109,6 +119,13 @@ def _preview(kind: str, payload: dict) -> dict:
                 "draft": {"to": payload.get("to"),
                           "subject": payload.get("subject"),
                           "body": payload.get("body")}}
+    if kind == "google_calendar.list_events":
+        return {"description": "Legge gli eventi del tuo Google Calendar reale (sola lettura)."}
+    if kind == "google_gmail.create_draft":
+        return {"description": "Crea una BOZZA reale su Gmail. Una bozza non e un invio.",
+                "draft": {"to": payload.get("to"),
+                          "subject": payload.get("subject"),
+                          "body": payload.get("body")}}
     raise AtlasError("unknown_action", f"Azione sconosciuta: {kind}.")
 
 
@@ -155,6 +172,18 @@ def _execute(db: Session, action: EngineAction) -> dict:
         db.add(draft)
         db.flush()
         return {"draft_id": str(draft.id), "note": "Bozza creata. Non inviata."}
+    if action.kind == "google_calendar.list_events":
+        from ..config import get_settings
+        from .google_connectors import list_calendar_events
+        conn = db.get(Connector, action.connector_id)
+        return list_calendar_events(db, get_settings(), user_id, conn,
+                                    max_results=int(payload.get("max_results", 20)))
+    if action.kind == "google_gmail.create_draft":
+        from ..config import get_settings
+        from .google_connectors import create_gmail_draft
+        conn = db.get(Connector, action.connector_id)
+        return create_gmail_draft(db, get_settings(), user_id, conn,
+                                  payload["to"], payload["subject"], payload["body"])
     raise AtlasError("unknown_action", f"Azione sconosciuta: {action.kind}.")
 
 
@@ -163,6 +192,7 @@ def _validate_payload(kind: str, payload: dict) -> None:
         "calendar.create_event": ("title", "starts_at", "ends_at"),
         "tasks.add": ("content",),
         "email.create_draft": ("to", "subject", "body"),
+        "google_gmail.create_draft": ("to", "subject", "body"),
     }.get(kind, ())
     missing = [k for k in required if not payload.get(k)]
     if missing:
@@ -259,6 +289,12 @@ def cancel_action(db: Session, action: EngineAction) -> EngineAction:
         mem = db.get(Memory, uuid.UUID(action.result["memory_id"]))
         if mem is not None:
             db.delete(mem)
+    elif action.kind == "google_gmail.create_draft":
+        from ..config import get_settings
+        from .google_connectors import delete_gmail_draft
+        conn = db.get(Connector, action.connector_id)
+        delete_gmail_draft(db, get_settings(), action.user_id, conn,
+                           action.result["draft_id"])
     elif action.kind == "email.create_draft":
         draft = db.get(MockEmailDraft, uuid.UUID(action.result["draft_id"]))
         if draft is not None:

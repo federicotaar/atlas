@@ -94,3 +94,15 @@ un'istanza avviata.
 |---|---|---|
 | GET | `/me/export` | Esporta tutti i dati dell'utente |
 | DELETE | `/me` | Cancella davvero tutti i dati (diritto all'oblio) |
+
+
+## Connettori Google (OAuth, fase 4)
+
+| Metodo | Path | Auth | Descrizione |
+| --- | --- | --- | --- |
+| GET | `/connectors/google/auth-url?scope_set=calendar\|gmail` | Bearer | URL di consenso OAuth (503 se non configurato) |
+| GET | `/connectors/google/callback?code=...&state=...` | state firmato | Scambia il codice, salva i token CIFRATI, autorizza |
+
+Azioni aggiuntive: `google_calendar.list_events` (livello 0, sola lettura)
+e `google_gmail.create_draft` (livello 1, annullabile: elimina la bozza).
+Nessuna operazione di invio email esiste.

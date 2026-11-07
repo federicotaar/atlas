@@ -145,6 +145,19 @@ modello esplicito (non "chiedi a un LLM di immaginare"). Senza dati reali
 longitudinali un prototipo misurerebbe solo se stesso: dichiarato apertamente
 invece di simulare la funzione.
 
+## Connettori Google reali (fase 4: calendario read-only, bozze email)
+
+- [x] OAuth gratuito con state firmato HMAC e scadenza; token cifrati con
+  Fernet (`ATLAS_CREDENTIALS_KEY`), fail-closed senza chiave; refresh
+  automatico con ri-cifratura
+- [x] `google_calendar.list_events` (livello 0, scope calendar.readonly) e
+  `google_gmail.create_draft` (livello 1, scope gmail.compose, annullabile
+  con eliminazione bozza). Nessuna operazione di invio esiste
+- [x] 14 test (monkeypatch, zero account reali toccati): OAuth, cifratura,
+  mapping, bozza+undo, isolamento, 401/403
+- [ ] Validazione con account reale: richiede il consenso di Fred
+  (docs/CONNECTORS-GOOGLE.md, passi 1-5); unico passaggio non automatizzabile
+
 ## Involucro desktop Tauri (fase 5, "poi involucro desktop Tauri")
 
 - [x] Shell Tauri v2 in `desktop/` attorno alla dashboard web esistente:

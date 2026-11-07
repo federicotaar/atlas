@@ -227,14 +227,20 @@ class Prediction(Base):
     created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
 
 
+GOOGLE_CONNECTOR_KINDS = ("google_calendar", "google_gmail")
+
+
 class Connector(Base):
     """Connettore (fase 4, spec 5F): permesso una volta per connettore.
-    Solo connettori fittizi in questa fase: calendar_mock ed email_mock,
-    nessun account reale."""
+    Fittizi: calendar_mock ed email_mock (dati sintetici). Reali:
+    google_calendar (sola lettura) e google_gmail (solo bozze, mai invii),
+    autorizzati via OAuth; i token vivono cifrati in connector_credentials."""
 
     __tablename__ = "connectors"
     __table_args__ = (
-        CheckConstraint("kind IN ('calendar_mock','email_mock')", name="connectors_kind_check"),
+        CheckConstraint(
+            "kind IN ('calendar_mock','email_mock','google_calendar','google_gmail')",
+            name="connectors_kind_check"),
         CheckConstraint("status IN ('pending','authorized','revoked')", name="connectors_status_check"),
     )
 
@@ -310,3 +316,21 @@ class MockEmailDraft(Base):
     status: Mapped[str] = mapped_column(Text, nullable=False, default="draft")  # draft | discarded
     created_action_id: Mapped[uuid.UUID | None] = mapped_column(PGUUID(as_uuid=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
+
+
+class ConnectorCredential(Base):
+    """Token OAuth di un connettore reale, cifrati con Fernet
+    (ATLAS_CREDENTIALS_KEY). Mai in chiaro, mai nei log."""
+
+    __tablename__ = "connector_credentials"
+
+    id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    connector_id: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("connectors.id"), nullable=False, unique=True)
+    access_token_enc: Mapped[str] = mapped_column(Text, nullable=False)
+    refresh_token_enc: Mapped[str] = mapped_column(Text, nullable=False)
+    expires_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    scope: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now(),
+                                                 onupdate=func.now())
