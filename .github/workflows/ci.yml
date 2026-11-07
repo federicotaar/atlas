@@ -72,3 +72,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: docker compose config -q
+
+
+# phase-1: entities/relationships/conversations coperte dalla stessa pipeline
