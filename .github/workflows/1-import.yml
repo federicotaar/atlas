@@ -5,7 +5,6 @@ on:
       - '*.zip'
 permissions:
   contents: write
-  workflows: write
 jobs:
   import:
     runs-on: ubuntu-latest
@@ -13,7 +12,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Import zip
         run: |
-          ZIP="$(ls ./*.zip | head -n1)"
+          ZIP="$(ls -t ./*.zip | head -n1)"
           unzip -o "$ZIP" -d .
           rm -f ./*.zip
           rm -f .github/workflows/1-import.yml
