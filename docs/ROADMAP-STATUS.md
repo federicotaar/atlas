@@ -115,3 +115,32 @@ Metodo dichiarato: la ricostruzione usa solo dati registrati (eventi
 append-only, memorie con sostituzioni datate). Il record progetto non ha
 storia propria: `state-at` lo riporta marcato come stato attuale, non come
 stato alla data. Nessuna statistica oltre i dati: le lacune restano lacune.
+
+## Uscita fase 6 (dalla specifica) e stato
+
+- [x] Prestazioni: indici sulle query piu frequenti (migrazione 0006: events,
+  memories, predictions, engine_actions, agent_runs, action_logs, tabelle
+  mock) e sonda `scripts/perf.py`. Su dataset sintetico realistico (300
+  eventi, 60 memorie): tutti gli endpoint chiave sotto 14 ms p95 in-process
+  (GET /dashboard 12.1 ms, /timemachine/* 5-13 ms, /memories/search 10.5 ms)
+- [x] Test di sicurezza: isolamento utenti anche sui nuovi endpoint
+  (timemachine, dashboard), 401 senza token su tutti i nuovi endpoint;
+  zero azioni non autorizzate resta garantito dai test di fase 4
+- [x] Documentazione API (`docs/API.md`) e architettura
+  (`docs/ARCHITECTURE.md`, sezioni per fase)
+- [ ] Beta con poche persone fidate: NON eseguibile da un processo di
+  sviluppo automatico — richiede persone reali che usano il sistema e
+  riportano problemi. Resta aperta; nessun dato reale di terzi e stato
+  toccato.
+
+Stato: il consolidamento tecnico della fase 6 e fatto; l'uscita completa
+della fase richiede la beta reale. Il badge resta "fase 5 di 6" finche la
+beta non e fatta.
+
+## Counterfactual Engine (ricerca parallela, facoltativa)
+
+Non implementato. La specifica (sez. 5J) pone precondizioni esplicite:
+almeno sei mesi di eventi affidabili e centinaia di eventi registrati,
+modello esplicito (non "chiedi a un LLM di immaginare"). Senza dati reali
+longitudinali un prototipo misurerebbe solo se stesso: dichiarato apertamente
+invece di simulare la funzione.

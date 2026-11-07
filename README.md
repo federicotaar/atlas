@@ -90,6 +90,7 @@ cd frontend && npm install && npm run dev
 | [`docs/ROADMAP-STATUS.md`](docs/ROADMAP-STATUS.md) | Stato onesto di ogni fase della specifica |
 | [`docs/BENCHMARK.md`](docs/BENCHMARK.md) | Benchmark di recupero: metodo, risultati, calibrazione |
 | [`docs/SECURITY.md`](docs/SECURITY.md) | Minacce considerate e contromisure implementate |
+| [`docs/API.md`](docs/API.md) | Riferimento endpoint HTTP |
 
 ## Limiti dichiarati
 

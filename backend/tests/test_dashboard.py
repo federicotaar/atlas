@@ -95,3 +95,8 @@ def test_dashboard_isolation(client):
     assert panels["upcoming"]["project_deadlines"] == []
     assert panels["authorization_requests"]["pending_connectors"] == []
     assert panels["predictions"]["open"] == 0
+
+
+def test_dashboard_requires_auth(client):
+    r = client.get("/dashboard")
+    assert r.status_code == 401

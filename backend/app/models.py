@@ -2,7 +2,7 @@ import uuid
 from datetime import date, datetime
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import CheckConstraint, ForeignKey, Text, func
+from sqlalchemy import CheckConstraint, ForeignKey, Index, Text, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -48,6 +48,10 @@ class Event(Base):
     """Log append-only: niente update, niente delete (cancellazione solo via diritto all'oblio)."""
 
     __tablename__ = "events"
+    __table_args__ = (
+        Index("ix_events_user_event_at", "user_id", "event_at"),
+        Index("ix_events_user_project_event_at", "user_id", "project_id", "event_at"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
@@ -62,6 +66,8 @@ class Event(Base):
 class Memory(Base):
     __tablename__ = "memories"
     __table_args__ = (
+        Index("ix_memories_user_recorded_at", "user_id", "recorded_at"),
+        Index("ix_memories_user_kind", "user_id", "kind"),
         CheckConstraint("kind IN ('fact','opinion','decision','hypothesis','task')", name="memories_kind_check"),
         CheckConstraint("origin IN ('stated','inferred','imported')", name="memories_origin_check"),
         CheckConstraint("confidence BETWEEN 0 AND 1", name="memories_confidence_check"),
@@ -89,6 +95,9 @@ class ActionLog(Base):
     """Storico operazioni e accessi. Mai contenuti personali: solo tipo, id e metadati."""
 
     __tablename__ = "action_logs"
+    __table_args__ = (
+        Index("ix_action_logs_user_created", "user_id", "created_at"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
@@ -166,6 +175,7 @@ class AgentRun(Base):
 
     __tablename__ = "agent_runs"
     __table_args__ = (
+        Index("ix_agent_runs_user_created", "user_id", "created_at"),
         CheckConstraint("status IN ('ok','error','stopped')", name="agent_runs_status_check"),
     )
 
@@ -190,6 +200,7 @@ class Prediction(Base):
 
     __tablename__ = "predictions"
     __table_args__ = (
+        Index("ix_predictions_user_status_verify", "user_id", "status", "verify_at"),
         CheckConstraint("status IN ('open','verified','refused')", name="predictions_status_check"),
         CheckConstraint("probability IS NULL OR (probability >= 0 AND probability <= 1)",
                         name="predictions_probability_check"),
@@ -242,6 +253,7 @@ class EngineAction(Base):
 
     __tablename__ = "engine_actions"
     __table_args__ = (
+        Index("ix_engine_actions_user_status", "user_id", "status"),
         CheckConstraint("level IN (0,1,2)", name="engine_actions_level_check"),
         CheckConstraint(
             "status IN ('previewed','pending_confirm','executed','failed','cancelled')",
@@ -270,6 +282,7 @@ class MockCalendarEvent(Base):
     calendario reale."""
 
     __tablename__ = "mock_calendar_events"
+    __table_args__ = (Index("ix_mock_calendar_user", "user_id"),)
 
     id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
@@ -287,6 +300,7 @@ class MockEmailDraft(Base):
     invio. Non esiste alcuna operazione di invio."""
 
     __tablename__ = "mock_email_drafts"
+    __table_args__ = (Index("ix_mock_email_user", "user_id"),)
 
     id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id"), nullable=False)

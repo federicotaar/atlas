@@ -208,3 +208,18 @@ def test_timemachine_isolation(client):
     assert rb2.json()["events"]["count"] == 0
     rb3 = client.get("/timemachine/abandoned-goals", headers=ub["headers"])
     assert rb3.json()["count"] == 0
+
+
+def test_timemachine_requires_auth(client):
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc).isoformat()
+    for path, params in [
+        ("/timemachine/timeline", {"from": now, "to": now}),
+        ("/timemachine/state-at", {"at": now}),
+        ("/timemachine/compare", {"a_start": now, "a_end": now,
+                                  "b_start": now, "b_end": now}),
+        ("/timemachine/abandoned-goals", {}),
+        ("/timemachine/recurring", {}),
+    ]:
+        r = client.get(path, params=params)
+        assert r.status_code == 401, (path, r.status_code)
