@@ -5,12 +5,14 @@ export function resolveBase(envUrl: string | undefined, isTauri: boolean): strin
   return isTauri ? "http://127.0.0.1:8000" : "/api";
 }
 
-const BASE = resolveBase(
-  import.meta.env.VITE_API_URL as string | undefined,
-  typeof (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ !== "undefined",
-);
+const IS_TAURI =
+  typeof window !== "undefined" &&
+  (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ !== undefined;
 
-let token: string | null = localStorage.getItem("atlas_token");
+const BASE = resolveBase(import.meta.env.VITE_API_URL as string | undefined, IS_TAURI);
+
+let token: string | null =
+  typeof localStorage !== "undefined" ? localStorage.getItem("atlas_token") : null;
 
 export function setToken(t: string | null) {
   token = t;
