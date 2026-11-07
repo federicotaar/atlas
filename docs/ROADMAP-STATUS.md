@@ -9,8 +9,9 @@ Le fasi finiscono quando passano i test di uscita, non per calendario.
 | 1 | Grafo entità/relazioni, tipi completi, contraddizioni, conversazioni | **Implementata** (questo repo) |
 | 2 | Agenti Researcher/Planner/Critic, agent_runs | **Implementata** (questo repo) |
 | 3 | Previsioni con intervalli, verifica e calibrazione | **Implementata** (questo repo) |
-| 4 | Connettori, Action Engine con permessi | Non implementata |
-| 5 | Time Machine, dashboard | Non implementata |
+| 4 | Connettori, Action Engine con permessi | **Implementata** (questo repo; connettori Google reali opzionali, validati solo su fixture sintetiche) |
+| 5 | Time Machine, dashboard, involucro desktop Tauri | **Implementata** (questo repo) |
+| 6 | Consolidamento per la beta | **Consolidamento tecnico implementato**; la beta con persone reali resta aperta |
 | ricerca | Counterfactual Engine | Non implementata (ricerca, richiede dati storici reali) |
 
 ## Uscita fase 0 (dalla specifica) e stato
@@ -68,7 +69,7 @@ subordina a un bisogno concreto con test.
 - L'estrazione di entità/relazioni è rule-based e richiede sempre conferma
   umana; il grafo non si popola da solo.
 - La classificazione delle richieste è a regole, non a modello.
-- La fase 4 usa solo connettori fittizi (calendario sintetico, bozze email): nessun account reale, nessun invio. Connettori reali non ancora implementati.
+- I connettori Google reali di fase 4 (calendario sola lettura, bozze Gmail) sono codice reale con OAuth e token cifrati, validato SOLO con fixture sintetiche in CI (chiamate Google simulate): nessun account reale è mai stato collegato. La validazione con account reale resta un passaggio manuale e volontario di chi installa ATLAS. Nessuna operazione di invio email esiste nel codice.
 
 ## Uscita fase 3 (dalla specifica) e stato
 
@@ -94,10 +95,13 @@ linguistici. Le verifiche sono oneste anche quando l'esito e sfavorevole.
 - [x] Esito registrato (`result`, `executed_at`) solo dopo esecuzione verificata; annullamento quando tecnicamente possibile (bozza eliminata, evento annullato, attivita rimossa)
 - [x] Test di sicurezza: nessuna esecuzione senza connettore autorizzato, senza conferma, o tra utenti diversi
 
-Metodo dichiarato: connettori fittizi con dati sintetici. Il meccanismo
-(permessi, anteprima, conferma, idempotenza, annullamento) e reale e
-testato; connettori veri (Google Calendar, Gmail) richiederebbero account
-reali e consensi espliciti, e non sono implementati.
+Metodo dichiarato: il meccanismo (permessi, anteprima, conferma,
+idempotenza, annullamento) e reale e testato. Accanto ai connettori
+fittizi con dati sintetici esistono i connettori reali Google (Calendar
+sola lettura, bozze Gmail), opzionali e configurati da chi installa (OAuth
+gratuito, token cifrati Fernet, docs/CONNECTORS-GOOGLE.md): anche questi
+sono testati solo con fixture sintetiche — la validazione con un account
+reale non e ancora stata eseguita e resta volontaria.
 
 ## Uscita fase 5 (dalla specifica) e stato
 
@@ -109,7 +113,7 @@ reali e consensi espliciti, e non sono implementati.
 - [x] Lacune sempre mostrate, mai riempite: ogni risposta su un intervallo include `gaps` (periodi senza alcun dato)
 - [x] Dashboard web (pannello React + `GET /dashboard`): progetti, attivita imminenti, eventi recenti, previsioni e scadenze, agenti attivi, automazioni, memorie importanti, richieste di autorizzazione
 - [x] Gate: ogni elemento della dashboard espone `derived_from` con gli id dei dati da cui deriva (verificato in `tests/test_dashboard.py`)
-- [ ] Involucro desktop Tauri: non implementato (nella specifica viene dopo la dashboard web)
+- [x] Involucro desktop Tauri (`desktop/`): build CI Linux (AppImage/.deb) e macOS (.dmg); smoke E2E su Xvfb/openbox con login sintetico guidato via xdotool contro backend reale (`POST /auth/login` 200) e screenshot post-login verificato (`docs/assets/desktop-postlogin-linux.png`)
 
 Metodo dichiarato: la ricostruzione usa solo dati registrati (eventi
 append-only, memorie con sostituzioni datate). Il record progetto non ha
@@ -128,6 +132,9 @@ stato alla data. Nessuna statistica oltre i dati: le lacune restano lacune.
   zero azioni non autorizzate resta garantito dai test di fase 4
 - [x] Documentazione API (`docs/API.md`) e architettura
   (`docs/ARCHITECTURE.md`, sezioni per fase)
+- [x] App desktop e packaging: release pubblica v0.1.0 (AppImage e .deb) e
+  smoke desktop end-to-end in CI (finestra nativa, login sintetico reale
+  contro il backend, schermata chat post-login)
 - [ ] Beta con poche persone fidate: NON eseguibile da un processo di
   sviluppo automatico — richiede persone reali che usano il sistema e
   riportano problemi. Resta aperta; nessun dato reale di terzi e stato

@@ -8,7 +8,7 @@
 
 ![status](https://img.shields.io/badge/status-fase%205%20di%206-orange)
 ![cost](https://img.shields.io/badge/costo-0%E2%82%AC%20tutto%20locale-brightgreen)
-![tests](https://img.shields.io/badge/test-114%20verdi-brightgreen)
+![tests](https://img.shields.io/badge/test-161%20verdi-brightgreen)
 
 </div>
 
@@ -33,16 +33,17 @@ esce dalla macchina senza permesso.
 - **Knowledge Graph assistito**: entità e relazioni proposte dal testo nascono `pending` e diventano reali solo dopo conferma.
 - **Agenti Researcher / Planner / Critic**: messaggi strutturati, limiti di passi, timeout e budget applicati (non solo registrati), ogni esecuzione tracciata. *Baseline rule-based dichiarata, non prova di capacità generale.*
 - **Prediction Engine**: stime a intervallo dalla velocità reale di completamento, rifiuto esplicito quando i dati sono troppo pochi, confronto con l'esito alla data di verifica (`GET /predictions/due` elenca le scadenze; `POST /predictions/evaluate-due` verifica automaticamente le stime automatiche misurando lo stato reale delle attività, mentre le stime manuali restano da verificare a mano), errore e punteggio di Brier, metriche di calibrazione. La verifica automatica è un meccanismo su dati sintetici: l'accuratezza longitudinale reale si misura solo con mesi di utilizzo reale.
-- **Action Engine**: unica porta per le azioni (gli agenti non eseguono mai direttamente). Livelli 0/1/2: lettura con permesso per connettore, modifiche reversibili eseguite e annullabili, azioni verso altri con anteprima esatta e conferma esplicita ogni volta. Chiave di idempotenza contro doppie esecuzioni, esito registrato, annullamento quando possibile. Connettori solo fittizi in questa fase (calendario sintetico, bozze email): una bozza non è un invio e non esiste alcuna operazione di invio.
+- **Action Engine**: unica porta per le azioni (gli agenti non eseguono mai direttamente). Livelli 0/1/2: lettura con permesso per connettore, modifiche reversibili eseguite e annullabili, azioni verso altri con anteprima esatta e conferma esplicita ogni volta. Chiave di idempotenza contro doppie esecuzioni, esito registrato, annullamento quando possibile. Connettori fittizi per i test (calendario sintetico, bozze email) e connettori Google reali opzionali (calendario in sola lettura, bozze Gmail; OAuth gratuito, token cifrati, setup in [`docs/CONNECTORS-GOOGLE.md`](docs/CONNECTORS-GOOGLE.md)): una bozza non è un invio e non esiste alcuna operazione di invio. I connettori reali sono validati solo con fixture sintetiche: nessun account reale è mai stato collegato.
 - **Time Machine**: ricostruisce lo stato a una data rileggendo i dati registrati fino a quel momento (gli eventi sono solo in aggiunta): cronologia, stato a una data, confronto tra due periodi, obiettivi abbandonati, attività ricorrenti. Le lacune (periodi senza dati) sono sempre mostrate, mai riempite.
 - **Dashboard web**: pannelli su progetti, scadenze, eventi recenti, previsioni, agenti, automazioni, memorie importanti e richieste di autorizzazione; ogni elemento si apre e mostra gli id dei dati da cui deriva.
-- **Interfacce**: API FastAPI, chat web React con dashboard, CLI `atlas`, Docker Compose.
+- **Interfacce**: API FastAPI, chat web React con dashboard, app desktop Tauri (Linux e macOS), CLI `atlas`, Docker Compose.
 
 Lo stato onesto di ogni fase è in
-[`docs/ROADMAP-STATUS.md`](docs/ROADMAP-STATUS.md): le fasi 0–5 sono
-implementate e testate in CI (la 4 con connettori fittizi, nessun account
-reale); il consolidamento per la beta privata (fase 6) e il Counterfactual
-Engine (ricerca facoltativa) **non sono ancora implementati**.
+[`docs/ROADMAP-STATUS.md`](docs/ROADMAP-STATUS.md): le fasi 0–6 sono
+implementate e testate in CI (161 test backend, frontend, job Ollama reale,
+compose e smoke desktop end-to-end). La fase 6 si chiude solo con la beta
+con persone reali, che **resta aperta**; il Counterfactual Engine (ricerca
+facoltativa) **non è implementato**.
 
 ## Avvio rapido (Docker Compose)
 
@@ -64,6 +65,24 @@ docker exec atlas-ollama-1 ollama pull llama3.2
 Senza Ollama ATLAS funziona comunque: gli embeddings lessicali integrati e il
 generatore estrattivo sono gratuiti e offline, con qualità inferiore ma
 comportamento identico (citazioni incluse).
+
+## App desktop (Linux)
+
+Dalla [release v0.1.0](https://github.com/federicotaar/atlas/releases/tag/v0.1.0)
+scarica `ATLAS_0.1.0_amd64.AppImage` (o il `.deb`). Prerequisiti: Ubuntu
+22.04 o 24.04 (se mancanti: `sudo apt install libwebkit2gtk-4.1-0 libegl1`)
+e Docker per il backend, che deve essere in ascolto su 127.0.0.1:8000
+**prima** di aprire l'app.
+
+```bash
+cp .env.example .env   # modifica ATLAS_JWT_SECRET
+docker compose up --build        # API + database su 127.0.0.1:8000
+chmod +x ATLAS_0.1.0_amd64.AppImage
+./ATLAS_0.1.0_amd64.AppImage
+```
+
+Senza il backend attivo l'app mostra solo la schermata di accesso.
+Dettagli in [`docs/DESKTOP.md`](docs/DESKTOP.md).
 
 ## CLI
 
