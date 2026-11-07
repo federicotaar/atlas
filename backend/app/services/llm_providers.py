@@ -59,6 +59,11 @@ PROMPT_TEMPLATE = (
 )
 
 
+# Tetto alla lunghezza della risposta: senza, un modello che non si ferma
+# tiene la richiesta appesa fino al timeout e la chat sembra bloccata.
+MAX_ANSWER_TOKENS = 512
+
+
 def _prompt(question: str, memories: list[dict]) -> str:
     context = "\n".join(f"[M{i}] {m['content']}" for i, m in enumerate(memories, start=1))
     return PROMPT_TEMPLATE.format(context=context, question=question)
@@ -77,7 +82,7 @@ def chat_completion(provider: str, model: str, base_url: str, api_key: str,
                 f"{base}/api/chat",
                 headers=headers,
                 json={"model": model, "messages": [{"role": "user", "content": prompt}],
-                      "stream": False},
+                      "stream": False, "options": {"num_predict": MAX_ANSWER_TOKENS}},
                 timeout=timeout,
             )
             resp.raise_for_status()
@@ -88,7 +93,8 @@ def chat_completion(provider: str, model: str, base_url: str, api_key: str,
             resp = httpx.post(
                 f"{base}/chat/completions",
                 headers=headers,
-                json={"model": model, "messages": [{"role": "user", "content": prompt}]},
+                json={"model": model, "messages": [{"role": "user", "content": prompt}],
+                      "max_tokens": MAX_ANSWER_TOKENS},
                 timeout=timeout,
             )
             resp.raise_for_status()
@@ -97,7 +103,8 @@ def chat_completion(provider: str, model: str, base_url: str, api_key: str,
             resp = httpx.post(
                 f"{GEMINI_BASE}/models/{model}:generateContent",
                 headers={"x-goog-api-key": api_key},
-                json={"contents": [{"parts": [{"text": prompt}]}]},
+                json={"contents": [{"parts": [{"text": prompt}]}],
+                      "generationConfig": {"maxOutputTokens": MAX_ANSWER_TOKENS}},
                 timeout=timeout,
             )
             resp.raise_for_status()

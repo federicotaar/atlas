@@ -61,6 +61,7 @@ export interface AskResponse {
   citations: Citation[];
   saved_memory: { id: string; content: string } | null;
   conversation_id: string | null;
+  model: string | null;
 }
 
 export interface DashboardData {

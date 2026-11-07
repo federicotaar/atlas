@@ -74,6 +74,9 @@ export default function Chat() {
                   <img className="avatar" src="/atlas-logo.png" alt="" />
                   ATLAS
                 </div>
+                {t.response.model?.includes("->extractive-fallback") && (
+                  <div className="fallback-note">Modello AI non raggiungibile: questa risposta e solo estratta dalle memorie, senza generazione.</div>
+                )}
                 <div className="answer">{t.response.answer}</div>
                 {t.response.citations.length > 0 && (
                   <ul className="cits">
