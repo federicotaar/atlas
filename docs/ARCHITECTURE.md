@@ -87,3 +87,15 @@ dell'utente A.
   turno). Gli agenti di fase 2 si agganceranno qui.
 - **Stato progetto**: classificatore riconosce "a che punto sono con ...";
   la risposta elenca solo eventi e date realmente registrati.
+
+## Fase 2
+
+- **Agenti** (`app/agents/`): Researcher (recupero memorie via Retrieval ibrido),
+  Planner (scomposizione dell'obiettivo in attivita ordinate), Critic
+  (verifica appoggio delle attivita sui fatti; segnala empty_plan e
+  unsourced_claim). Messaggi Pydantic in `app/agents/schemas.py`.
+- **Limiti**: MAX_STEPS=3, TIMEOUT_S=20, costo sempre 0 (tutto locale).
+- **Registro**: tabella `agent_runs` (input/output JSONB, passi, durata, costo,
+  esito) esposta via `GET /agents/runs`.
+- Pipeline via `POST /agents/run` {"goal": "..."}; il Critic decide
+  l'approvazione finale.

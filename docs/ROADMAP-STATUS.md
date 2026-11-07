@@ -7,7 +7,7 @@ Le fasi finiscono quando passano i test di uscita, non per calendario.
 |---|---|---|
 | 0 | Nucleo: memoria, fonti, eventi, recupero ibrido, /ask con citazioni, auth, test | **Implementata** (questo repo) |
 | 1 | Grafo entità/relazioni, tipi completi, contraddizioni, conversazioni | **Implementata** (questo repo) |
-| 2 | Agenti Researcher/Planner/Critic, agent_runs | Non implementata |
+| 2 | Agenti Researcher/Planner/Critic, agent_runs | **Implementata** (questo repo) |
 | 3 | Previsioni con intervalli, verifica e calibrazione | Non implementata |
 | 4 | Connettori, Action Engine con permessi | Non implementata |
 | 5 | Time Machine, dashboard | Non implementata |
@@ -36,6 +36,18 @@ Le fasi finiscono quando passano i test di uscita, non per calendario.
 - [x] Orchestratore centrale (`app/services/orchestrator.py`): classifica -> percorso -> registra
 - [x] Domande contestuali sui progetti ("A che punto sono con X?": eventi e date reali, niente progressi inventati)
 - [x] Gate: benchmark >= 80% (88% con provider locale, 100% con Ollama) e «Non lo so» quando manca l'informazione
+
+## Uscita fase 2 (dalla specifica) e stato
+
+- [x] Researcher, Planner, Critic con messaggi strutturati (schemi Pydantic in `app/agents/schemas.py`)
+- [x] Limiti di esecuzione: passi (3), timeout (20s), budget costo (0, solo provider locali)
+- [x] Registro `agent_runs` (input, output, passi, durata, costo, esito) + `GET /agents/runs`
+- [x] Pipeline `POST /agents/run`: Researcher -> Planner -> Critic; il Critic ha l'ultima parola
+- [x] Gate: il Critic individua errori inseriti di proposito (test con attivita "piantata" senza fonte)
+
+Gli agenti sono rule-based e locali: niente chiamate a modelli esterni.
+Analyst ed Engineer (opzionali nella spec) non ancora aggiunti: la spec li
+subordina a un bisogno concreto con test.
 
 ## Note di onestà
 

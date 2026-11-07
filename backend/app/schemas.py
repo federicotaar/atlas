@@ -220,3 +220,16 @@ class ContradictionPairOut(BaseModel):
     memory: MemoryOut
     conflicts_with: MemoryOut
     shared_terms: list[str]
+
+class AgentRunOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    agent: str
+    input: dict
+    output: dict
+    steps: int
+    duration_ms: int
+    cost_eur: float
+    status: str
+    error: str | None
+    created_at: datetime

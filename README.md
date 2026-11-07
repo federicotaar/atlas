@@ -99,8 +99,3 @@ scripts/   benchmark di recupero ripetibile
 ## Licenza
 
 MIT — vedi [LICENSE](LICENSE).
-
-
-## Stato
-
-Fase 0 e fase 1 implementate e coperte da test in CI. Dettagli: [docs/ROADMAP-STATUS.md](docs/ROADMAP-STATUS.md).

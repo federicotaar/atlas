@@ -41,6 +41,24 @@ def client(_setup_db):
     return TestClient(app)
 
 
+@pytest.fixture()
+def db_session(_setup_db):
+    from sqlalchemy.orm import Session
+    engine = create_engine(os.environ["ATLAS_DATABASE_URL"])
+    with Session(engine) as session:
+        yield session
+
+
+@pytest.fixture()
+def db_user(db_session):
+    from app.models import User
+    user = User(email=f"db-{uuid.uuid4().hex[:10]}@example.com", password_hash="x")
+    db_session.add(user)
+    db_session.commit()
+    db_session.refresh(user)
+    return user
+
+
 def make_user(client: TestClient, prefix: str = "user") -> dict:
     """Registra un utente e ritorna header auth + email."""
     email = f"{prefix}-{uuid.uuid4().hex[:10]}@example.com"

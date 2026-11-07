@@ -158,3 +158,25 @@ class Message(Base):
     role: Mapped[str] = mapped_column(Text, nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
+
+
+class AgentRun(Base):
+    """Registro esecuzioni agenti (fase 2, spec 5D): input, output, passi,
+    durata, costo (sempre 0: solo provider locali), esito."""
+
+    __tablename__ = "agent_runs"
+    __table_args__ = (
+        CheckConstraint("status IN ('ok','error','stopped')", name="agent_runs_status_check"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    agent: Mapped[str] = mapped_column(Text, nullable=False)
+    input: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    output: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    steps: Mapped[int] = mapped_column(nullable=False, default=1)
+    duration_ms: Mapped[int] = mapped_column(nullable=False, default=0)
+    cost_eur: Mapped[float] = mapped_column(nullable=False, default=0.0)
+    status: Mapped[str] = mapped_column(Text, nullable=False, default="ok")
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
