@@ -1,6 +1,7 @@
-import { useState } from "react";
-import { api, type AskResponse } from "../api";
+import { useEffect, useState } from "react";
+import { api, type AskResponse, type ModelSettings } from "../api";
 import { formatCitation } from "../lib";
+import ModelPicker from "./ModelPicker";
 
 interface Turn {
   question: string;
@@ -13,6 +14,16 @@ export default function Chat() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [conversationId, setConversationId] = useState<string | null>(null);
+  const [modelSettings, setModelSettings] = useState<ModelSettings | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+
+  useEffect(() => {
+    api.getModelSettings().then(setModelSettings).catch(() => setModelSettings(null));
+  }, []);
+
+  const cloudLabel = modelSettings && modelSettings.provider_kind === "cloud"
+    ? modelSettings.providers.find((p) => p.id === modelSettings.provider)?.label ?? modelSettings.provider
+    : null;
 
   async function send(e: React.FormEvent) {
     e.preventDefault();
@@ -34,6 +45,15 @@ export default function Chat() {
 
   return (
     <div className="chat">
+      <div className="chat-topbar">
+        {cloudLabel
+          ? <span className="cloud-badge" title="Le risposte passano da un provider cloud esterno">Cloud: {cloudLabel}</span>
+          : <span />}
+        <button type="button" className="ghost" onClick={() => setPickerOpen(true)}>Modello</button>
+      </div>
+      {pickerOpen && (
+        <ModelPicker onClose={() => setPickerOpen(false)} onSaved={setModelSettings} />
+      )}
       {turns.length === 0 && (
         <div className="empty-chat">
           <img src="/atlas-logo.png" alt="" />

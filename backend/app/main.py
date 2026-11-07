@@ -18,6 +18,7 @@ from .routers import (
     memories,
     predictions,
     projects,
+    settings,
     sources,
     timemachine,
 )
@@ -52,6 +53,7 @@ app.include_router(predictions.router)
 app.include_router(actions.router)
 app.include_router(timemachine.router)
 app.include_router(dashboard.router)
+app.include_router(settings.router)
 
 
 @app.get("/health")

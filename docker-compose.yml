@@ -25,6 +25,11 @@ services:
       ATLAS_EMBED_PROVIDER: ${ATLAS_EMBED_PROVIDER:-local}
       ATLAS_LLM_PROVIDER: ${ATLAS_LLM_PROVIDER:-extractive}
       ATLAS_OLLAMA_BASE_URL: http://ollama:11434
+      # Chiave Fernet per cifrare le credenziali per-utente (connettori, chiavi
+      # API dei provider LLM BYOK). Default di SVILUPPO: sostituiscila con una
+      # chiave generata (python -c "from cryptography.fernet import Fernet;
+      # print(Fernet.generate_key().decode())").
+      ATLAS_CREDENTIALS_KEY: ${ATLAS_CREDENTIALS_KEY:-dFlmLYWhooNIxCgkSH_aPNs5xJEhnX8kIJCQyUjePtk=}
     depends_on:
       db:
         condition: service_healthy

@@ -101,6 +101,15 @@ def _project_status_answer(db: Session, user: User, text: str) -> str:
 def handle_ask(db: Session, settings: Settings, user: User, text: str,
                conversation_id: uuid.UUID | None = None) -> AskOut:
     router_ = ModelRouter(settings)
+    # BYOK: se l'utente ha scelto un provider/modello proprio, il suo
+    # generatore sostituisce quello di default del server. Errori di
+    # configurazione (chiave mancante) arrivano all'utente come errore
+    # chiaro; errori di rete del provider ricadono sull'estrattivo locale
+    # con il modello segnato "->extractive-fallback" (mai downgrade silenzioso).
+    from .llm_providers import resolve_user_generator
+    user_gen = resolve_user_generator(db, settings, user.id)
+    if user_gen is not None:
+        router_._generator = user_gen
     classification = classify(text)
     conv = _get_conversation(db, user, conversation_id, text)
 

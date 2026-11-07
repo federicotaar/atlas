@@ -21,6 +21,24 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
 
 
+class UserModelSetting(Base):
+    """Scelta modello BYOK dell'utente: provider, modello, base_url e chiave
+    API cifrata (Fernet, ATLAS_CREDENTIALS_KEY). La chiave non e' mai in
+    chiaro nel DB e non esce mai dalle API. consent_cloud registra il
+    consenso esplicito alla trasmissione verso provider cloud."""
+
+    __tablename__ = "user_model_settings"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    provider: Mapped[str] = mapped_column(Text, nullable=False)
+    model: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    base_url: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    api_key_enc: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    consent_cloud: Mapped[bool] = mapped_column(nullable=False, default=False)
+    updated_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
+
+
 class UsedAttestation(Base):
     __tablename__ = "used_attestations"
 

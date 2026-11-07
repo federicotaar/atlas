@@ -104,6 +104,26 @@ export interface DashboardData {
   };
 }
 
+export interface ProviderInfo {
+  id: string;
+  label: string;
+  kind: "local" | "cloud";
+  needs_key: boolean;
+  needs_base_url: boolean;
+  default_model: string;
+}
+
+export interface ModelSettings {
+  provider: string;
+  model: string;
+  base_url: string;
+  has_key: boolean;
+  consent_cloud: boolean;
+  provider_kind: "local" | "cloud";
+  needs_key: boolean;
+  providers: ProviderInfo[];
+}
+
 export const api = {
   requestCode: (email: string, purpose: "register" | "login", turnstileToken = "") =>
     req<{ ok: boolean; ttl_seconds: number }>("/auth/codes/request", {
@@ -130,4 +150,10 @@ export const api = {
       body: JSON.stringify(conversationId ? { text, conversation_id: conversationId } : { text }),
     }),
   dashboard: () => req<DashboardData>("/dashboard"),
+  getModelSettings: () => req<ModelSettings>("/settings/model"),
+  putModelSettings: (body: { provider: string; model?: string; base_url?: string;
+                             api_key?: string; consent_cloud?: boolean }) =>
+    req<ModelSettings>("/settings/model", { method: "PUT", body: JSON.stringify(body) }),
+  listModels: (provider: string) =>
+    req<{ models: string[] }>(`/settings/models?provider=${encodeURIComponent(provider)}`),
 };
