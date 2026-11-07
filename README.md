@@ -6,7 +6,7 @@
 
 **Un sistema di intelligenza personale che ricorda, ragiona e prevede, con fonti verificabili, limiti dichiarati e zero costi.**
 
-![status](https://img.shields.io/badge/status-fase%204%20di%206-orange)
+![status](https://img.shields.io/badge/status-fase%205%20di%206-orange)
 ![cost](https://img.shields.io/badge/costo-0%E2%82%AC%20tutto%20locale-brightgreen)
 ![tests](https://img.shields.io/badge/test-114%20verdi-brightgreen)
 
@@ -34,13 +34,15 @@ esce dalla macchina senza permesso.
 - **Agenti Researcher / Planner / Critic**: messaggi strutturati, limiti di passi, timeout e budget applicati (non solo registrati), ogni esecuzione tracciata. *Baseline rule-based dichiarata, non prova di capacità generale.*
 - **Prediction Engine**: stime a intervallo dalla velocità reale di completamento, rifiuto esplicito quando i dati sono troppo pochi, confronto con l'esito alla data di verifica (`GET /predictions/due` elenca le scadenze; `POST /predictions/evaluate-due` verifica automaticamente le stime automatiche misurando lo stato reale delle attività, mentre le stime manuali restano da verificare a mano), errore e punteggio di Brier, metriche di calibrazione. La verifica automatica è un meccanismo su dati sintetici: l'accuratezza longitudinale reale si misura solo con mesi di utilizzo reale.
 - **Action Engine**: unica porta per le azioni (gli agenti non eseguono mai direttamente). Livelli 0/1/2: lettura con permesso per connettore, modifiche reversibili eseguite e annullabili, azioni verso altri con anteprima esatta e conferma esplicita ogni volta. Chiave di idempotenza contro doppie esecuzioni, esito registrato, annullamento quando possibile. Connettori solo fittizi in questa fase (calendario sintetico, bozze email): una bozza non è un invio e non esiste alcuna operazione di invio.
-- **Interfacce**: API FastAPI, chat web React, CLI `atlas`, Docker Compose.
+- **Time Machine**: ricostruisce lo stato a una data rileggendo i dati registrati fino a quel momento (gli eventi sono solo in aggiunta): cronologia, stato a una data, confronto tra due periodi, obiettivi abbandonati, attività ricorrenti. Le lacune (periodi senza dati) sono sempre mostrate, mai riempite.
+- **Dashboard web**: pannelli su progetti, scadenze, eventi recenti, previsioni, agenti, automazioni, memorie importanti e richieste di autorizzazione; ogni elemento si apre e mostra gli id dei dati da cui deriva.
+- **Interfacce**: API FastAPI, chat web React con dashboard, CLI `atlas`, Docker Compose.
 
 Lo stato onesto di ogni fase è in
-[`docs/ROADMAP-STATUS.md`](docs/ROADMAP-STATUS.md): le fasi 0–4 sono
+[`docs/ROADMAP-STATUS.md`](docs/ROADMAP-STATUS.md): le fasi 0–5 sono
 implementate e testate in CI (la 4 con connettori fittizi, nessun account
-reale); time machine e dashboard (fase 5) e il Counterfactual Engine
-**non sono ancora implementati**.
+reale); il consolidamento per la beta privata (fase 6) e il Counterfactual
+Engine (ricerca facoltativa) **non sono ancora implementati**.
 
 ## Avvio rapido (Docker Compose)
 
@@ -93,5 +95,6 @@ cd frontend && npm install && npm run dev
 
 - Gli agenti di fase 2 sono rule-based: struttura e limiti reali, intelligenza generale no (richiede un modello locale via Ollama).
 - Le previsioni di fase 3 verificano il meccanismo (stima, scadenza, errore, calibrazione); l'accuratezza su dati longitudinali reali va dimostrata con l'uso.
+- La Time Machine ricostruisce dallo stato registrato (eventi append-only, memorie con sostituzioni datate); il record progetto non ha storia propria e lo stato attuale viene marcato come tale.
 - Il benchmark misura il recupero sul set preparato, non l'utilità percepita da utenti reali.
 - Le memorie dedotte sono sempre marcate come tali; la risoluzione delle contraddizioni spetta all'utente.

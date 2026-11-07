@@ -98,3 +98,20 @@ Metodo dichiarato: connettori fittizi con dati sintetici. Il meccanismo
 (permessi, anteprima, conferma, idempotenza, annullamento) e reale e
 testato; connettori veri (Google Calendar, Gmail) richiederebbero account
 reali e consensi espliciti, e non sono implementati.
+
+## Uscita fase 5 (dalla specifica) e stato
+
+- [x] Ricostruzione dello stato a una data (`GET /timemachine/state-at`): memorie attive alla data (sostituzioni rispettate per data di registrazione), eventi fino alla data per tipo, previsioni come risultavano alla data
+- [x] Cronologia (`GET /timemachine/timeline`): eventi in ordine temporale con fonte
+- [x] Confronto tra due periodi (`GET /timemachine/compare`): eventi, memorie e previsioni per periodo
+- [x] Obiettivi abbandonati (`GET /timemachine/abandoned-goals`): progetti attivi senza eventi recenti o con data obiettivo passata, con l'ultimo evento da cui deriva la segnalazione
+- [x] Attivita ricorrenti (`GET /timemachine/recurring`): tipi di evento ripetuti con cadenza media e regolarita
+- [x] Lacune sempre mostrate, mai riempite: ogni risposta su un intervallo include `gaps` (periodi senza alcun dato)
+- [x] Dashboard web (pannello React + `GET /dashboard`): progetti, attivita imminenti, eventi recenti, previsioni e scadenze, agenti attivi, automazioni, memorie importanti, richieste di autorizzazione
+- [x] Gate: ogni elemento della dashboard espone `derived_from` con gli id dei dati da cui deriva (verificato in `tests/test_dashboard.py`)
+- [ ] Involucro desktop Tauri: non implementato (nella specifica viene dopo la dashboard web)
+
+Metodo dichiarato: la ricostruzione usa solo dati registrati (eventi
+append-only, memorie con sostituzioni datate). Il record progetto non ha
+storia propria: `state-at` lo riporta marcato come stato attuale, non come
+stato alla data. Nessuna statistica oltre i dati: le lacune restano lacune.

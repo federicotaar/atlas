@@ -117,3 +117,22 @@ dell'utente A.
 - **Metriche** (`GET /predictions/metrics`): conteggio, MAE, Brier medio e
   curva di calibrazione a bucket (prob dichiarata vs frequenza reale) per
   mostrare l'accuratezza storica.
+
+### Fase 5 - Time Machine e dashboard
+
+- **Time Machine** (`app/services/timemachine.py`, router `/timemachine`):
+  gli eventi sono append-only, quindi lo stato a una data si ricostruisce
+  filtrando per data di registrazione. `memories_as_of` tiene conto delle
+  sostituzioni: una memoria sostituita resta attiva fino al `recorded_at`
+  della memoria che la sostituisce. `find_gaps` divide l'intervallo in
+  bucket (giornalieri fino a 62 giorni, settimanali oltre) ed elenca i
+  bucket consecutivi senza eventi: le lacune sono dati, non si riempiono.
+  Obiettivi abbandonati = progetti attivi senza eventi da N giorni o con
+  data obiettivo passata. Attivita ricorrenti = tipi di evento con almeno N
+  occorrenze, con cadenza media e coefficiente di variazione.
+- **Dashboard** (`app/services/dashboard.py`, router `/dashboard` + pannello
+  React `components/Dashboard.tsx`): aggrega progetti, scadenze, eventi
+  recenti, previsioni, agenti, connettori, memorie importanti e richieste di
+  autorizzazione. Regola d'uscita della fase: ogni elemento espone
+  `derived_from` con gli id sorgente; il frontend li mostra espandendo
+  "Da quali dati deriva".

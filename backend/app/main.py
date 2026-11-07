@@ -9,6 +9,7 @@ from .routers import (
     ask,
     auth,
     conversations,
+    dashboard,
     events,
     graph,
     me,
@@ -16,6 +17,7 @@ from .routers import (
     predictions,
     projects,
     sources,
+    timemachine,
 )
 
 app = FastAPI(title="ATLAS", version="0.1.0", docs_url="/docs")
@@ -33,6 +35,8 @@ app.include_router(conversations.router)
 app.include_router(agents.router)
 app.include_router(predictions.router)
 app.include_router(actions.router)
+app.include_router(timemachine.router)
+app.include_router(dashboard.router)
 
 
 @app.get("/health")
