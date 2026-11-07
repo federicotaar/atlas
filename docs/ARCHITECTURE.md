@@ -99,3 +99,21 @@ dell'utente A.
   esito) esposta via `GET /agents/runs`.
 - Pipeline via `POST /agents/run` {"goal": "..."}; il Critic decide
   l'approvazione finale.
+
+## Fase 3
+
+- **Prediction Engine** (`app/services/predictions.py`, router
+  `/predictions`): registro di previsioni con stima a intervallo
+  (low/central/high), unita, probabilita dichiarata, assunzioni, dati usati
+  e fattori di rischio. La stima automatica deriva dalla velocita storica di
+  completamento delle attivita (`kind=task` sostituite, alla data evento):
+  settimane necessarie = attivita aperte / completamenti a settimana. Con
+  meno di 2 settimane di osservazioni la stima viene RIFIUTATA
+  (`status=refused`) invece di inventare un numero.
+- **Verifica** (`POST /predictions/{id}/verify`): alla scadenza si registra
+  l'esito reale; il sistema calcola errore (|esito - centrale|) e Brier
+  ((prob - esito_binario)^2). Una previsione gia verificata o rifiutata non
+  puo essere riverificata (409).
+- **Metriche** (`GET /predictions/metrics`): conteggio, MAE, Brier medio e
+  curva di calibrazione a bucket (prob dichiarata vs frequenza reale) per
+  mostrare l'accuratezza storica.

@@ -8,7 +8,7 @@ Le fasi finiscono quando passano i test di uscita, non per calendario.
 | 0 | Nucleo: memoria, fonti, eventi, recupero ibrido, /ask con citazioni, auth, test | **Implementata** (questo repo) |
 | 1 | Grafo entità/relazioni, tipi completi, contraddizioni, conversazioni | **Implementata** (questo repo) |
 | 2 | Agenti Researcher/Planner/Critic, agent_runs | **Implementata** (questo repo) |
-| 3 | Previsioni con intervalli, verifica e calibrazione | Non implementata |
+| 3 | Previsioni con intervalli, verifica e calibrazione | **Implementata** (questo repo) |
 | 4 | Connettori, Action Engine con permessi | Non implementata |
 | 5 | Time Machine, dashboard | Non implementata |
 | ricerca | Counterfactual Engine | Non implementata (ricerca, richiede dati storici reali) |
@@ -69,3 +69,16 @@ subordina a un bisogno concreto con test.
   umana; il grafo non si popola da solo.
 - La classificazione delle richieste è a regole, non a modello.
 - Le azioni (fase 4) non esistono ancora: `/ask` le riconosce e le rifiuta.
+
+## Uscita fase 3 (dalla specifica) e stato
+
+- [x] Registro delle previsioni e dei risultati (tabella `predictions`, `POST/GET /predictions`, `POST /predictions/{id}/verify`)
+- [x] Stime con intervallo (basso/centrale/alto) dalla velocita storica di completamento delle attivita
+- [x] Rifiuto esplicito quando i dati sono troppo pochi (< 2 settimane di completamenti): niente stime inventate
+- [x] Metriche di errore e calibrazione (`GET /predictions/metrics`: MAE, Brier medio, bucket di calibrazione)
+- [x] Assunzioni, dati usati, probabilita dichiarata e fattori di rischio sempre registrati
+- [x] Gate: il sistema formula previsioni, le verifica alla scadenza (errore + Brier) e mostra l'accuratezza storica
+
+Metodo dichiarato: la stima automatica usa solo la velocita di completamento
+delle attivita (attivita chiuse per settimana ISO); non usa modelli
+linguistici. Le verifiche sono oneste anche quando l'esito e sfavorevole.

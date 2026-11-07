@@ -233,3 +233,24 @@ class AgentRunOut(BaseModel):
     status: str
     error: str | None
     created_at: datetime
+
+class PredictionOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    question: str
+    estimate_central: float | None
+    estimate_low: float | None
+    estimate_high: float | None
+    unit: str
+    probability: float | None
+    data_used: dict
+    assumptions: str
+    risk_factors: str
+    verify_at: datetime
+    status: str
+    outcome: float | None
+    outcome_note: str | None
+    error: float | None
+    brier: float | None
+    verified_at: datetime | None
+    created_at: datetime

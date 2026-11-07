@@ -180,3 +180,37 @@ class AgentRun(Base):
     status: Mapped[str] = mapped_column(Text, nullable=False, default="ok")
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
+
+
+class Prediction(Base):
+    """Prediction Engine (fase 3, spec 5E): ogni previsione registra domanda,
+    stima centrale, intervallo, probabilita dichiarata, dati usati, assunzioni,
+    fattori di rischio e data di verifica. Alla verifica si confronta con
+    l'esito reale e si calcola l'errore."""
+
+    __tablename__ = "predictions"
+    __table_args__ = (
+        CheckConstraint("status IN ('open','verified','refused')", name="predictions_status_check"),
+        CheckConstraint("probability IS NULL OR (probability >= 0 AND probability <= 1)",
+                        name="predictions_probability_check"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    question: Mapped[str] = mapped_column(Text, nullable=False)
+    estimate_central: Mapped[float | None] = mapped_column(nullable=True)
+    estimate_low: Mapped[float | None] = mapped_column(nullable=True)
+    estimate_high: Mapped[float | None] = mapped_column(nullable=True)
+    unit: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    probability: Mapped[float | None] = mapped_column(nullable=True)
+    data_used: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    assumptions: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    risk_factors: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    verify_at: Mapped[datetime] = mapped_column(nullable=False)
+    status: Mapped[str] = mapped_column(Text, nullable=False, default="open")
+    outcome: Mapped[float | None] = mapped_column(nullable=True)
+    outcome_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    error: Mapped[float | None] = mapped_column(nullable=True)
+    brier: Mapped[float | None] = mapped_column(nullable=True)
+    verified_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())

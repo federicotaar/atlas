@@ -3,7 +3,7 @@ from sqlalchemy import text as sql_text
 
 from .db import get_engine
 from .errors import register_error_handlers
-from .routers import agents, ask, auth, conversations, events, graph, me, memories, projects, sources
+from .routers import agents, ask, auth, conversations, events, graph, me, memories, predictions, projects, sources
 
 app = FastAPI(title="ATLAS", version="0.1.0", docs_url="/docs")
 register_error_handlers(app)
@@ -18,6 +18,7 @@ app.include_router(me.router)
 app.include_router(graph.router)
 app.include_router(conversations.router)
 app.include_router(agents.router)
+app.include_router(predictions.router)
 
 
 @app.get("/health")
