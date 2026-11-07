@@ -1,0 +1,29 @@
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
+
+
+class AtlasError(Exception):
+    def __init__(self, code: str, message: str, status: int = 400):
+        super().__init__(message)
+        self.code = code
+        self.message = message
+        self.status = status
+
+
+def _body(code: str, message: str) -> dict:
+    return {"error": {"code": code, "message": message}}
+
+
+def register_error_handlers(app: FastAPI) -> None:
+    @app.exception_handler(AtlasError)
+    async def atlas_error_handler(_: Request, exc: AtlasError) -> JSONResponse:
+        return JSONResponse(status_code=exc.status, content=_body(exc.code, exc.message))
+
+    @app.exception_handler(RequestValidationError)
+    async def validation_error_handler(_: Request, exc: RequestValidationError) -> JSONResponse:
+        return JSONResponse(status_code=422, content=_body("validation_error", str(exc.errors()[:3])))
+
+    @app.exception_handler(Exception)
+    async def generic_error_handler(_: Request, exc: Exception) -> JSONResponse:
+        return JSONResponse(status_code=500, content=_body("internal_error", "Errore interno."))

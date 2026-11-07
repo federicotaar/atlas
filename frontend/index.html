@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="it">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ATLAS</title>
+    <style>
+      body { margin: 0; font-family: system-ui, sans-serif; background: #0b0e14; color: #e6e9ef; }
+      #root { max-width: 760px; margin: 0 auto; padding: 2rem 1rem; }
+      input, button, textarea { font: inherit; }
+      input, textarea { background: #141a26; color: #e6e9ef; border: 1px solid #2a3550; border-radius: 8px; padding: 0.6rem 0.8rem; }
+      button { background: #3b82f6; color: white; border: 0; border-radius: 8px; padding: 0.6rem 1rem; cursor: pointer; }
+      button:hover { background: #2563eb; }
+      .msg { margin: 0.8rem 0; padding: 0.8rem 1rem; border-radius: 10px; background: #141a26; }
+      .cits { margin-top: 0.5rem; font-size: 0.85rem; color: #9fb0cc; }
+      .cits li { margin: 0.3rem 0; }
+      form { display: flex; gap: 0.5rem; margin-top: 1rem; }
+      form input { flex: 1; }
+      h1 { font-size: 1.4rem; letter-spacing: 0.15em; }
+      .auth { display: grid; gap: 0.6rem; max-width: 320px; }
+      .err { color: #f87171; font-size: 0.9rem; }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

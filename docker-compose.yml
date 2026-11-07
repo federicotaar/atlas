@@ -1,0 +1,45 @@
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: atlas
+      POSTGRES_PASSWORD: atlas
+      POSTGRES_DB: atlas
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U atlas -d atlas"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  api:
+    build: ./backend
+    restart: unless-stopped
+    environment:
+      ATLAS_DATABASE_URL: postgresql+psycopg://atlas:atlas@db:5432/atlas
+      ATLAS_JWT_SECRET: ${ATLAS_JWT_SECRET:-change-me-with-a-long-random-string}
+      ATLAS_EMBED_PROVIDER: ${ATLAS_EMBED_PROVIDER:-local}
+      ATLAS_LLM_PROVIDER: ${ATLAS_LLM_PROVIDER:-extractive}
+      ATLAS_OLLAMA_BASE_URL: http://ollama:11434
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+
+  ollama:
+    image: ollama/ollama:latest
+    profiles: ["models"]
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama:/root/.ollama
+
+volumes:
+  pgdata:
+  ollama:
