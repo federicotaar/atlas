@@ -1,0 +1,280 @@
+name: desktop
+
+permissions:
+  contents: write
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'desktop/**'
+      - 'frontend/**'
+      - 'backend/**'
+      - '.github/workflows/desktop.yml'
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop
+
+      - name: Dipendenze Linux per Tauri
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: Genera icone dal logo approvato
+        working-directory: desktop
+        run: npx --yes @tauri-apps/cli@^2 icon app-icon.png
+
+      - name: Build desktop (frontend + bundle Tauri)
+        working-directory: desktop
+        run: npx --yes @tauri-apps/cli@^2 build
+
+      - name: Artifact Linux
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: atlas-desktop-linux
+          path: |
+            desktop/target/release/bundle/deb/*.deb
+            desktop/target/release/bundle/appimage/*.AppImage
+          if-no-files-found: error
+
+      - name: Artifact macOS
+        if: runner.os == 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: atlas-desktop-macos
+          path: desktop/target/release/bundle/dmg/*.dmg
+          if-no-files-found: ignore
+
+  smoke-linux:
+    needs: build
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: atlas
+          POSTGRES_PASSWORD: atlas
+          POSTGRES_DB: atlas
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U atlas"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      ATLAS_DATABASE_URL: postgresql+psycopg://atlas:atlas@localhost:5432/atlas
+      ATLAS_EMBED_PROVIDER: local
+      ATLAS_LLM_PROVIDER: extractive
+      ATLAS_JWT_SECRET: ci-desktop-smoke
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Scarica AppImage dalla build
+        uses: actions/download-artifact@v4
+        with:
+          name: atlas-desktop-linux
+          path: /tmp/art
+
+      - name: Backend locale (Postgres + migrazioni + uvicorn)
+        run: |
+          pip install "./backend[dev]" --quiet
+          cd backend
+          alembic upgrade head
+          nohup uvicorn app.main:app --host 127.0.0.1 --port 8000 > /tmp/atlas-backend.log 2>&1 &
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:8000/health > /dev/null && break
+            sleep 2
+          done
+          curl -sf http://127.0.0.1:8000/health || { echo "ERRORE: backend non risponde"; cat /tmp/atlas-backend.log; exit 1; }
+
+      - name: Utente sintetico + verifica CORS per origine Tauri
+        run: |
+          TOKEN=$(curl -sf -X POST http://127.0.0.1:8000/auth/register -H 'Content-Type: application/json' -d '{"email":"smoke.desktop@example.com","password":"SmokePass123!"}' | jq -r .token)
+          [ -n "$TOKEN" ] && [ "$TOKEN" != "null" ] || { echo "ERRORE: registrazione sintetica fallita"; exit 1; }
+          echo "registrazione sintetica ok"
+          echo "--- preflight CORS (origine Tauri):"
+          curl -s -D /tmp/pre.h -o /dev/null -X OPTIONS http://127.0.0.1:8000/me/export -H 'Origin: http://tauri.localhost' -H 'Access-Control-Request-Method: GET' -H 'Access-Control-Request-Headers: authorization'
+          grep -i '^access-control-allow-origin: http://tauri.localhost' /tmp/pre.h || { echo "ERRORE: preflight CORS non concesso per origine Tauri"; cat /tmp/pre.h; exit 1; }
+          echo "--- GET autenticata con Origin tauri:"
+          CODE=$(curl -s -D /tmp/get.h -o /tmp/get.json -w '%{http_code}' http://127.0.0.1:8000/me/export -H "Origin: http://tauri.localhost" -H "Authorization: Bearer $TOKEN")
+          [ "$CODE" = "200" ] || { echo "ERRORE: GET /me/export -> $CODE"; cat /tmp/get.json; exit 1; }
+          grep -i '^access-control-allow-origin: http://tauri.localhost' /tmp/get.h || { echo "ERRORE: header CORS assente sulla GET"; cat /tmp/get.h; exit 1; }
+          echo "--- controllo negativo (origine estranea NON deve ricevere CORS):"
+          curl -s -D /tmp/neg.h -o /dev/null http://127.0.0.1:8000/me/export -H 'Origin: http://evil.example' -H "Authorization: Bearer $TOKEN"
+          grep -i '^access-control-allow-origin' /tmp/neg.h && { echo "ERRORE: CORS concesso a origine estranea"; exit 1; } || echo "ok: origine estranea senza CORS"
+          echo "CORS desktop verificato"
+
+      - name: Smoke test - avvio e render su Xvfb (Linux)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb imagemagick x11-utils openbox dbus-x11 xdotool
+          echo "--- contenuto /tmp/art:"
+          ls -la /tmp/art/ || true
+          find /tmp/art -maxdepth 3 | head -20
+          APPIMAGE=$(find /tmp/art -maxdepth 3 -type f -iname '*.appimage' | head -1)
+          [ -n "$APPIMAGE" ] || { echo "ERRORE: AppImage non trovata nell'artifact scaricato"; exit 1; }
+          APPIMAGE=$(readlink -f "$APPIMAGE")
+          chmod +x "$APPIMAGE"
+          cd /tmp && "$APPIMAGE" --appimage-extract >/dev/null
+          Xvfb :99 -screen 0 1280x800x24 &
+          sleep 2
+          DISPLAY=:99 openbox > /tmp/openbox.log 2>&1 &
+          sleep 2
+          DISPLAY=:99 dbus-run-session -- env WEBKIT_DISABLE_DMABUF_RENDERER=1 WEBKIT_DISABLE_COMPOSITING_MODE=1 NO_AT_BRIDGE=1 GDK_BACKEND=x11 RUST_LOG=info /tmp/squashfs-root/AppRun > /tmp/atlas-app.log 2>&1 &
+          echo $! > /tmp/atlas-app.pid
+          echo "--- attesa finestra dimensionata >=400x300 (max 60s):"
+          FOUND=0
+          for i in $(seq 1 30); do
+            LINE=$(DISPLAY=:99 xwininfo -root -children | grep -E '([4-9][0-9]{2}|[1-9][0-9]{3,})x([3-9][0-9]{2}|[1-9][0-9]{3,})\+' | head -1)
+            if [ -n "$LINE" ]; then
+              echo "  finestra dimensionata: $LINE"
+              echo "$LINE" > /tmp/atlas-window.txt
+              FOUND=1; break
+            fi
+            sleep 2
+          done
+          if [ "$FOUND" != "1" ]; then
+            echo "--- nessuna finestra, rilancio AppRun (tentativo 2, max 60s):"
+            kill "$(cat /tmp/atlas-app.pid)" 2>/dev/null || true
+            sleep 2
+            echo "=== rilancio ===" >> /tmp/atlas-app.log
+            DISPLAY=:99 dbus-run-session -- env WEBKIT_DISABLE_DMABUF_RENDERER=1 WEBKIT_DISABLE_COMPOSITING_MODE=1 NO_AT_BRIDGE=1 GDK_BACKEND=x11 RUST_LOG=info /tmp/squashfs-root/AppRun >> /tmp/atlas-app.log 2>&1 &
+            echo $! > /tmp/atlas-app.pid
+            for i in $(seq 1 30); do
+              LINE=$(DISPLAY=:99 xwininfo -root -children | grep -E '([4-9][0-9]{2}|[1-9][0-9]{3,})x([3-9][0-9]{2}|[1-9][0-9]{3,})\+' | head -1)
+              if [ -n "$LINE" ]; then
+                echo "  finestra dimensionata: $LINE"
+                echo "$LINE" > /tmp/atlas-window.txt
+                FOUND=1; break
+              fi
+              sleep 2
+            done
+          fi
+          if [ "$FOUND" = "1" ]; then
+            echo "--- finestra trovata, attesa render (10s)"
+            sleep 10
+          fi
+          DISPLAY=:99 import -window root /tmp/atlas-desktop-smoke.png || true
+          STATS=$(identify -format "mean=%[mean] stddev=%[standard-deviation] size=%wx%h" /tmp/atlas-desktop-smoke.png 2>/dev/null || echo "n/a")
+          echo "--- statistiche pixel: $STATS"
+          {
+            echo "esito: $([ "$FOUND" = "1" ] && echo finestra-trovata || echo NESSUNA-FINESTRA)"
+            echo "finestra: ${LINE:-nessuna}"
+            echo "pixel login: $STATS"
+            echo "--- finestre X (xwininfo -root -children):"
+            DISPLAY=:99 xwininfo -root -children 2>&1 | tail -15
+            echo "--- processi app/webkit:"
+            ps aux | grep -iE 'apprun|webkit|atlas' | grep -v grep || echo "(nessuno)"
+            echo "--- memoria:"
+            free -m | head -3
+            echo "--- log app (stdout+stderr):"
+            cat /tmp/atlas-app.log
+            echo "--- log openbox:"
+            cat /tmp/openbox.log 2>/dev/null || true
+          } > /tmp/atlas-desktop-smoke.log 2>&1
+          if [ "$FOUND" != "1" ]; then
+            echo "ERRORE: nessuna finestra ATLAS dimensionata >=400x300 (2 tentativi)"
+            exit 1
+          fi
+          STDDEV=$(echo "$STATS" | sed -E 's/.*stddev=([0-9.]+).*/\1/')
+          awk -v s="$STDDEV" 'BEGIN{ if (s+0 < 1.0) { print "ERRORE: screenshot login vuoto/uniforme (stddev=" s ")"; exit 1 } }'
+          echo "OK: schermata login resa (stddev=$STDDEV)"
+
+      - name: Login sintetico guidato (xdotool) + screenshot post-login
+        run: |
+          LINE=$(cat /tmp/atlas-window.txt)
+          WID=$(echo "$LINE" | grep -oE '0x[0-9a-f]+' | head -1)
+          POS=$(echo "$LINE" | grep -oE '\+[0-9-]+\+[0-9-]+' | head -1)
+          WX=$(echo "$POS" | cut -d+ -f2)
+          WY=$(echo "$POS" | cut -d+ -f3)
+          echo "finestra $WID a +$WX+$WY"
+          DISPLAY=:99 xdotool windowactivate "$WID"
+          sleep 1
+          DISPLAY=:99 xdotool mousemove $((WX+331)) $((WY+131)) click 1
+          sleep 1
+          DISPLAY=:99 xdotool type --delay 30 'smoke.desktop@example.com'
+          DISPLAY=:99 xdotool mousemove $((WX+331)) $((WY+181)) click 1
+          sleep 1
+          DISPLAY=:99 xdotool type --delay 30 'SmokePass123!'
+          DISPLAY=:99 xdotool mousemove $((WX+331)) $((WY+230)) click 1
+          echo "--- click Entra inviato, attesa dashboard (max 45s):"
+          CHANGED=0
+          for i in $(seq 1 9); do
+            sleep 5
+            DISPLAY=:99 import -window root /tmp/atlas-desktop-postlogin.png
+            RMSE=$(compare -metric RMSE /tmp/atlas-desktop-smoke.png /tmp/atlas-desktop-postlogin.png null: 2>&1 | grep -oE '\([0-9.]+\)' | tr -d '()' || echo 0)
+            echo "  t+$((i*5))s RMSE=${RMSE:-0}"
+            awk -v r="${RMSE:-0}" 'BEGIN{ exit !(r+0 > 0.03) }' && { CHANGED=1; break; }
+          done
+          STATS2=$(identify -format "mean=%[mean] stddev=%[standard-deviation] size=%wx%h" /tmp/atlas-desktop-postlogin.png)
+          echo "--- statistiche pixel post-login: $STATS2"
+          {
+            echo "post-login pixel: $STATS2"
+            echo "schermata cambiata dopo login: $([ "$CHANGED" = "1" ] && echo si || echo no)"
+            echo "--- finestre X:"
+            DISPLAY=:99 xwininfo -root -children 2>&1 | tail -15
+            echo "--- processi app/webkit:"
+            ps aux | grep -iE 'apprun|webkit|atlas' | grep -v grep || echo "(nessuno)"
+            echo "--- log app (stdout+stderr):"
+            cat /tmp/atlas-app.log
+            echo "--- log backend (ultime 30 righe):"
+            tail -30 /tmp/atlas-backend.log
+            echo "--- log openbox:"
+            cat /tmp/openbox.log 2>/dev/null || true
+          } >> /tmp/atlas-desktop-smoke.log 2>&1
+          kill "$(cat /tmp/atlas-app.pid)" 2>/dev/null || true
+          [ "$CHANGED" = "1" ] || { echo "ERRORE: schermata identica dopo il login - autenticazione UI non riuscita"; exit 1; }
+          STDDEV2=$(echo "$STATS2" | sed -E 's/.*stddev=([0-9.]+).*/\1/')
+          awk -v s="$STDDEV2" 'BEGIN{ if (s+0 < 1.0) { print "ERRORE: screenshot post-login vuoto/uniforme (stddev=" s ")"; exit 1 } }'
+          echo "OK: login UI riuscito e dashboard resa (stddev=$STDDEV2)"
+
+      - name: Salva gli screenshot smoke in docs/ (evidenza render nel repo)
+        if: always()
+        run: |
+          mkdir -p docs/assets
+          [ -f /tmp/atlas-desktop-smoke.png ] && cp /tmp/atlas-desktop-smoke.png docs/assets/desktop-smoke-linux.png
+          [ -f /tmp/atlas-desktop-postlogin.png ] && cp /tmp/atlas-desktop-postlogin.png docs/assets/desktop-postlogin-linux.png
+          [ -f /tmp/atlas-desktop-smoke.log ] && cp /tmp/atlas-desktop-smoke.log docs/assets/desktop-smoke-log.txt
+          git config user.name "atlas-ci"
+          git config user.email "ci@fredrichlabs.invalid"
+          git add -A docs/assets/
+          git commit -m "ci: screenshot smoke desktop (render Xvfb) [skip ci]" || echo "nessuna modifica"
+          git push
+
+      - name: Artifact smoke screenshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: atlas-desktop-smoke-linux
+          path: |
+            /tmp/atlas-desktop-smoke.png
+            /tmp/atlas-desktop-postlogin.png
+            /tmp/atlas-desktop-smoke.log
+          if-no-files-found: warn
