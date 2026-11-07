@@ -1,7 +1,6 @@
 """BYOK model settings: scelta provider per utente, chiave cifrata, consenso
 cloud, isolamento tra utenti, uso reale nel flusso /ask (provider mockati)."""
 import base64
-import os
 
 import pytest
 
