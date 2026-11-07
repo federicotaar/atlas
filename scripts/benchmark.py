@@ -17,11 +17,47 @@ os.environ.setdefault("ATLAS_JWT_SECRET", "benchmark-secret")
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backend"))
 
+# Worker codici finto (stesso approccio di tests/conftest.py): il benchmark
+# gira fuori da pytest e si porta il suo fake in-process, con firma Ed25519
+# reale cosi il flusso register a 3 passi resta quello vero.
+import base64  # noqa: E402
+import json as _json  # noqa: E402
+import time  # noqa: E402
+import uuid as _uuid  # noqa: E402
+
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey  # noqa: E402
+from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 from sqlalchemy import create_engine, text  # noqa: E402
 
+from app.config import get_settings  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models import Base  # noqa: E402
+from app.services import codes as codes_svc  # noqa: E402
+
+_priv = Ed25519PrivateKey.generate()
+
+
+def _b64u(b: bytes) -> str:
+    return base64.urlsafe_b64encode(b).rstrip(b"=").decode()
+
+
+get_settings().codes_public_key = _b64u(_priv.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw))
+get_settings().codes_api_url = "https://codes.test"
+
+
+def _fake_post(path: str, payload: dict):
+    if path.endswith("/request"):
+        return 200, {"ok": True, "ttl_seconds": 600}
+    now = int(time.time())
+    pl = _json.dumps({
+        "iss": "atlas-codes", "email": str(payload.get("email", "")).lower(),
+        "purpose": payload.get("purpose"), "iat": now, "exp": now + 300, "jti": _uuid.uuid4().hex,
+    }).encode()
+    return 200, {"ok": True, "attestation": _b64u(pl) + "." + _b64u(_priv.sign(pl))}
+
+
+codes_svc._post = _fake_post
 
 # Persona sintetica: nessun dato reale.
 SEED = [
@@ -55,7 +91,13 @@ def main() -> int:
     Base.metadata.create_all(engine)
 
     client = TestClient(app)
-    r = client.post("/auth/register", json={"email": "benchmark@example.com", "password": "benchmark-123"})
+    email = "benchmark@example.com"
+    client.post("/auth/codes/request", json={"email": email, "purpose": "register"})
+    r = client.post("/auth/codes/check", json={"email": email, "code": "000000"})
+    assert r.status_code == 200, r.text
+    r = client.post("/auth/register", json={
+        "email": email, "password": "benchmark-123", "signup_token": r.json()["signup_token"],
+    })
     assert r.status_code == 201, r.text
     headers = {"Authorization": f"Bearer {r.json()['token']}"}
     sid = client.post("/sources", json={"kind": "benchmark", "label": "benchmark"},
