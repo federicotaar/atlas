@@ -144,3 +144,16 @@ almeno sei mesi di eventi affidabili e centinaia di eventi registrati,
 modello esplicito (non "chiedi a un LLM di immaginare"). Senza dati reali
 longitudinali un prototipo misurerebbe solo se stesso: dichiarato apertamente
 invece di simulare la funzione.
+
+## Involucro desktop Tauri (fase 5, "poi involucro desktop Tauri")
+
+- [x] Shell Tauri v2 in `desktop/` attorno alla dashboard web esistente:
+  stesso frontend compilato, base API risolta a `http://127.0.0.1:8000`
+  dentro il webview, CORS del backend aperto solo per le origini Tauri
+  (test `test_cors.py`: preflight Tauri ok, origine sconosciuta senza
+  header, same-origin invariato)
+- [x] Build CI su ubuntu-latest e macos-latest
+  (`.github/workflows/desktop.yml`) con icone generate dal logo v7
+  approvato e artifact .deb/.AppImage/.dmg
+- [ ] Il backend resta un processo separato avviato dall'utente
+  (nessun sidecar embedded): limite dichiarato, vedi `docs/DESKTOP.md`

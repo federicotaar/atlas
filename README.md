@@ -88,6 +88,7 @@ cd frontend && npm install && npm run dev
 | --- | --- |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Componenti, flussi e scelte tecniche per fase |
 | [`docs/ROADMAP-STATUS.md`](docs/ROADMAP-STATUS.md) | Stato onesto di ogni fase della specifica |
+| [`docs/DESKTOP.md`](docs/DESKTOP.md) | Involucro desktop Tauri della dashboard |
 | [`docs/BENCHMARK.md`](docs/BENCHMARK.md) | Benchmark di recupero: metodo, risultati, calibrazione |
 | [`docs/SECURITY.md`](docs/SECURITY.md) | Minacce considerate e contromisure implementate |
 | [`docs/API.md`](docs/API.md) | Riferimento endpoint HTTP |

@@ -33,6 +33,10 @@ class Settings(BaseSettings):
     agent_timeout_s: float = 20.0
     agent_budget_eur: float = 0.0
 
+    # Origini extra ammesse via CORS, separate da virgola. Di default solo le
+    # origini dell'involucro desktop Tauri; il browser resta same-origin.
+    cors_origins: str = "http://tauri.localhost,tauri://localhost"
+
 
 @lru_cache
 def get_settings() -> Settings:

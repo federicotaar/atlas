@@ -1,4 +1,14 @@
-const BASE = (import.meta.env.VITE_API_URL as string | undefined) ?? "/api";
+export function resolveBase(envUrl: string | undefined, isTauri: boolean): string {
+  if (envUrl) return envUrl;
+  // In Tauri non c'e' proxy: il webview (origine tauri.localhost) chiama
+  // direttamente il backend locale, che espone CORS solo per le origini Tauri.
+  return isTauri ? "http://127.0.0.1:8000" : "/api";
+}
+
+const BASE = resolveBase(
+  import.meta.env.VITE_API_URL as string | undefined,
+  typeof (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ !== "undefined",
+);
 
 let token: string | null = localStorage.getItem("atlas_token");
 
