@@ -72,3 +72,5 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: docker compose config -q
+
+# fase 4: trigger CI dopo import bot
