@@ -46,6 +46,15 @@ Le fasi finiscono quando passano i test di uscita, non per calendario.
 - [x] Gate: il Critic individua errori inseriti di proposito (test con attivita "piantata" senza fonte)
 
 Gli agenti sono rule-based e locali: niente chiamate a modelli esterni.
+Questa e una BASELINE meccanica della struttura richiesta (messaggi
+strutturati, limiti, registro, ultima parola del Critic), NON prova di
+capacita generale di ricerca o pianificazione intelligente: quella richiede
+un modello linguistico locale (Ollama) e valutazione su casi reali.
+I limiti (passi, timeout, budget) sono APPLICATI, non solo registrati: test
+dedicati verificano che la pipeline si fermi (stopped_reason) quando un
+limite scatta. Il Critic controlla l'appoggio sostanziale (parole di
+contenuto condivise) e le contraddizioni con i fatti, con casi avversari in
+test (memoria citata ma irrilevante; attivita che contraddice un fatto).
 Analyst ed Engineer (opzionali nella spec) non ancora aggiunti: la spec li
 subordina a un bisogno concreto con test.
 

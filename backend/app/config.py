@@ -29,6 +29,9 @@ class Settings(BaseSettings):
     recency_half_life_days: float = 30.0
     ask_min_relevance: float = 0.12
     duplicate_max_distance: float = 0.05
+    agent_max_steps: int = 3
+    agent_timeout_s: float = 20.0
+    agent_budget_eur: float = 0.0
 
 
 @lru_cache

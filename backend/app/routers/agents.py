@@ -34,20 +34,45 @@ class AgentPipelineOut(BaseModel):
 @router.post("/run", response_model=AgentPipelineOut)
 def run_pipeline(body: AgentPipelineIn, db: Session = Depends(get_db),
                  user: User = Depends(get_current_user)) -> AgentPipelineOut:
+    """Pipeline con limiti EFFETTIVI (spec 5D): passi, timeout, budget.
+
+    Ogni agente e un passo. Se un limite scatta, la pipeline si ferma e lo
+    dice (stopped_reason): i limiti non sono solo registrati, sono applicati.
+    """
     settings = get_settings()
     start = time.monotonic()
+    steps = 0
+
+    def stopped(reason: str, detail: str, facts: list[str]) -> AgentPipelineOut:
+        return AgentPipelineOut(goal=body.goal, facts=facts, tasks=[],
+                                critic_approved=False,
+                                critic_issues=[{"kind": reason, "detail": detail}],
+                                runs=_run_ids(db, user), stopped_reason=reason)
+
+    def check_limits(facts: list[str]) -> AgentPipelineOut | None:
+        if steps >= settings.agent_max_steps:
+            return stopped("step_limit", f"Limite di {settings.agent_max_steps} passi raggiunto.", facts)
+        if time.monotonic() - start > settings.agent_timeout_s:
+            return stopped("timeout", f"Timeout di {settings.agent_timeout_s}s superato.", facts)
+        spent = db.query(AgentRun).filter(AgentRun.user_id == user.id).with_entities(
+            AgentRun.cost_eur).all()
+        if sum(c for (c,) in spent) > settings.agent_budget_eur:
+            return stopped("budget", f"Budget di {settings.agent_budget_eur} EUR superato.", facts)
+        return None
 
     research = core.run_researcher(db, settings, user.id, ResearchInput(goal=body.goal))
-    if time.monotonic() - start > core.TIMEOUT_S:
-        return AgentPipelineOut(goal=body.goal, facts=research.facts, tasks=[],
-                                critic_approved=False,
-                                critic_issues=[{"kind": "timeout",
-                                                "detail": "Timeout prima del Planner."}],
-                                runs=_run_ids(db, user), stopped_reason="timeout")
+    steps += 1
+    if (hit := check_limits(research.facts)) is not None:
+        return hit
 
     plan = core.run_planner(db, user.id, PlanInput(goal=body.goal, facts=research.facts))
+    steps += 1
+    if (hit := check_limits(research.facts)) is not None:
+        return hit
+
     verdict = core.critique(db, user.id, CriticInput(
         goal=body.goal, facts=research.facts, tasks=plan.tasks))
+    steps += 1
 
     return AgentPipelineOut(
         goal=body.goal,

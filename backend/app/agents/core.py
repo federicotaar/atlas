@@ -20,15 +20,17 @@ from .schemas import (
     ResearchOutput,
 )
 
-MAX_STEPS = 3  # researcher -> planner -> critic
-TIMEOUT_S = 20
+# i valori effettivi arrivano da Settings (ATLAS_AGENT_*); questi restano
+# come default documentati per chi legge il codice
+DEFAULT_MAX_STEPS = 3
+DEFAULT_TIMEOUT_S = 20.0
 
 _WORD = re.compile(r"[a-zàèéìòù0-9]{4,}", re.IGNORECASE)
 _SPLIT = re.compile(r"\b(?:e poi|poi|dopo|quindi|infine|;|\.\s)\s*", re.IGNORECASE)
 
 
-class BudgetExceeded(Exception):
-    pass
+class LimitExceeded(Exception):
+    """Un limite (passi, timeout o budget) ha fermato l'esecuzione."""
 
 
 def _log_run(db: Session, user_id: uuid.UUID, agent: str, inp, out, steps: int,
@@ -82,13 +84,27 @@ def _support_words(facts: list[str]) -> set[str]:
     return words
 
 
+def _contradicts_facts(title: str, facts: list[str]) -> str | None:
+    """Un'attivita che contraddice un fatto noto (stesso soggetto, valori
+    diversi) viene segnalata: riusa l'euristica contraddizioni del Memory
+    Engine. Ritorna il fatto contraddetto, se trovato."""
+    from ..services.contradictions import is_possible_contradiction
+
+    for f in facts:
+        conflict, _ = is_possible_contradiction(title, f)
+        if conflict:
+            return f
+    return None
+
+
 def critique(db: Session, user_id: uuid.UUID, inp: CriticInput) -> CriticOutput:
-    """Il Critic ha l'ultima parola (spec 5D). Regole:
+    """Il Critic ha l'ultima parola (spec 5D). Controllo SOSTANZIALE, non di
+    sola presenza di citazioni:
     - piano vuoto con fatti disponibili -> errore;
-    - ogni attivita deve avere appoggio lessicale nei fatti (soglia minima):
-      senza appoggio e un 'affermazione senza fonte' segnalata;
-    - nessuna attivita inventata passa inosservata: resta nella risposta solo
-      se segnalata."""
+    - ogni attivita deve condividere contenuto reale con i fatti recuperati
+      (almeno un terzo delle parole significative): memorie citate ma
+      irrilevanti non valgono come appoggio;
+    - un'attivita che contraddice un fatto noto viene segnalata a parte."""
     start = time.monotonic()
     issues: list[CriticIssue] = []
     if not inp.tasks:
@@ -103,8 +119,14 @@ def critique(db: Session, user_id: uuid.UUID, inp: CriticInput) -> CriticOutput:
             issues.append(CriticIssue(
                 kind="unsourced_claim",
                 detail=f"L'attivita '{t.title}' non trova appoggio nelle memorie recuperate."))
-        else:
-            verified.append(t)
+            continue
+        contra = _contradicts_facts(t.title, inp.facts)
+        if contra is not None:
+            issues.append(CriticIssue(
+                kind="contradicts_fact",
+                detail=f"L'attivita '{t.title}' contraddice il fatto: '{contra}'."))
+            continue
+        verified.append(t)
     out = CriticOutput(approved=not issues, issues=issues, verified_tasks=verified)
     _log_run(db, user_id, "critic", inp, out, 1, start, "ok")
     return out
