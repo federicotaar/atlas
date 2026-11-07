@@ -77,3 +77,5 @@ jobs:
 # phase-1: entities/relationships/conversations coperte dalla stessa pipeline
 
 # phase-2: agenti (researcher/planner/critic) nella stessa pipeline
+
+# fase-2 hardening: limiti applicati (passi/timeout/budget) e critic sostanziale
