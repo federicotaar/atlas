@@ -74,3 +74,4 @@ jobs:
       - run: docker compose config -q
 
 # fase 4: trigger CI dopo import bot
+# nota fase 5 (trigger run)
