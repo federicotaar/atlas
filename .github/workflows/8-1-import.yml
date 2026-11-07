@@ -1,0 +1,32 @@
+name: import
+on:
+  push:
+    paths:
+      - '*.zip'
+permissions:
+  contents: write
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Import zip
+        run: |
+          ZIP="$(ls ./*.zip 2>/dev/null | sort -V | tail -n1 || true)"
+          if [ -z "$ZIP" ]; then echo "nessun zip da importare (push di tag o altro)"; exit 0; fi
+          unzip -o "$ZIP" -d .
+          rm -f ./*.zip
+          rm -rf frontend/node_modules backend/.venv
+      - name: Commit
+        run: |
+          git config user.name "atlas-import"
+          git config user.email "import@localhost"
+          MSG="$(cat COMMIT_MSG.txt 2>/dev/null || echo 'Import ATLAS source update')"
+          rm -f COMMIT_MSG.txt
+          git add -A
+          if git diff --cached --quiet; then
+            echo "nessuna modifica da committare"
+          else
+            git commit -m "$MSG"
+            git push
+          fi
