@@ -4,7 +4,7 @@
   "version": "2.0.0",
   "identifier": "com.fredrichlabs.atlas",
   "build": {
-    "beforeBuildCommand": "npm --prefix ../frontend ci && npm --prefix ../frontend run build",
+    "beforeBuildCommand": "",
     "frontendDist": "../frontend/dist"
   },
   "app": {
