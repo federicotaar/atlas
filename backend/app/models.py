@@ -21,6 +21,30 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
 
 
+class UsedAttestation(Base):
+    __tablename__ = "used_attestations"
+
+    jti: Mapped[str] = mapped_column(Text, primary_key=True)
+    email: Mapped[str] = mapped_column(Text, nullable=False)
+    purpose: Mapped[str] = mapped_column(Text, nullable=False)
+    used_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
+
+
+class SignupProof(Base):
+    """Prova di verifica email (server-held): prodotta da /auth/codes/check,
+    consumata atomicamente da /auth/register. Vive al piu' 5 minuti."""
+
+    __tablename__ = "signup_proofs"
+
+    jti: Mapped[str] = mapped_column(Text, primary_key=True)
+    email: Mapped[str] = mapped_column(Text, nullable=False)
+    # sha256 del signup_token restituito a /auth/codes/check: la registrazione
+    # e' consumabile SOLO da chi detiene il token (la sessione che ha verificato),
+    # non da chiunque conosca l'email. Il token in chiaro non tocca mai il DB.
+    token_hash: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    expires_at: Mapped[int] = mapped_column(nullable=False)  # epoch seconds
+
+
 class Source(Base):
     __tablename__ = "sources"
 

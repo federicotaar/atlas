@@ -7,24 +7,44 @@ import Dashboard from "./components/Dashboard";
 export default function App() {
   const [logged, setLogged] = useState(hasToken());
   const [view, setView] = useState<"chat" | "dashboard">("chat");
+
+  function logout() {
+    setToken(null);
+    setLogged(false);
+  }
+
+  if (!logged) {
+    return <Auth onLogin={() => setLogged(true)} />;
+  }
+
   return (
     <>
-      <h1>ATLAS</h1>
-      {logged ? (
-        <>
-          <nav style={{ marginBottom: "1rem" }}>
-            <button disabled={view === "chat"} onClick={() => setView("chat")}>Chat</button>{" "}
-            <button disabled={view === "dashboard"} onClick={() => setView("dashboard")}>Dashboard</button>
-          </nav>
-          {view === "chat" ? (
-            <Chat onLogout={() => { setToken(null); setLogged(false); }} />
-          ) : (
-            <Dashboard />
-          )}
-        </>
-      ) : (
-        <Auth onLogin={() => setLogged(true)} />
-      )}
+      <header className="topbar">
+        <div className="brand">
+          <img src="/atlas-logo.png" alt="ATLAS" className="logo" />
+          <span className="wordmark">ATLAS</span>
+        </div>
+        <nav className="seg">
+          <button
+            className={view === "chat" ? "seg-item active" : "seg-item"}
+            aria-pressed={view === "chat"}
+            onClick={() => setView("chat")}
+          >
+            Chat
+          </button>
+          <button
+            className={view === "dashboard" ? "seg-item active" : "seg-item"}
+            aria-pressed={view === "dashboard"}
+            onClick={() => setView("dashboard")}
+          >
+            Dashboard
+          </button>
+        </nav>
+        <button className="ghost" onClick={logout}>Esci</button>
+      </header>
+      <main className={view === "chat" ? "view view-chat" : "view"}>
+        {view === "chat" ? <Chat /> : <Dashboard />}
+      </main>
     </>
   );
 }

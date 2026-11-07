@@ -105,10 +105,25 @@ export interface DashboardData {
 }
 
 export const api = {
-  register: (email: string, password: string) =>
-    req<{ token: string }>("/auth/register", { method: "POST", body: JSON.stringify({ email, password }) }),
+  requestCode: (email: string, purpose: "register" | "login", turnstileToken = "") =>
+    req<{ ok: boolean; ttl_seconds: number }>("/auth/codes/request", {
+      method: "POST",
+      body: JSON.stringify({ email, purpose, turnstile_token: turnstileToken }),
+    }),
+  checkCode: (email: string, code: string) =>
+    req<{ ok: boolean; signup_token: string }>("/auth/codes/check", {
+      method: "POST",
+      body: JSON.stringify({ email, code }),
+    }),
+  register: (email: string, password: string, signupToken: string) =>
+    req<{ token: string }>("/auth/register", {
+      method: "POST",
+      body: JSON.stringify({ email, password, signup_token: signupToken }),
+    }),
   login: (email: string, password: string) =>
     req<{ token: string }>("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
+  loginCode: (email: string, code: string) =>
+    req<{ token: string }>("/auth/login-code", { method: "POST", body: JSON.stringify({ email, code }) }),
   ask: (text: string, conversationId?: string) =>
     req<AskResponse>("/ask", {
       method: "POST",

@@ -1,0 +1,22 @@
+name = "atlas-codes"
+main = "src/index.js"
+compatibility_date = "2026-11-07"
+
+# Subdomain TBD (proposta: atlas.federicotaranu.site) - custom domain attach al deploy.
+# Sender TBD: proposta "ATLAS" <atlas@federicotaranu.site> (auto-verificato sul dominio
+# gia' autenticato Brevo). LOGO_URL = https://<subdomain>/logo.png una volta attaccato.
+
+[[d1_databases]]
+binding = "DB"
+database_name = "atlas-codes-db"
+database_id = "00000000-0000-0000-0000-000000000000" # TBD: sostituire al deploy con wrangler d1 create atlas-codes-db
+
+[vars]
+SENDER_NAME = "ATLAS"
+SENDER_EMAIL = "TBD"                  # atlas@federicotaranu.site dopo review utente
+LOGO_URL = "TBD"                      # https://atlas.federicotaranu.site/logo.png
+ALLOWED_ORIGINS = "http://localhost:5173,tauri://localhost,https://tauri.localhost"
+# DAILY_SEND_MAX = "100"              # default 100; solo override test
+
+# Secrets da impostare al deploy (wrangler secret put): BREVO_API_KEY (chiave NUOVA
+# restricted transactional-only, NON quella NOVA), CODE_PEPPER, CODE_SIGNING_JWK.

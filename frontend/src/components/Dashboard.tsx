@@ -43,6 +43,7 @@ export default function Dashboard() {
       <p className="muted">Generata il {new Date(data.generated_at).toLocaleString("it-IT")}.{" "}
         {data.provenance_rule}</p>
 
+      <div className="dashboard-grid">
       <Section title={`Progetti (${p.projects.length})`}>
         {p.projects.length === 0 && <p className="muted">Nessun progetto.</p>}
         {p.projects.map((pr) => (
@@ -147,6 +148,7 @@ export default function Dashboard() {
           <p className="muted">Nessuna richiesta in sospeso.</p>
         )}
       </Section>
+      </div>
     </div>
   );
 }

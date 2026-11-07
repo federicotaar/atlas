@@ -1,5 +1,6 @@
 import uuid
 from datetime import date, datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
@@ -7,6 +8,32 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field
 class RegisterIn(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8, max_length=256)
+    signup_token: str = Field(default="", max_length=128)
+
+
+class CodeCheckIn(BaseModel):
+    email: EmailStr
+    code: str = Field(min_length=4, max_length=8)
+
+
+class CodeCheckOut(BaseModel):
+    ok: bool
+    signup_token: str
+
+
+class CodeRequestIn(BaseModel):
+    email: EmailStr
+    purpose: Literal["register", "login"]
+
+
+class CodeRequestOut(BaseModel):
+    ok: bool
+    ttl_seconds: int
+
+
+class LoginCodeIn(BaseModel):
+    email: EmailStr
+    code: str = Field(min_length=4, max_length=8)
 
 
 class LoginIn(BaseModel):
