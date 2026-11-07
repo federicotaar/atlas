@@ -194,7 +194,10 @@ def save_pref(db: Session, settings: Settings, user_id, provider: str, model: st
             pref.api_key_enc = ""
         else:
             pref.api_key_enc = encrypt_secret(api_key, settings.credentials_key)
-    if meta.needs_key and not pref.api_key_enc:
+    # api_key == "" = rimozione esplicita: consentita (al prossimo /ask
+    # arriva l'errore chiaro missing_api_key). Chiave omessa del tutto =
+    # prima configurazione senza chiave: rifiutata subito.
+    if meta.needs_key and not pref.api_key_enc and api_key != "":
         raise AtlasError("missing_api_key",
                          f"Il provider {meta.label} richiede una chiave API: inseriscila "
                          "e riprova. La chiave resta cifrata nel tuo backend locale.",

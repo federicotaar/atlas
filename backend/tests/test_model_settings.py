@@ -61,8 +61,9 @@ def test_save_and_clear_key_never_exposed(client, fake_codes_worker, creds_key, 
     assert "gsk_segreto" not in r.text and "api_key" not in body
 
     # nel DB la chiave e' cifrata (Fernet), mai in chiaro
-    from app.models import UserModelSetting
-    row = db_session.query(UserModelSetting).first()
+    from app.models import User, UserModelSetting
+    row = (db_session.query(UserModelSetting).join(User, User.id == UserModelSetting.user_id)
+           .filter(User.email == u["email"]).one())
     assert row.api_key_enc.startswith("gAAAA")
     assert "gsk_segreto" not in row.api_key_enc
 
@@ -121,8 +122,9 @@ def test_ask_missing_key_is_clear_error(client, fake_codes_worker, creds_key, db
                    json={"provider": "groq", "api_key": "gsk_x", "consent_cloud": True})
     assert r.status_code == 200
     # cancella la chiave direttamente nel DB: al prossimo /ask errore chiaro
-    from app.models import UserModelSetting
-    row = db_session.query(UserModelSetting).first()
+    from app.models import User, UserModelSetting
+    row = (db_session.query(UserModelSetting).join(User, User.id == UserModelSetting.user_id)
+           .filter(User.email == u["email"]).one())
     row.api_key_enc = ""
     db_session.commit()
     client.post("/ask", json={"text": "ricorda che ho un gatto"}, headers=u["headers"])
