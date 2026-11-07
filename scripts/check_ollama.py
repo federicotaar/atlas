@@ -14,7 +14,7 @@ import sys
 os.environ.setdefault("ATLAS_EMBED_PROVIDER", "ollama")
 os.environ.setdefault("ATLAS_LLM_PROVIDER", "ollama")
 os.environ.setdefault("ATLAS_OLLAMA_LLM_MODEL", "llama3.2:1b")
-os.environ.setdefault("ATLAS_MODEL_CALL_TIMEOUT_S", "120")
+os.environ.setdefault("ATLAS_MODEL_CALL_TIMEOUT_S", "300")
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backend"))
 
