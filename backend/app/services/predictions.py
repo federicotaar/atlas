@@ -140,3 +140,85 @@ def metrics(db: Session, user_id: uuid.UUID) -> dict:
         "mean_brier": round(statistics.fmean(briers), 4) if briers else None,
         "calibration": buckets,
     }
+
+
+MANUAL_SOURCE = "dichiarata dall'utente"
+
+
+def _aware(dt: datetime) -> datetime:
+    return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
+
+
+def due_predictions(db: Session, user_id: uuid.UUID,
+                    now: datetime | None = None) -> list[Prediction]:
+    """Previsioni aperte la cui data di verifica e arrivata (spec 5E:
+    alla data di verifica il sistema confronta con l'esito reale)."""
+    now = now or datetime.now(timezone.utc)
+    return (db.query(Prediction)
+            .filter(Prediction.user_id == user_id, Prediction.status == "open",
+                    Prediction.verify_at <= now)
+            .order_by(Prediction.verify_at).all())
+
+
+def _last_closure_after(db: Session, user_id: uuid.UUID,
+                        since: datetime) -> datetime | None:
+    """Ultima chiusura di attivita (task sostituito) successiva a `since`."""
+    superseded = (db.query(Memory)
+                  .filter(Memory.user_id == user_id, Memory.kind == "task",
+                          Memory.superseded_by.isnot(None))
+                  .all())
+    last = None
+    for m in superseded:
+        newer = db.get(Memory, m.superseded_by)
+        when = (newer.event_at or newer.recorded_at) if newer is not None else m.recorded_at
+        when = _aware(when)
+        if when > since and (last is None or when > last):
+            last = when
+    return last
+
+
+def _live_outcome(db: Session, pred: Prediction, now: datetime) -> tuple[float, str]:
+    """Esito misurato dallo stato reale delle attivita (non dichiarato):
+    se non restano attivita aperte, le settimane effettive dalla creazione
+    all'ultima chiusura nota; altrimenti le settimane trascorse, dichiarate
+    come limite inferiore perche le attivita non sono ancora finite."""
+    created = _aware(pred.created_at)
+    remaining = open_tasks(db, pred.user_id)
+    if remaining == 0:
+        last = _last_closure_after(db, pred.user_id, created)
+        end = last or now
+        outcome = round(max((end - created).total_seconds() / (7 * 86400), 0.0), 2)
+        note = ("Valutazione automatica alla scadenza: attivita aperte esaurite; "
+                "esito misurato sullo stato reale delle attivita, non dichiarato.")
+    else:
+        outcome = round(max((now - created).total_seconds() / (7 * 86400), 0.0), 2)
+        note = (f"Valutazione automatica alla scadenza: {remaining} attivita ancora aperte; "
+                "l'esito e il tempo trascorso (limite inferiore), la stima resta da confermare.")
+    return outcome, note
+
+
+def evaluate_due(db: Session, user_id: uuid.UUID,
+                 now: datetime | None = None) -> tuple[list[Prediction], list[Prediction]]:
+    """Verifica automatica delle previsioni auto_estimate arrivate a scadenza:
+    l'esito viene calcolato dallo stato reale delle attivita. Le previsioni
+    con stima manuale restano aperte e vanno verificate a mano.
+    Restituisce (valutate, in_attesa_di_verifica_manuale)."""
+    now = now or datetime.now(timezone.utc)
+    evaluated: list[Prediction] = []
+    pending_manual: list[Prediction] = []
+    for pred in due_predictions(db, user_id, now):
+        if (pred.data_used or {}).get("source") == MANUAL_SOURCE:
+            pending_manual.append(pred)
+            continue
+        outcome, note = _live_outcome(db, pred, now)
+        pred.outcome = outcome
+        pred.outcome_note = note
+        pred.status = "verified"
+        pred.verified_at = now
+        if pred.estimate_central is not None:
+            pred.error = round(abs(outcome - pred.estimate_central), 3)
+        if pred.probability is not None:
+            pred.brier = brier_score(pred.probability, outcome >= 0.5)
+        evaluated.append(pred)
+    db.commit()
+    return evaluated, pending_manual

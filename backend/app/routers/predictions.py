@@ -12,7 +12,7 @@ from ..models import Prediction, User
 from ..schemas import PredictionOut
 from ..security import get_current_user
 from ..services.memory import log_action
-from ..services.predictions import brier_score, estimate_completion, metrics
+from ..services.predictions import brier_score, due_predictions, estimate_completion, evaluate_due, metrics
 
 router = APIRouter(prefix="/predictions", tags=["predictions"])
 
@@ -95,6 +95,31 @@ def list_predictions(db: Session = Depends(get_db),
     rows = (db.query(Prediction).filter(Prediction.user_id == user.id)
             .order_by(Prediction.created_at.desc()).limit(100).all())
     return [_out(p) for p in rows]
+
+
+@router.get("/due", response_model=list[PredictionOut])
+def list_due(db: Session = Depends(get_db),
+             user: User = Depends(get_current_user)) -> list[PredictionOut]:
+    """Previsioni aperte la cui data di verifica e arrivata."""
+    return [_out(p) for p in due_predictions(db, user.id)]
+
+
+class EvaluateDueOut(BaseModel):
+    evaluated: list[PredictionOut]
+    pending_manual: list[PredictionOut]
+
+
+@router.post("/evaluate-due", response_model=EvaluateDueOut)
+def post_evaluate_due(db: Session = Depends(get_db),
+                      user: User = Depends(get_current_user)) -> EvaluateDueOut:
+    """Verifica automatica delle previsioni auto_estimate scadute: esito
+    calcolato dallo stato reale delle attivita. Le stime manuali restano
+    da verificare a mano."""
+    evaluated, pending_manual = evaluate_due(db, user.id)
+    for p in evaluated:
+        log_action(db, user.id, "prediction.auto_verified", {"prediction_id": str(p.id)})
+    return EvaluateDueOut(evaluated=[_out(p) for p in evaluated],
+                          pending_manual=[_out(p) for p in pending_manual])
 
 
 @router.get("/metrics", response_model=MetricsOut)

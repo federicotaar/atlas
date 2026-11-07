@@ -32,7 +32,7 @@ esce dalla macchina senza permesso.
 - **Recupero ibrido**: ricerca per similarità + testuale + recenza + confidenza, con pesi calibrati su un benchmark ripetibile. Sul set sintetico di 8 domande in `scripts/benchmark.py`: 88% (7/8) con il provider lessicale integrato (hash n-gram, baseline), 100% (8/8) con Ollama (embeddings semantici reali). Set piccolo e sintetico: indica che il meccanismo funziona, non l'accuratezza su dati reali.
 - **Knowledge Graph assistito**: entità e relazioni proposte dal testo nascono `pending` e diventano reali solo dopo conferma.
 - **Agenti Researcher / Planner / Critic**: messaggi strutturati, limiti di passi, timeout e budget applicati (non solo registrati), ogni esecuzione tracciata. *Baseline rule-based dichiarata, non prova di capacità generale.*
-- **Prediction Engine**: stime a intervallo dalla velocità reale di completamento, rifiuto esplicito quando i dati sono troppo pochi, registrazione dell'esito alla data di verifica (verifica manuale via API in questa fase) con errore e punteggio di Brier, metriche di calibrazione.
+- **Prediction Engine**: stime a intervallo dalla velocità reale di completamento, rifiuto esplicito quando i dati sono troppo pochi, confronto con l'esito alla data di verifica (`GET /predictions/due` elenca le scadenze; `POST /predictions/evaluate-due` verifica automaticamente le stime automatiche misurando lo stato reale delle attività, mentre le stime manuali restano da verificare a mano), errore e punteggio di Brier, metriche di calibrazione. La verifica automatica è un meccanismo su dati sintetici: l'accuratezza longitudinale reale si misura solo con mesi di utilizzo reale.
 - **Interfacce**: API FastAPI, chat web React, CLI `atlas`, Docker Compose.
 
 Lo stato onesto di ogni fase è in
