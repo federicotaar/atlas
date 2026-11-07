@@ -15,7 +15,7 @@ jobs:
         run: |
           ZIP="$(ls ./*.zip | head -n1)"
           unzip -o "$ZIP" -d .
-          rm -f "$ZIP"
+          rm -f ./*.zip
           rm -f .github/workflows/1-import.yml
       - name: Commit
         run: |
