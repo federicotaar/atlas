@@ -64,7 +64,11 @@ xdotool type --delay 20 'ricorda che il gatto si chiama Briciola'
 xdotool key Tab Return
 sleep 6
 import -window root /tmp/e2e-4-salvato.png
-ocr_has /tmp/e2e-4-salvato.png 'Briciola' || { echo 'E2E UI: salvataggio memoria NON visibile in chat'; exit 1; }
+# Asserzione sulla conferma del backend ("Salvato.", bolla scura = OCR
+# affidabile dopo negate). NON sul testo utente: la bolla utente e' chiara,
+# dopo -negate diventa scura e tesseract la legge male (run 42473097331:
+# "Briciola" perso, salvataggio in realta' riuscito).
+ocr_has /tmp/e2e-4-salvato.png 'Salvato' || { echo 'E2E UI: conferma salvataggio memoria NON visibile in chat'; exit 1; }
 echo 'memoria salvata via chat OK'
 xdotool type --delay 20 'come si chiama il mio gatto?'
 xdotool key Tab Return
