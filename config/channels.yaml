@@ -1,0 +1,10 @@
+# Canali di messaggistica (spec sez. 6). Ogni canale disabilitato non parte.
+# Il token NON sta qui: TELEGRAM_BOT_TOKEN va in .env; gli allowlist pure
+# (ALLOWED_TELEGRAM_IDS, ALLOWED_WHATSAPP_NUMBERS: liste separate da virgole).
+channels:
+  telegram:
+    enabled: false
+  whatsapp_unofficial:
+    enabled: false
+  whatsapp_official:
+    enabled: false
