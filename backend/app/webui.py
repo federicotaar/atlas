@@ -85,8 +85,16 @@ button:hover{background:#30363d}
 const log = document.getElementById('log'), inp = document.getElementById('in'),
       st = document.getElementById('st');
 let lastSeq = 0, polling = false;
+/* Rendering sicuro: PRIMA escape di tutto l'HTML del modello, POI solo
+   **grassetto** e `codice` generati da noi. Niente HTML grezzo, mai. */
+function esc(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;')
+  .replace(/>/g,'&gt;'); }
+function md(s){ return esc(s)
+  .replace(/\\*\\*([^*]+)\\*\\*/g,'<strong>$1</strong>')
+  .replace(/`([^`]+)`/g,'<code>$1</code>')
+  .replace(/\\n/g,'<br>'); }
 function add(cls, text){ const d = document.createElement('div');
-  d.className = 'msg ' + cls; d.textContent = text; log.appendChild(d);
+  d.className = 'msg ' + cls; d.innerHTML = md(text); log.appendChild(d);
   log.scrollTop = log.scrollHeight; }
 async function poll(){
   if (polling) return; polling = true;
@@ -391,6 +399,15 @@ class ConfigAPI:
             os.environ[spec.api_key_env] = api_key
             self._persist_key(spec.api_key_env, api_key)
         usable, reason = self._registry.usable(name)
+        if not usable and api_key and reason == "disabilitato in config":
+            # Chiave fornita per un provider disabilitato: lo si abilita a
+            # runtime e la scelta si persiste (il YAML non si tocca).
+            self._registry.set_enabled(name, True)
+            enabled = sorted({n for n in self._registry._order  # noqa: SLF001
+                              if self._registry._enabled_overrides.get(n)})  # noqa: SLF001
+            self._persist_key("ATLAS_ENABLED_PROVIDERS", ",".join(enabled))
+            os.environ["ATLAS_ENABLED_PROVIDERS"] = ",".join(enabled)
+            usable, reason = self._registry.usable(name)
         if not usable:
             return {"ok": False, "error": f"{name} non usabile: {reason}"}
         self._set_active(name)
