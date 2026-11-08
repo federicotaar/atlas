@@ -33,6 +33,7 @@ from ..agent.seal import SealGuard
 from ..agent.tools import ToolContext
 from ..providers.base import AllProvidersFailed, ProviderError
 from ..providers.registry import ProviderRegistry
+from .pairing import PairingStore
 
 
 @dataclass(frozen=True)
@@ -40,6 +41,7 @@ class ChannelMessage:
     sender: str
     channel: str
     text: str
+    display: str = ""  # nome/username mostrato nel pairing locale
 
 
 class Channel(ABC):
@@ -113,6 +115,7 @@ class ChannelHub:
                  channels_log: ChannelLog,
                  allowed: dict[str, set[str]],
                  set_active=None, describe_registry=None,
+                 pairing: PairingStore | None = None,
                  max_steps: int = 10,
                  rate_per_minute: int = 20,
                  confirm_timeout: float = 120.0):
@@ -129,6 +132,7 @@ class ChannelHub:
         self._secrets = secrets
         self._channels_log = channels_log
         self._allowed = allowed
+        self._pairing = pairing
         self._max_steps = max_steps
         self._rate = RateLimiter(rate_per_minute)
         self._confirm_timeout = confirm_timeout
@@ -149,6 +153,16 @@ class ChannelHub:
         ids = allowed.get(channel, set())
         return sender in ids
 
+    def approve_pairing(self, channel: str, sender: str) -> dict | None:
+        """Approva un pairing in sospeso (chiamato SOLO dalla CLI locale):
+        sposta l'id nei paired e lo attiva subito nell'allowlist."""
+        if self._pairing is None:
+            return None
+        entry = self._pairing.approve(channel, sender)
+        if entry is not None:
+            self._allowed.setdefault(channel, set()).add(sender)
+        return entry
+
     # --- ingresso -----------------------------------------------------------
 
     def handle(self, msg: ChannelMessage, reply: Callable[[str], None]) -> None:
@@ -157,7 +171,12 @@ class ChannelHub:
         self._channels_log.record("in", msg.channel, msg.sender, msg.text)
 
         if not self.is_allowed(msg.sender, msg.channel, self._allowed):
-            return  # ignorato in silenzio (spec sez. 6)
+            # Ignorato in silenzio (spec sez. 6): nessuna risposta, mai.
+            # L'evento resta registrato in locale come richiesta di pairing,
+            # approvabile SOLO dalla CLI locale (mai dalla chat).
+            if self._pairing is not None:
+                self._pairing.record(msg.channel, msg.sender, msg.display)
+            return
         if not self._rate.allow(msg.sender):
             return  # oltre il rate limit: ignora in silenzio
 
