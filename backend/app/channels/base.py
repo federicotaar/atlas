@@ -119,6 +119,10 @@ class ChannelHub:
                  set_active=None, describe_registry=None,
                  pairing: PairingStore | None = None,
                  media: MediaProcessor | None = None,
+                 scheduler=None,
+                 proactive=None,
+                 rollback_fn=None,
+                 post_approve_fn=None,
                  max_steps: int = 10,
                  rate_per_minute: int = 20,
                  confirm_timeout: float = 120.0):
@@ -129,6 +133,9 @@ class ChannelHub:
             lambda registry, active, out: out("elenco provider non disponibile qui"))
         self._state = {"mode": Mode.ASK}
         self._ctx = ctx
+        self._proactive = proactive
+        self._rollback_fn = rollback_fn
+        self._post_approve_fn = post_approve_fn
         self._store = store
         self._log = log
         self._seal = seal
@@ -137,6 +144,7 @@ class ChannelHub:
         self._allowed = allowed
         self._pairing = pairing
         self._media = media
+        self._scheduler = scheduler
         self._max_steps = max_steps
         self._rate = RateLimiter(rate_per_minute)
         self._confirm_timeout = confirm_timeout
@@ -198,6 +206,14 @@ class ChannelHub:
         if not self._rate.allow(msg.sender):
             return  # oltre il rate limit: ignora in silenzio
 
+        # Guardrail proattivita' (stage 11): un messaggio dell'utente azzera
+        # il conteggio 'ignorato' delle categorie proattive.
+        if self._proactive is not None:
+            self._proactive.user_message_seen()
+        # Abitudini (stage 13): osserva orari/argomenti, mai temi sensibili.
+        if self._ctx.habits is not None:
+            self._ctx.habits.observe_message(msg.text)
+
         # Il log vede solo tipo e nome degli allegati, mai il contenuto.
         log_text = msg.text
         if msg.attachments:
@@ -226,7 +242,13 @@ class ChannelHub:
                 registry=self._registry, state=self._state, store=self._store,
                 out=send_reply, get_active=self._active_getter,
                 set_active=self._set_active,
-                describe_registry=self._describe_registry))
+                describe_registry=self._describe_registry,
+                scheduler=self._scheduler,
+                habits=self._ctx.habits,
+                skills=self._ctx.skills, forge=self._ctx.forge,
+                rollback_fn=self._rollback_fn,
+                post_approve_fn=self._post_approve_fn,
+                channel=msg.channel, sender=msg.sender))
             if handled:
                 return
         if text == "/stop":
@@ -298,9 +320,14 @@ class ChannelHub:
             return approved
 
         try:
+            # Contesto strumenti per-conversazione: i job creati dall'agente
+            # in questa chat consegnano il loro output QUI (schedule_job).
+            import dataclasses
+            call_ctx = dataclasses.replace(self._ctx, channel=channel,
+                                           sender=sender)
             result = run_agent_loop(
                 self._registry, self._active_getter(), call_messages,
-                self._ctx, Mode.ASK, self._log,
+                call_ctx, Mode.ASK, self._log,
                 ask_fn=ask_fn, max_steps=self._max_steps,
                 cancel=convo.cancel, on_delta=None, seal=self._seal)
         except (AllProvidersFailed, ProviderError) as exc:
