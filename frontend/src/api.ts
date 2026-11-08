@@ -122,19 +122,39 @@ export function hasToken() {
   return token !== null;
 }
 
+// Callback registrata dall'app: un 401 a una richiesta AUTENTICATA (mai gli
+// endpoint /auth/*, dove un 401 e' solo "password o codice sbagliati") vuol
+// dire che il backend ha rifiutato il token - tipico dopo un aggiornamento
+// che ha rigenerato i segreti locali. Senza questo instradamento l'utente
+// resta in una sessione zombie: dentro l'app, ma con ogni chiamata rotta.
+let onUnauthorized: (() => void) | null = null;
+
+export function setOnUnauthorized(fn: (() => void) | null) {
+  onUnauthorized = fn;
+}
+
 async function req<T>(path: string, options: RequestInit = {}): Promise<T> {
   // In Tauri attende che la scoperta abbia selezionato un backend
   // compatibile: nessuna richiesta raggiunge mai un vecchio server.
   if (discoveryGate) await discoveryGate;
+  const sentToken = token;
   const res = await fetch(`${BASE}${path}`, {
     ...options,
     headers: {
       "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(sentToken ? { Authorization: `Bearer ${sentToken}` } : {}),
       ...(options.headers ?? {}),
     },
   });
   if (!res.ok) {
+    // Sessione morta: cancella il token e avvisa l'app SOLO se il token
+    // rifiutato e' ancora quello corrente. Se nel frattempo e' avvenuto un
+    // nuovo login (token cambiato), questo 401 riguarda la vecchia richiesta
+    // in volo e non deve buttare fuori la sessione nuova.
+    if (res.status === 401 && sentToken && sentToken === token && !path.startsWith("/auth/")) {
+      setToken(null);
+      onUnauthorized?.();
+    }
     let message = `Errore ${res.status}`;
     try {
       const data = await res.json();
