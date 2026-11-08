@@ -38,7 +38,7 @@ ok=0
 for i in $(seq 1 90); do
   sleep 1
   BODY=$(curl -s http://127.0.0.1:8100/health || true)
-  if echo "$BODY" | grep -q '"app":"atlas"' && echo "$BODY" | grep -q '"version":"2.1.1"'; then
+  if echo "$BODY" | grep -q '"app":"atlas"' && echo "$BODY" | grep -q '"version":"2.1.2"'; then
     ok=1; break
   fi
 done
