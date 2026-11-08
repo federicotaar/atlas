@@ -6,7 +6,6 @@
 //! - se la porta e' occupata da qualcos'altro, NON uccidiamo nulla: stato
 //!   errore "porta occupata", l'utente decide;
 //! - chiudiamo solo il processo che abbiamo avviato noi.
-use std::process::Child;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 use tauri::{Emitter, Manager};
@@ -14,7 +13,7 @@ use tauri_plugin_shell::ShellExt;
 
 const HEALTH_URL: &str = "http://127.0.0.1:8000/health";
 
-struct Sidecar(Mutex<Option<Child>>);
+struct Sidecar(Mutex<Option<tauri_plugin_shell::process::CommandChild>>);
 
 #[derive(PartialEq)]
 enum Probe {
