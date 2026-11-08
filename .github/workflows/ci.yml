@@ -195,6 +195,8 @@ jobs:
       - name: Build app desktop (Tauri)
         working-directory: desktop
         run: npx --yes @tauri-apps/cli@2 build --no-bundle
+      - name: "E2E porta di riserva: vecchia API 2.0.x su 8000 intoccata"
+        run: bash scripts/e2e_reserve_port.sh
       - name: Lancio reale dell'app e verifica backend sidecar
         run: |
           set -e
@@ -257,7 +259,10 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: atlas-screenshot
-          path: /tmp/atlas-screenshot.png
+          path: |
+            /tmp/atlas-screenshot.png
+            /tmp/e2e-*.png
+            /tmp/reserve-*.png
           if-no-files-found: warn
       - name: Pubblica screenshot su branch ci-artifacts
         if: always()
