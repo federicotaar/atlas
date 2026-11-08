@@ -394,6 +394,10 @@ class ConfigAPI:
         if not usable:
             return {"ok": False, "error": f"{name} non usabile: {reason}"}
         self._set_active(name)
+        # La scelta del provider sopravvive ai riavvii (come la chiave):
+        # ATLAS_PROVIDER nel .env del workspace, letto al boot.
+        self._persist_key("ATLAS_PROVIDER", name)
+        os.environ["ATLAS_PROVIDER"] = name
         return {"ok": True, "active": name}
 
     def _persist_key(self, env_name: str, value: str) -> None:
