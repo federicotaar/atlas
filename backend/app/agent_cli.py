@@ -27,6 +27,7 @@ from typing import Callable
 
 from .agent.actionlog import ActionLog
 from .agent.loop import run_agent_loop
+from .agent.memory import MemoryStore, memories_context
 from .agent.permissions import Mode, parse_mode
 from .agent.safety import SecretFilter
 from .agent.seal import SealGuard
@@ -43,6 +44,9 @@ HELP_TEXT = """Comandi:
   /mode                        modo permessi attivo
   /mode <ask|auto-safe|yolo>   cambia modo permessi (spec sez. 4)
   /stop                        annulla il task in corso (spec sez. 2)
+  /remember <testo>            salva una nota persistente (spec sez. 5)
+  /forget <testo>              rimuove le note che contengono il testo
+  /memories                    elenca le note salvate
   /help                        questo aiuto
   /quit                        esci
 Qualunque altro testo viene mandato all'agente, che puo' usare gli strumenti
@@ -133,7 +137,10 @@ def run_cli(registry: ProviderRegistry, *, active: str | None = None,
     def on_fallback(failed: str, to: str, err: str) -> None:
         out(f"[{failed} non disponibile ({err}); passo a {to}]")
 
-    history: list[dict] = []
+    # Memoria persistente (spec sez. 5): cronologia per (mittente, canale) -
+    # la CLI e' ("locale", "cli") - piu' note /remember iniettate a richiesta.
+    store = MemoryStore(workspace / "memory.db")
+    history: list[dict] = store.history("locale", "cli")
 
     # Conferme di permesso: il task gira in un thread, ma solo il REPL legge
     # stdin. Quando il worker chiede, la prossima riga non-comando dell'utente
@@ -169,10 +176,15 @@ def run_cli(registry: ProviderRegistry, *, active: str | None = None,
         tutti i provider hanno fallito. /stop annulla tra un passo e l'altro
         e mentre attende una conferma."""
         history.append({"role": "user", "content": text})
+        # Note pertinenti iniettate come contesto di sistema SOLO per questa
+        # chiamata: la storia persistente resta utente/assistente.
+        notes_block = memories_context(store.relevant(text))
+        call_messages = ([{"role": "system", "content": notes_block}]
+                         if notes_block else []) + history
         write("atlas> ")
         try:
             result = run_agent_loop(
-                registry, active, history, ctx, state["mode"], log,
+                registry, active, call_messages, ctx, state["mode"], log,
                 ask_fn=ask_fn, max_steps=max_steps, cancel=cancel,
                 on_fallback=on_fallback, on_step=out, on_delta=write, seal=seal)
         except AllProvidersFailed as exc:
@@ -190,8 +202,12 @@ def run_cli(registry: ProviderRegistry, *, active: str | None = None,
         if result.stopped_by_limit:
             out(f"stop: {result.notes[-1]}")
             history.append({"role": "assistant", "content": result.notes[-1]})
+            store.add_message("locale", "cli", "user", text)
+            store.add_message("locale", "cli", "assistant", result.notes[-1])
             return True
         history.append({"role": "assistant", "content": result.text})
+        store.add_message("locale", "cli", "user", text)
+        store.add_message("locale", "cli", "assistant", result.text)
         return True
 
     if once is not None:
@@ -263,6 +279,33 @@ def run_cli(registry: ProviderRegistry, *, active: str | None = None,
             continue
         if line == "/help":
             out(HELP_TEXT)
+            continue
+        if line.startswith("/remember"):
+            note = line[len("/remember"):].strip()
+            try:
+                note_id = store.remember(note)
+            except ValueError as exc:
+                out(f"Errore: {exc}")
+                continue
+            out(f"Ricordato (#{note_id}).")
+            continue
+        if line.startswith("/forget"):
+            fragment = line[len("/forget"):].strip()
+            try:
+                removed = store.forget(fragment)
+            except ValueError as exc:
+                out(f"Errore: {exc}")
+                continue
+            out(f"Dimenticate {removed} note." if removed else
+                "Nessuna nota contiene quel testo.")
+            continue
+        if line == "/memories":
+            notes = store.all_memories()
+            if not notes:
+                out("Nessuna nota salvata. /remember <testo> per aggiungerne una.")
+            else:
+                for note_id, text_note in notes:
+                    out(f"  #{note_id} {text_note}")
             continue
         if line == "/mode":
             out(f"modo permessi: {state['mode'].value} (ask, auto-safe, yolo)")
