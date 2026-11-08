@@ -110,12 +110,13 @@ def _maybe_start_channels(*, workspace: Path, registry: ProviderRegistry,
     config = load_channels_config(workspace)
     if not channel_enabled(config, "telegram"):
         return None
-    token = dotenv.get("TELEGRAM_BOT_TOKEN") or os.environ.get("TELEGRAM_BOT_TOKEN", "")
+    # ATTENZIONE: il dict di load_dotenv e' REDATTO ("(impostata)") - serve
+    # solo per la diagnostica. I valori veri restano in os.environ.
+    token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
     if not token:
         out("telegram abilitato ma TELEGRAM_BOT_TOKEN mancante in .env: canale non avviato")
         return None
-    raw_ids = (dotenv.get("ALLOWED_TELEGRAM_IDS")
-               or os.environ.get("ALLOWED_TELEGRAM_IDS", ""))
+    raw_ids = os.environ.get("ALLOWED_TELEGRAM_IDS", "")
     # Allowlist = .env + pairing approvati in locale con /pairing approve.
     allowed = {"telegram": ({s.strip() for s in raw_ids.split(",") if s.strip()}
                             | pairing.paired_ids("telegram"))}
@@ -128,7 +129,9 @@ def _maybe_start_channels(*, workspace: Path, registry: ProviderRegistry,
         ctx=ctx, store=store, log=log, seal=seal, secrets=secrets,
         channels_log=ChannelLog(workspace / "logs" / "channels.log", secrets),
         allowed=allowed, pairing=pairing, max_steps=max_steps)
-    channel = TelegramChannel(token)
+    tg_cfg = config.get("channels", {}).get("telegram", {})
+    channel = TelegramChannel(
+        token, drop_pending_updates=bool(tg_cfg.get("drop_pending_updates", True)))
     channel.on_message(
         lambda m: hub.handle(m, lambda text: channel.send(m.sender, text)))
     channel.start()
