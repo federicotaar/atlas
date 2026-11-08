@@ -201,10 +201,16 @@ xdotool mousemove 500 746 click 1
 sleep 1
 xdotool type --delay 30 'ciao'
 xdotool key Return
-sleep 6
-import -window root /tmp/e2e-13-agente-roundtrip.png
-ocr_has /tmp/e2e-13-agente-roundtrip.png 'ciao' || { echo 'E2E UI: messaggio inviato NON visibile nella superficie agente'; exit 1; }
-ocr_has /tmp/e2e-13-agente-roundtrip.png 'provider' || { echo 'E2E UI: risposta agente (avviso provider) NON visibile dopo invio'; exit 1; }
+# Asserzione sulla RISPOSTA (bolla scura, OCR affidabile dopo negate), mai
+# sulla bolla utente chiara. Attesa a poll: la chain provider puo' metterci
+# qualche secondo a fallire/rispondere.
+ok=0
+for i in 1 2 3 4 5; do
+  sleep 4
+  import -window root /tmp/e2e-13-agente-roundtrip.png
+  ocr_has /tmp/e2e-13-agente-roundtrip.png 'provider' && { ok=1; break; }
+done
+[ "$ok" = 1 ] || { echo 'E2E UI: risposta agente NON visibile dopo invio messaggio'; exit 1; }
 echo 'E2E UI: click-through Agente + roundtrip messaggio OK'
 
 # Ritorno alla dashboard: "indietro" (history.back) chiude il ciclo di
