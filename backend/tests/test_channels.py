@@ -314,3 +314,65 @@ def test_pairing_pending_expires(tmp_path):
     pairing.record("telegram", "999")
     time.sleep(0.02)
     assert pairing.pending() == []
+
+
+def test_challenge_pairs_sender_and_replies_once(tmp_path):
+    hub, pairing = make_hub_with_pairing(tmp_path, [text_response("ciao")])
+    code = pairing.create_challenge()
+    replies, reply = collect()
+    hub.handle(ChannelMessage(sender="999", channel="telegram", text=code), reply)
+    assert replies == ["Pairing confermato: questo account ora e' autorizzato."]
+    assert "999" in pairing.paired_ids("telegram")
+    # dopo il pairing i messaggi girano normali
+    hub.handle(ChannelMessage(sender="999", channel="telegram", text="ciao"), reply)
+    deadline = time.time() + 5
+    while len(replies) < 2 and time.time() < deadline:
+        time.sleep(0.02)
+    assert replies[-1] == "ciao"
+
+
+def test_challenge_is_single_use(tmp_path):
+    hub, pairing = make_hub_with_pairing(tmp_path, [])
+    code = pairing.create_challenge()
+    replies, reply = collect()
+    hub.handle(ChannelMessage(sender="999", channel="telegram", text=code), reply)
+    assert len(replies) == 1
+    # lo stesso codice da un altro mittente non autorizza piu'
+    hub.handle(ChannelMessage(sender="555", channel="telegram", text=code), reply)
+    assert len(replies) == 1
+    assert "555" not in pairing.paired_ids("telegram")
+
+
+def test_wrong_challenge_stays_silent(tmp_path):
+    hub, pairing = make_hub_with_pairing(tmp_path, [])
+    pairing.create_challenge()
+    replies, reply = collect()
+    hub.handle(ChannelMessage(sender="999", channel="telegram",
+                              text="ATLAS-SBAGLIATO"), reply)
+    assert replies == []
+    assert "999" not in pairing.paired_ids("telegram")
+    assert [p["sender"] for p in pairing.pending()] == ["999"]
+
+
+def test_challenge_expires(tmp_path):
+    from app.channels.pairing import PairingStore
+    pairing = PairingStore(tmp_path / "data" / "pairing.json", ttl=60)
+    code = pairing.create_challenge(ttl=0.01)
+    time.sleep(0.02)
+    assert pairing.consume_challenge(code) is False
+
+
+def test_unknown_sender_text_not_logged(tmp_path):
+    hub, pairing = make_hub_with_pairing(tmp_path, [])
+    _, reply = collect()
+    hub.handle(ChannelMessage(sender="999", channel="telegram",
+                              text="contenuto privato di uno sconosciuto"), reply)
+    import json as _json
+    lines = (tmp_path / "logs" / "channels.log").read_text().splitlines()
+    assert len(lines) == 1
+    entry = _json.loads(lines[0])
+    assert "contenuto privato" not in entry["text"]
+    assert "non autorizzato" in entry["text"]
+    # nemmeno il pairing store trattiene il testo
+    raw = (tmp_path / "data" / "pairing.json").read_text()
+    assert "contenuto privato" not in raw
