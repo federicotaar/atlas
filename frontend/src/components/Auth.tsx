@@ -17,16 +17,31 @@ export default function Auth({ onLogin }: { onLogin: () => void }) {
   // il server ne conserva solo l'hash e la rifiuta se non combacia con l'email.
   const [signupToken, setSignupToken] = useState("");
   const [busy, setBusy] = useState(false);
-  // local = istanza desktop standalone: solo profilo locale, niente codici email.
-  const [local, setLocal] = useState(false);
+  // modes = capacita' auth dell'istanza; null = backend non ancora pronto.
+  // Il backend (sidecar) puo' impiegare secondi ad avviarsi: si riprova
+  // finche' non risponde, altrimenti la prima schermata mostrerebbe scelte
+  // sbagliate (es. codice email su installazione locale).
+  const [modes, setModes] = useState<string[] | null>(null);
+  const local = modes?.includes("local_password") ?? false;
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    api
-      .modes()
-      .then((r) => setLocal(r.modes.includes("local_password")))
-      .catch(() => {});
+    let alive = true;
+    const load = () => {
+      api
+        .modes()
+        .then((r) => {
+          if (alive) setModes(r.modes);
+        })
+        .catch(() => {
+          if (alive) setTimeout(load, 1000);
+        });
+    };
+    load();
+    return () => {
+      alive = false;
+    };
   }, []);
 
   function reset(next: Mode) {
@@ -102,6 +117,18 @@ export default function Auth({ onLogin }: { onLogin: () => void }) {
     }
   }
 
+  if (modes === null) {
+    return (
+      <div className="auth-wrap">
+        <div className="auth-card">
+          <img src="/atlas-logo.png" alt="ATLAS" className="auth-logo" />
+          <h1 className="auth-title">ATLAS</h1>
+          <p className="auth-sub">Avvio in corso…</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="auth-wrap">
       <div className="auth-card">
@@ -170,6 +197,7 @@ export default function Auth({ onLogin }: { onLogin: () => void }) {
                    onChange={(e) => setPassword(e.target.value)} required minLength={8} />
             {error && <div className="err">{error}</div>}
             <button type="submit" className="primary" disabled={busy}>Crea profilo</button>
+            <p className="auth-note">Il profilo vive solo su questo dispositivo: niente account cloud.</p>
             <button type="button" className="ghost" onClick={() => reset("login")}>
               Ho gia un profilo
             </button>
