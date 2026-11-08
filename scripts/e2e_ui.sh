@@ -9,15 +9,26 @@ if ss -ltn | grep ':8000' | grep -qE '(0\.0\.0\.0|\*|\[::\]):8000'; then echo 'b
 echo 'bind solo loopback OK'
 curl -sf http://127.0.0.1:8000/auth/modes | tee /tmp/modes.json
 grep -q 'local_password' /tmp/modes.json || { echo 'modes NON locali: il sidecar non e in modalita desktop' >&2; exit 1; }
-# Click al centro della prima parola trovata via OCR (coordinate TSV).
+# Click al centro della parola trovata via OCR (coordinate TSV). Prima la
+# corrispondenza ESATTA (case-sensitive): la voce di navigazione "Chat" si
+# distingue cosi' dal "chat" minuscolo nel testo della card WhatsApp. Senza
+# questo, il primo match TSV (non ordinato top-down) era quello sbagliato e
+# il click non navigava (run 42472102718). Fallback: match case-insensitive
+# piu' in alto nella pagina.
 click_word() {
   local png="$1" word="$2"
   convert "$png" -negate /tmp/ocr-click.png
   local geo
   geo=$(tesseract /tmp/ocr-click.png stdout tsv 2>/dev/null | \
-    awk -F'\t' -v w="$word" 'NR>1 && tolower($12) ~ tolower(w) {print $7" "$8" "$9" "$10; exit}')
+    awk -F'\t' -v w="$word" 'NR>1 && $12 == w {print $7" "$8" "$9" "$10; exit}')
+  if [ -z "$geo" ]; then
+    geo=$(tesseract /tmp/ocr-click.png stdout tsv 2>/dev/null | \
+      awk -F'\t' -v w="$word" 'NR>1 && tolower($12) ~ tolower(w) {print $8" "$7" "$9" "$10}' | \
+      sort -n | head -1 | awk '{print $2" "$1" "$3" "$4}')
+  fi
   [ -n "$geo" ] || { echo "E2E UI: parola '$word' NON trovata via OCR" >&2; return 1; }
   set -- $geo
+  echo "click_word '$word' -> x=$1 y=$2 w=$3 h=$4"
   xdotool mousemove $(( $1 + $3 / 2 )) $(( $2 + $4 / 2 )) click 1
 }
 # OCR onesto (tesseract): la prova e' quel che si VEDE nel frame.
