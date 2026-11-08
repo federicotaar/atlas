@@ -195,23 +195,48 @@ sleep 6
 import -window root /tmp/e2e-12-agente.png
 ocr_has /tmp/e2e-12-agente.png 'invia' || ocr_has /tmp/e2e-12-agente.png 'Scrivi ad ATLAS' || { echo 'E2E UI: click su Apri agente NON ha aperto la superficie agente (composer assente nel frame)'; exit 1; }
 echo 'click-through dashboard -> agente OK'
-# Usabilita' della superficie: messaggio reale dal composer. Senza provider
-# configurati la risposta onesta e' l'avviso "nessun provider usabile".
+# Selezione modello locale IN APP (mai terminale/YAML): pannello provider,
+# ollama_local, tag custom smollm2:135m (scaricato nello step CI dedicato).
+# Il click sulla riga provider precompila il campo modello e gli da' il
+# focus: da li' ctrl+a, nuovo tag, Tab+Return su "imposta modello".
+xdotool mousemove 1157 49 click 1
+sleep 2
+import -window root /tmp/e2e-13-config.png
+ocr_has /tmp/e2e-13-config.png 'modello' || { echo 'E2E UI: pannello senza selezione modello'; exit 1; }
+click_word /tmp/e2e-13-config.png 'ollama_local' || { echo 'E2E UI: ollama_local NON nel pannello'; exit 1; }
+sleep 1
+xdotool key ctrl+a
+xdotool type --delay 20 'smollm2:135m'
+sleep 1
+xdotool key Tab Return
+sleep 3
+import -window root /tmp/e2e-13b-config.png
+ocr_has /tmp/e2e-13b-config.png 'impostato' || { echo 'E2E UI: conferma modello impostato NON visibile'; exit 1; }
+echo 'modello custom impostato dalla superficie OK'
+# Chiudi il pannello e invia un messaggio reale dal composer.
+xdotool mousemove 1157 49 click 1
+sleep 1
 xdotool mousemove 500 746 click 1
 sleep 1
 xdotool type --delay 30 'ciao'
 xdotool key Return
-# Asserzione sulla RISPOSTA (bolla scura, OCR affidabile dopo negate), mai
-# sulla bolla utente chiara. Attesa a poll: la chain provider puo' metterci
-# qualche secondo a fallire/rispondere.
+# Roundtrip RIUSCITO (provider locale, nessun segreto in CI): la risposta
+# non e' un errore di chain. Fonte di verita' API, poi il frame: mai OCR
+# sulla bolla utente chiara (nota Briciola), mai asserzione su testo libero
+# del modello.
 ok=0
-for i in 1 2 3 4 5; do
-  sleep 4
-  import -window root /tmp/e2e-13-agente-roundtrip.png
-  ocr_has /tmp/e2e-13-agente-roundtrip.png 'provider' && { ok=1; break; }
+for i in $(seq 1 20); do
+  sleep 6
+  LAST=$(curl -s http://127.0.0.1:8000/agent/api/history | python3 -c 'import sys,json
+msgs = json.load(sys.stdin)["messages"]
+asst = [m for m in msgs if m.get("role") == "assistant"]
+print(asst[-1]["content"] if asst else "")' 2>/dev/null || true)
+  if [ -n "$LAST" ] && [ "${LAST#Errore}" = "$LAST" ]; then ok=1; break; fi
 done
-[ "$ok" = 1 ] || { echo 'E2E UI: risposta agente NON visibile dopo invio messaggio'; exit 1; }
-echo 'E2E UI: click-through Agente + roundtrip messaggio OK'
+[ "$ok" = 1 ] || { echo "E2E UI: roundtrip NON riuscito, ultima risposta: ${LAST:0:200}"; exit 1; }
+import -window root /tmp/e2e-13-agente-roundtrip.png
+! ocr_has /tmp/e2e-13-agente-roundtrip.png 'Errore' || { echo 'E2E UI: il frame mostra una risposta di errore'; exit 1; }
+echo 'E2E UI: click-through Agente + roundtrip riuscito (ollama smollm2) OK'
 
 # Ritorno alla dashboard: "indietro" (history.back) chiude il ciclo di
 # navigazione nella stessa finestra.
