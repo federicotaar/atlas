@@ -15,7 +15,7 @@ export default function TelegramCard() {
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const refresh = () => {
-    api.getTelegramStatus().then(setSt).catch(() => setError("Stato Telegram non raggiungibile."));
+    api.getTelegramStatus().then((s) => { setSt(s); setError(null); }).catch(() => setError("Stato Telegram non raggiungibile."));
   };
 
   useEffect(() => {
@@ -86,7 +86,25 @@ export default function TelegramCard() {
     } catch { /* clipboard non disponibile: il link resta visibile */ }
   };
 
-  if (!st) return null;
+  // Mai sparire in silenzio: stato non arrivato = card visibile con errore
+  // e riprova, non una sezione che svanisce dalla Dashboard.
+  if (!st) {
+    return (
+      <section className="panel">
+        <h3>Telegram</h3>
+        {error ? (
+          <>
+            <div className="err">{error}</div>
+            <div className="row">
+              <button className="ghost" onClick={refresh}>Ricontrolla</button>
+            </div>
+          </>
+        ) : (
+          <p className="muted">Caricamento…</p>
+        )}
+      </section>
+    );
+  }
 
   return (
     <section className="panel">
