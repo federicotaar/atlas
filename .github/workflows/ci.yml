@@ -274,6 +274,31 @@ jobs:
           sudo apt-get install -y imagemagick xdotool >/dev/null
           DISPLAY=:99 import -window root /tmp/atlas-screenshot.png
           DISPLAY=:99 xdotool search --name 'ATLAS|atlas' 2>/dev/null && echo 'finestra app presente' || echo 'nessuna finestra trovata'
+      - name: Ollama per roundtrip riuscito nell'app impacchettata
+        run: |
+          # Stessa installazione del job ollama (asset via API GitHub):
+          # il click-through E2E imposta smollm2:135m DALLA PAGINA dell'agente
+          # e prova un roundtrip di successo nell'app impacchettata, senza
+          # segreti in CI (provider locale, nessuna chiave).
+          ASSET_URL=""
+          for i in 1 2 3 4; do
+            ASSET_URL=$(curl -fsSL https://api.github.com/repos/ollama/ollama/releases/latest | python3 -c "import sys,json; d=json.load(sys.stdin); print(next(a['url'] for a in d['assets'] if a['name']=='ollama-linux-amd64.tar.zst'))") && [ -n "$ASSET_URL" ] && break
+            echo "risoluzione release ollama fallita (tentativo $i), riprovo..."
+            sleep 15
+          done
+          [ -n "$ASSET_URL" ]
+          ok=0
+          for i in 1 2 3; do
+            if curl -fsSL --retry 3 -H 'Accept: application/octet-stream' "$ASSET_URL" -o /tmp/ollama.tar.zst; then
+              sudo tar -I zstd -xf /tmp/ollama.tar.zst -C /usr/local && ok=1 && break
+            fi
+            echo "download tarball fallito (tentativo $i), riprovo..."
+            sleep 10
+          done
+          [ "$ok" = 1 ]
+          ollama serve > /tmp/ollama.log 2>&1 &
+          sleep 3
+          ollama pull smollm2:135m
       - name: "E2E UI reale: registrazione, memoria, riavvio"
         run: bash scripts/e2e_ui.sh
       - name: Carica artefatto screenshot
