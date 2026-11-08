@@ -430,7 +430,7 @@ def _captured():
     return buf, (lambda s: buf.append(str(s))), (lambda s: buf.append(str(s)))
 
 
-def test_stop_cancels_running_task():
+def test_stop_cancels_running_task(tmp_path):
     # /stop ferma il task tra un passo e l'altro del loop strumenti. Il
     # provider chiede strumenti all'infinito (con una pausa per lasciare al
     # REPL il tempo di inviare /stop): senza cancel non finirebbe mai.
@@ -447,22 +447,23 @@ def test_stop_cancels_running_task():
     fake = P(name="fake", model="m")
     lines = iter(["racconta", "/stop", "/quit"])
     buf, out, write = _captured()
-    run_cli(_cli_registry(fake), active="fake",
+    run_cli(_cli_registry(fake), active="fake", workspace=tmp_path,
             input_fn=lambda prompt: next(lines), out=out, write=write)
     text = "".join(buf)
     assert "annullamento richiesto" in text
     assert "annullato con /stop" in text
 
 
-def test_stop_without_task():
+def test_stop_without_task(tmp_path):
     lines = iter(["/stop", "/quit"])
     buf, out, write = _captured()
     run_cli(_cli_registry(FakeProvider(name="fake", behavior="ok")), active="fake",
+            workspace=tmp_path,
             input_fn=lambda prompt: next(lines), out=out, write=write)
     assert "Nessun task in corso." in "".join(buf)
 
 
-def test_second_message_rejected_while_running():
+def test_second_message_rejected_while_running(tmp_path):
     gate = threading.Event()
 
     class P(LLMProvider):
@@ -480,7 +481,7 @@ def test_second_message_rejected_while_running():
         gate.set()
 
     threading.Thread(target=release_soon, daemon=True).start()
-    run_cli(_cli_registry(fake), active="fake",
+    run_cli(_cli_registry(fake), active="fake", workspace=tmp_path,
             input_fn=lambda prompt: next(lines), out=out, write=write)
     assert "gia' in corso" in "".join(buf)
 
