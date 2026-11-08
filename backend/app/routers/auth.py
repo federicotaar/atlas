@@ -9,6 +9,7 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
+from ..config import get_settings
 from ..db import get_db
 from ..errors import AtlasError
 from ..models import User
@@ -19,6 +20,7 @@ from ..schemas import (
     CodeRequestOut,
     LoginCodeIn,
     LoginIn,
+    ModesOut,
     RegisterIn,
     TokenOut,
     UserOut,
@@ -28,6 +30,15 @@ from ..services import codes as codes_service
 from ..services.memory import log_action
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+@router.get("/modes", response_model=ModesOut)
+def auth_modes() -> ModesOut:
+    """Capabilita' auth di QUESTA istanza: il frontend le legge prima di
+    mostrare scelte impossibili (es. codice email senza servizio configurato)."""
+    if get_settings().desktop:
+        return ModesOut(modes=["local_password"])
+    return ModesOut(modes=["email_code", "password"])
 
 
 @router.post("/codes/request", response_model=CodeRequestOut)
@@ -62,15 +73,23 @@ def register(body: RegisterIn, db: Session = Depends(get_db)) -> TokenOut:
     existing = db.query(User).filter(User.email == email).one_or_none()
     if existing is not None:
         raise AtlasError("email_taken", "Email gia registrata.", status=409)
-    # Richiede la prova di verifica email (server-held, legata al signup_token
-    # della sessione che ha verificato); la consuma nella stessa transazione
-    # della creazione utente.
-    codes_service.consume_signup_proof(db, email, body.signup_token)
+    if get_settings().desktop:
+        # Profilo LOCALE (desktop standalone): i dati vivono solo su questa
+        # macchina e il backend ascolta solo su 127.0.0.1; la verifica email
+        # non aggiungerebbe sicurezza e richiederebbe un servizio esterno che
+        # un'installazione pulita non ha.
+        via = "local_desktop"
+    else:
+        # Richiede la prova di verifica email (server-held, legata al signup_token
+        # della sessione che ha verificato); la consuma nella stessa transazione
+        # della creazione utente.
+        codes_service.consume_signup_proof(db, email, body.signup_token)
+        via = "email_code"
     user = User(email=email, password_hash=hash_password(body.password))
     db.add(user)
     db.commit()
     db.refresh(user)
-    log_action(db, user.id, "auth.register", {"via": "email_code"})
+    log_action(db, user.id, "auth.register", {"via": via})
     return TokenOut(token=create_token(user.id), user=UserOut.model_validate(user))
 
 

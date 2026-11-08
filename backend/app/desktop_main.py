@@ -17,6 +17,7 @@ def main() -> None:
     )
     data_dir.mkdir(parents=True, exist_ok=True)
     os.environ.setdefault("ATLAS_DATABASE_URL", f"sqlite:///{data_dir / 'atlas.db'}")
+    os.environ.setdefault("ATLAS_DESKTOP", "1")
     os.environ.setdefault("ATLAS_EMBED_PROVIDER", "local")
     os.environ.setdefault("ATLAS_LLM_PROVIDER", "extractive")
     # Il segreto JWT/credentials deve essere stabile tra avvii: se non

@@ -15,6 +15,11 @@ class Settings(BaseSettings):
     jwt_secret: str = "dev-secret-change-me"
     jwt_ttl_minutes: int = 60 * 24
 
+    # Modalita' desktop standalone (sidecar Tauri, SQLite locale, bind solo
+    # 127.0.0.1): registrazione = profilo LOCALE senza codice email, perche'
+    # l'installazione pulita non ha un servizio email configurato.
+    desktop: bool = False
+
     # API codici email (worker Cloudflare). La chiave pubblica Ed25519 NON e'
     # un segreto: serve solo a verificare le attestazioni firmate dal worker.
     codes_api_url: str = "https://atlas.federicotaranu.site"

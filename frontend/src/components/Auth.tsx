@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api, setToken } from "../api";
 
 type Mode = "login" | "register";
@@ -17,8 +17,17 @@ export default function Auth({ onLogin }: { onLogin: () => void }) {
   // il server ne conserva solo l'hash e la rifiuta se non combacia con l'email.
   const [signupToken, setSignupToken] = useState("");
   const [busy, setBusy] = useState(false);
+  // local = istanza desktop standalone: solo profilo locale, niente codici email.
+  const [local, setLocal] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    api
+      .modes()
+      .then((r) => setLocal(r.modes.includes("local_password")))
+      .catch(() => {});
+  }, []);
 
   function reset(next: Mode) {
     setMode(next);
@@ -100,7 +109,7 @@ export default function Auth({ onLogin }: { onLogin: () => void }) {
         <h1 className="auth-title">ATLAS</h1>
         <p className="auth-sub">Ricorda, ragiona e prevede.</p>
 
-        {mode === "login" && method === null && (
+        {mode === "login" && method === null && !local && (
           <div className="auth">
             <p className="auth-ask">Come vuoi accedere?</p>
             <button type="button" className="primary" onClick={() => setMethod("code")}>
@@ -115,16 +124,23 @@ export default function Auth({ onLogin }: { onLogin: () => void }) {
           </div>
         )}
 
-        {mode === "login" && method === "password" && (
+        {mode === "login" && (method === "password" || (local && method === null)) && (
           <form className="auth" onSubmit={submit}>
             <input type="email" placeholder="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
             <input type="password" placeholder="password" value={password}
                    onChange={(e) => setPassword(e.target.value)} required />
             {error && <div className="err">{error}</div>}
             <button type="submit" className="primary" disabled={busy}>Entra</button>
-            <button type="button" className="ghost" onClick={() => { setMethod(null); setError(null); }}>
-              Indietro
-            </button>
+            {!(local && method === null) && (
+              <button type="button" className="ghost" onClick={() => { setMethod(null); setError(null); }}>
+                Indietro
+              </button>
+            )}
+            {local && method === null && (
+              <button type="button" className="ghost" onClick={() => reset("register")}>
+                Non ho un profilo
+              </button>
+            )}
           </form>
         )}
 
@@ -146,7 +162,21 @@ export default function Auth({ onLogin }: { onLogin: () => void }) {
           </form>
         )}
 
-        {mode === "register" && (
+        {mode === "register" && local && (
+          <form className="auth" onSubmit={submit}>
+            <p className="auth-ask">Crea il tuo profilo locale</p>
+            <input type="email" placeholder="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+            <input type="password" placeholder="scegli una password (min 8 caratteri)" value={password}
+                   onChange={(e) => setPassword(e.target.value)} required minLength={8} />
+            {error && <div className="err">{error}</div>}
+            <button type="submit" className="primary" disabled={busy}>Crea profilo</button>
+            <button type="button" className="ghost" onClick={() => reset("login")}>
+              Ho gia un profilo
+            </button>
+          </form>
+        )}
+
+        {mode === "register" && !local && (
           <form className="auth" onSubmit={submit}>
             <input type="email" placeholder="email" value={email} onChange={(e) => setEmail(e.target.value)}
                    required disabled={step !== "email"} />

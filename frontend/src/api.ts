@@ -132,6 +132,7 @@ export interface MigrationStatus {
 }
 
 export const api = {
+  modes: () => req<{ modes: string[] }>("/auth/modes"),
   requestCode: (email: string, purpose: "register" | "login", turnstileToken = "") =>
     req<{ ok: boolean; ttl_seconds: number }>("/auth/codes/request", {
       method: "POST",

@@ -53,6 +53,10 @@ class TokenOut(BaseModel):
     user: UserOut
 
 
+class ModesOut(BaseModel):
+    modes: list[str]
+
+
 class SourceIn(BaseModel):
     kind: str = Field(min_length=1, max_length=50)
     label: str = Field(min_length=1, max_length=200)
