@@ -1,0 +1,14 @@
+[Unit]
+Description=ATLAS agent (headless: canali chat + scheduler)
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=__ATLAS_DIR__
+ExecStart=__PYTHON__ __ATLAS_DIR__/main.py --headless
+Restart=on-failure
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=default.target
