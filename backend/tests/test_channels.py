@@ -234,3 +234,83 @@ def test_rate_limiter_window():
     rl = RateLimiter(2)
     assert rl.allow("a") and rl.allow("a") and not rl.allow("a")
     assert rl.allow("b")  # per-mittente
+
+
+def make_hub_with_pairing(tmp_path, responses, allowed=None):
+    from app.channels.pairing import PairingStore
+    store = MemoryStore(tmp_path / "memory.db")
+    secrets = SecretFilter(["sk-test-1234567890"])
+    pairing = PairingStore(tmp_path / "data" / "pairing.json")
+    hub = ChannelHub(
+        registry=FakeRegistry(responses), active_getter=lambda: "fake",
+        ctx=ToolContext(workspace=tmp_path, secrets=secrets),
+        store=store, log=ActionLog(tmp_path / "logs" / "actions.log", secrets),
+        seal=None, secrets=secrets,
+        channels_log=ChannelLog(tmp_path / "logs" / "channels.log", secrets),
+        allowed=allowed or {"telegram": {"111"}}, pairing=pairing,
+        max_steps=5, confirm_timeout=5.0)
+    return hub, pairing
+
+
+def test_unknown_sender_recorded_for_pairing_no_reply(tmp_path):
+    hub, pairing = make_hub_with_pairing(tmp_path, [text_response("ciao")])
+    replies, reply = collect()
+    hub.handle(ChannelMessage(sender="999", channel="telegram", text="ciao",
+                              display="Mario Rossi (@mario)"), reply)
+    assert replies == []  # mai una risposta a sconosciuti
+    pending = pairing.pending()
+    assert len(pending) == 1
+    assert pending[0]["sender"] == "999"
+    assert pending[0]["display"] == "Mario Rossi (@mario)"
+
+
+def test_pairing_dedupes_and_allowlisted_not_recorded(tmp_path):
+    hub, pairing = make_hub_with_pairing(tmp_path, [text_response("ok")])
+    _, reply = collect()
+    for _ in range(3):
+        hub.handle(ChannelMessage(sender="999", channel="telegram", text="x"), reply)
+    hub.handle(ChannelMessage(sender="111", channel="telegram", text="x"), reply)
+    assert [p["sender"] for p in pairing.pending()] == ["999"]
+
+
+def test_pairing_approve_activates_allowlist_live(tmp_path):
+    hub, pairing = make_hub_with_pairing(tmp_path, [text_response("ciao")])
+    replies, reply = collect()
+    hub.handle(ChannelMessage(sender="999", channel="telegram", text="ciao"), reply)
+    assert replies == []
+    entry = hub.approve_pairing("telegram", "999")
+    assert entry is not None
+    hub.handle(ChannelMessage(sender="999", channel="telegram", text="ciao"), reply)
+    deadline = time.time() + 5
+    while not replies and time.time() < deadline:
+        time.sleep(0.02)
+    assert replies != []  # ora autorizzato: il task gira e risponde
+    assert "999" in pairing.paired_ids("telegram")
+    assert pairing.pending() == []
+
+
+def test_pairing_reject_drops_request(tmp_path):
+    hub, pairing = make_hub_with_pairing(tmp_path, [])
+    _, reply = collect()
+    hub.handle(ChannelMessage(sender="999", channel="telegram", text="x"), reply)
+    assert pairing.reject("telegram", "999") is True
+    assert pairing.pending() == []
+    assert "999" not in pairing.paired_ids("telegram")
+
+
+def test_pairing_persists_across_reload(tmp_path):
+    from app.channels.pairing import PairingStore
+    hub, pairing = make_hub_with_pairing(tmp_path, [])
+    _, reply = collect()
+    hub.handle(ChannelMessage(sender="999", channel="telegram", text="x"), reply)
+    pairing.approve("telegram", "999")
+    reloaded = PairingStore(tmp_path / "data" / "pairing.json")
+    assert "999" in reloaded.paired_ids("telegram")
+
+
+def test_pairing_pending_expires(tmp_path):
+    from app.channels.pairing import PairingStore
+    pairing = PairingStore(tmp_path / "data" / "pairing.json", ttl=0.01)
+    pairing.record("telegram", "999")
+    time.sleep(0.02)
+    assert pairing.pending() == []
