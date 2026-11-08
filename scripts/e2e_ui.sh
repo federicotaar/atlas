@@ -44,5 +44,5 @@ done
 sleep 5
 import -window root /tmp/e2e-6-riavvio.png
 TOKEN=$(curl -s -X POST http://127.0.0.1:8000/auth/login -H 'content-type: application/json' -d '{"email":"e2e@example.com","password":"password-locale-e2e"}' | python3 -c 'import sys,json; print(json.load(sys.stdin)["token"])')
-curl -s http://127.0.0.1:8000/me -H "Authorization: Bearer $TOKEN" | tee /tmp/e2e-me.json | grep -i briciola || { echo 'Briciola NON trovata in /me export:'; cat /tmp/e2e-me.json; exit 1; }
+curl -s http://127.0.0.1:8000/me/export -H "Authorization: Bearer $TOKEN" | tee /tmp/e2e-export.json | grep -i briciola || { echo 'Briciola NON trovata in /me/export:'; cat /tmp/e2e-export.json; exit 1; }
 echo 'E2E UI: registrazione + salvataggio + riavvio + persistenza OK'
