@@ -164,7 +164,19 @@ def _mount_agent(asgi_app, data_dir: Path):
         # chiave): lo stack parte comunque - il pannello di configurazione
         # nella pagina permette di aggiungere la chiave e attivare il
         # provider senza toccare file a mano.
-        active = _first_usable(registry) or registry._order[0]  # noqa: SLF001
+        # Provider salvato dalla pagina (ATLAS_PROVIDER nel .env del
+        # workspace) ha priorita'; poi il primo usabile, poi il primo
+        # definito (la pagina permette di aggiungere la chiave).
+        saved = os.environ.get("ATLAS_PROVIDER", "")
+        if saved:
+            try:
+                registry.spec(saved)
+                usable, _r = registry.usable(saved)
+            except Exception:
+                usable = False
+            if not usable:
+                saved = ""
+        active = saved or _first_usable(registry) or registry._order[0]  # noqa: SLF001
         # Il filtro segreti copre .env e le variabili che suonano chiavi.
         secret_values = list(dotenv.values()) + [
             v for k, v in os.environ.items()
