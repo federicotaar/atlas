@@ -35,6 +35,7 @@ from .agent.seal import SealGuard
 from .agent.tools import ToolContext
 from .channels.base import ChannelHub, ChannelLog
 from .channels.config import channel_enabled, load_channels_config
+from .channels.media import MediaProcessor
 from .channels.pairing import PairingStore
 from .channels.telegram import TelegramChannel
 from .providers.base import AllProvidersFailed, ProviderError
@@ -123,15 +124,25 @@ def _maybe_start_channels(*, workspace: Path, registry: ProviderRegistry,
     if not allowed["telegram"]:
         out("ALLOWED_TELEGRAM_IDS vuoto: il canale ignorera' TUTTI i mittenti "
             "(richieste registrate in locale; approva con /pairing approve)")
+    # Stage 6: vocali (trascrizione Groq), foto (descrizione Gemini) e file.
+    # Le chiavi arrivano da .env/ambiente come quelle dei provider; senza
+    # chiave il file resta salvato e la nota segnala il servizio mancante.
+    media = MediaProcessor(
+        workspace,
+        groq_key=os.environ.get("GROQ_API_KEY", ""),
+        gemini_key=os.environ.get("GEMINI_API_KEY", ""))
     hub = ChannelHub(
         registry=registry, active_getter=get_active, set_active=set_active,
         describe_registry=_describe_registry,
         ctx=ctx, store=store, log=log, seal=seal, secrets=secrets,
         channels_log=ChannelLog(workspace / "logs" / "channels.log", secrets),
-        allowed=allowed, pairing=pairing, max_steps=max_steps)
+        allowed=allowed, pairing=pairing, media=media, max_steps=max_steps)
     tg_cfg = config.get("channels", {}).get("telegram", {})
     channel = TelegramChannel(
-        token, drop_pending_updates=bool(tg_cfg.get("drop_pending_updates", True)))
+        token, drop_pending_updates=bool(tg_cfg.get("drop_pending_updates", True)),
+        # Gate del download: `allowed` e' lo stesso dict dell'hub, quindi un
+        # /pairing approve live vale subito anche per gli allegati.
+        allow_check=lambda sender: ChannelHub.is_allowed(sender, "telegram", allowed))
     channel.on_message(
         lambda m: hub.handle(m, lambda text: channel.send(m.sender, text)))
     channel.start()
