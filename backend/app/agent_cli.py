@@ -50,6 +50,7 @@ HELP_TEXT = """Comandi:
   /mode <ask|auto-safe|yolo>   cambia modo permessi (spec sez. 4)
   /stop                        annulla il task in corso (spec sez. 2)
   /pairing                     elenca le richieste di pairing in sospeso
+  /pairing challenge           genera un codice monouso per autorizzare Fred
   /pairing approve <n>         autorizza il mittente n (allowlist canali)
   /pairing reject <n>          scarta la richiesta n
   /remember <testo>            salva una nota persistente (spec sez. 5)
@@ -142,6 +143,14 @@ def _handle_pairing(line: str, pairing: PairingStore, hub, out) -> None:
 
     parts = line.split()
     sub = parts[1] if len(parts) > 1 else "list"
+    if sub == "challenge":
+        # Codice monouso da consegnare a Fred sul canale autenticato: chi lo
+        # presenta al bot viene abbinato. Non finire in nessun log.
+        code = pairing.create_challenge()
+        out(f"Challenge monouso (30 min): {code}")
+        out("Condividila solo sul canale autenticato; chi la invia al bot "
+            "viene autorizzato.")
+        return
     pending = pairing.pending()
     if sub in ("list", "ls"):
         if not pending:
