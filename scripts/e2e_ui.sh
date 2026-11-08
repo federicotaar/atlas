@@ -184,6 +184,11 @@ echo 'E2E UI: registrazione + salvataggio + riavvio + relogin UI + persistenza O
 # il browser di sistema, la cattura deve vedere quello.
 click_word /tmp/e2e-10-richiamo-relogin.png 'Dashboard' || { echo 'E2E UI: voce Dashboard NON trovata via OCR'; exit 1; }
 sleep 3
+# La sezione "Agente ATLAS" e' sotto la piega a 1280x800: scrollare in fondo
+# (rotella sul centro pagina) prima della cattura e del click OCR su "Apri".
+xdotool mousemove 640 400
+for i in $(seq 1 12); do xdotool click 5; sleep 0.2; done
+sleep 1
 shot /tmp/e2e-11-dashboard.png
 click_word /tmp/e2e-11-dashboard.png 'Apri' || { echo 'E2E UI: link Apri agente NON trovato via OCR in dashboard'; exit 1; }
 sleep 6
@@ -192,7 +197,7 @@ ocr_has /tmp/e2e-12-agente.png 'invia' || ocr_has /tmp/e2e-12-agente.png 'Scrivi
 echo 'click-through dashboard -> agente OK'
 # Usabilita' della superficie: messaggio reale dal composer. Senza provider
 # configurati la risposta onesta e' l'avviso "nessun provider usabile".
-xdotool mousemove 500 767 click 1
+xdotool mousemove 500 746 click 1
 sleep 1
 xdotool type --delay 30 'ciao'
 xdotool key Return
