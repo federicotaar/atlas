@@ -98,8 +98,39 @@ def _scrubbed_env() -> dict[str, str]:
                 mark in k.upper() for mark in ("API_KEY", "TOKEN", "SECRET", "PASSWORD"))}
 
 
+# git legge configurazione da /etc, $HOME e .git/config: alias, diff esterni,
+# textconv, pager possono eseguire processi arbitrari, e .git/config sarebbe
+# scrivibile via write_file. Neutralizziamo TUTTE le sorgenti: il git della
+# superficie ristretta gira senza nessuna configurazione ereditabile.
+_GIT_NEUTRAL_ENV = {
+    "GIT_CONFIG_NOSYSTEM": "1",
+    "GIT_CONFIG_GLOBAL": "/dev/null",
+    "GIT_CONFIG_LOCAL": "/dev/null",
+    "GIT_PAGER": "cat",
+    "PAGER": "cat",
+    "GIT_EXTERNAL_DIFF": "",
+    "GIT_DIFF_OPTS": "",
+    "GIT_SSH": "/bin/false",
+    "GIT_SSH_COMMAND": "/bin/false",
+    "GIT_ASKPASS": "/bin/false",
+    "SSH_ASKPASS": "/bin/false",
+    "GIT_TERMINAL_PROMPT": "0",
+    "GIT_EDITOR": "/bin/false",
+    "EDITOR": "/bin/false",
+    "VISUAL": "/bin/false",
+}
+
+
+def _tool_env() -> dict[str, str]:
+    env = _scrubbed_env()
+    env.update(_GIT_NEUTRAL_ENV)
+    return env
+
+
 def _is_protected_path(target: Path) -> bool:
     norm = str(target).replace("\\", "/")
+    if "/.git/" in norm or norm.endswith("/.git"):
+        return True  # config/hooks/attributes del repo: mai scrivibili dai tool
     if any(part in norm for part in ("app/agent/", "app/agent_cli.py")):
         return True
     return target.name == ".env"
@@ -124,7 +155,7 @@ def _shell(args: dict[str, Any], ctx: ToolContext) -> str:
         proc = subprocess.run(
             check.argv, shell=False, cwd=str(ctx.workspace),
             capture_output=True, text=True, timeout=SHELL_TIMEOUT,
-            errors="replace", env=_scrubbed_env(), stdin=subprocess.DEVNULL,
+            errors="replace", env=_tool_env(), stdin=subprocess.DEVNULL,
         )
     except subprocess.TimeoutExpired:
         return f"errore: comando oltre il timeout di {SHELL_TIMEOUT}s, terminato"
