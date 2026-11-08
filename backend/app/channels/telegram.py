@@ -36,10 +36,11 @@ class TelegramChannel(Channel):
             raise RuntimeError("canale non avviato")
         self._client.send_message(to, text)
 
-    def _on_update(self, chat_id: str, text: str) -> None:
+    def _on_update(self, chat_id: str, text: str, display: str = "") -> None:
         if self._handler is not None:
             self._handler(ChannelMessage(sender=str(chat_id),
-                                         channel=self.name, text=text))
+                                         channel=self.name, text=text,
+                                         display=display))
 
 
 class _PTBClient:
@@ -51,7 +52,7 @@ class _PTBClient:
         self._app = ApplicationBuilder().token(token).build()
         self._loop = None
 
-    def start_polling(self, on_update: Callable[[str, str], None]) -> None:
+    def start_polling(self, on_update: Callable[..., None]) -> None:
         import asyncio
 
         from telegram.ext import MessageHandler, filters
@@ -59,7 +60,14 @@ class _PTBClient:
         async def _recv(update, context) -> None:
             msg = update.message
             if msg is not None and msg.text:
-                on_update(str(msg.chat_id), msg.text)
+                user = msg.from_user
+                display = ""
+                if user is not None:
+                    parts = [p for p in (user.first_name, user.last_name) if p]
+                    display = " ".join(parts)
+                    if user.username:
+                        display += f" (@{user.username})"
+                on_update(str(msg.chat_id), msg.text, display.strip())
 
         async def _post_init(app) -> None:
             self._loop = asyncio.get_running_loop()
