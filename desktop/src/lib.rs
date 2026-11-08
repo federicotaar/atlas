@@ -126,7 +126,9 @@ pub fn run() {
                 .sidecar("atlas-backend")
                 .expect("sidecar atlas-backend non trovato nel bundle")
                 .env("ATLAS_DESKTOP_DATA_DIR", &data_dir)
-                .env("ATLAS_PORT", port.to_string());
+                .env("ATLAS_PORT", port.to_string())
+                // Il backend si auto-termina se questo processo non esiste piu'.
+                .env("ATLAS_APP_PID", std::process::id().to_string());
             let (mut rx, child) = sidecar.spawn().expect("avvio sidecar fallito");
             app.manage(Sidecar(Mutex::new(Some(child))));
             // Drena stdout/stderr del sidecar: errori di avvio visibili, mai morte silenziosa.

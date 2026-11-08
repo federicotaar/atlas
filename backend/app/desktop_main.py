@@ -9,6 +9,8 @@ import ctypes
 import os
 import signal
 import sys
+import threading
+import time
 from pathlib import Path
 
 
@@ -34,8 +36,38 @@ def _install_parent_death_watch() -> None:
         pass
 
 
+def _start_app_watchdog() -> None:
+    """Esce se il processo dell'app desktop (ATLAS_APP_PID) non esiste piu'.
+
+    La chiusura normale della finestra fa uscire l'app; se il sidecar non
+    viene fermato (crash, kill -9, evento di chiusura non recapitato), il
+    server non deve restare orfano con la porta occupata (bug osservato in
+    CI: chiusura normale, CloseRequested mai consegnato, porta 8100 in
+    ascolto). Solo Linux: usa /proc, nessuna dipendenza.
+    """
+    if sys.platform != "linux":
+        return
+    try:
+        pid = int(os.environ.get("ATLAS_APP_PID", "0") or 0)
+    except ValueError:
+        return
+    if pid <= 0:
+        return
+    proc = f"/proc/{pid}"
+
+    def _watch() -> None:
+        while True:
+            time.sleep(2)
+            if not os.path.exists(proc):
+                os._exit(0)
+
+    threading.Thread(target=_watch, daemon=True).start()
+
+
+
 def main() -> None:
     _install_parent_death_watch()
+    _start_app_watchdog()
     data_dir = Path(
         os.environ.get("ATLAS_DESKTOP_DATA_DIR")
         or Path.home() / ".atlas" / "desktop"
