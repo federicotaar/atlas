@@ -79,6 +79,39 @@ jobs:
           npm ci
           npm run build
 
+      # Workaround runner: i download degli strumenti AppImage dalle release
+      # tauri-apps/binary-releases (host github.com/releases/download) rispondono
+      # 504 in modo persistente dalla rete dei runner. Pre-seed della cache del
+      # bundler ($HOME/.cache/tauri) via endpoint asset di api.github.com, che
+      # risponde: il bundler salta il download se il file esiste gia'.
+      - name: Pre-seed cache AppImage tooling (workaround 504 runner)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          CACHE="$HOME/.cache/tauri"
+          mkdir -p "$CACHE"
+          seed() {
+            local tag="$1" asset="$2" dest="$3"
+            if [ -s "$dest" ]; then echo "gia' in cache: $dest"; return 0; fi
+            local url=""
+            for i in 1 2 3 4; do
+              url=$(curl -sfL "https://api.github.com/repos/tauri-apps/binary-releases/releases/tags/$tag" \
+                | jq -r --arg n "$asset" '.assets[] | select(.name==$n) | .url') || url=""
+              if [ -n "$url" ] && curl -sfL -H 'Accept: application/octet-stream' "$url" -o "$dest"; then
+                echo "scaricato $asset -> $dest"
+                break
+              fi
+              echo "tentativo $i fallito per $asset"
+              sleep 10
+            done
+            [ -s "$dest" ] || { echo "FALLITO seed $asset"; exit 1; }
+            chmod +x "$dest"
+          }
+          seed apprun-old AppRun-x86_64 "$CACHE/AppRun-x86_64"
+          seed linuxdeploy-07333c6 linuxdeploy-x86_64.AppImage "$CACHE/linuxdeploy-07333c6-x86_64.AppImage"
+          ls -la "$CACHE"
+
       # beforeBuildCommand in tauri.conf.json e' volutamente vuoto: il frontend
       # viene costruito dallo step sopra (CWD esplicita, cross-shell). tauri
       # build usa solo frontendDist gia' pronto.
