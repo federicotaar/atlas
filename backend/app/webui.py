@@ -13,6 +13,7 @@ asset esterno, nessuna build: la pagina e' servita inline.
 """
 from __future__ import annotations
 
+import os
 import threading
 from pathlib import Path
 from typing import Callable
@@ -62,7 +63,18 @@ padding:0 16px;font:inherit;cursor:pointer}
 button:hover{background:#30363d}
 #stop{color:#f85149}
 </style></head><body>
-<header>ATLAS <span id="st">pronto</span></header>
+<header>ATLAS <span id="st">pronto</span>
+<button id="gear" title="Provider e chiavi" style="float:right">&#9881;</button>
+</header>
+<div id="cfg" style="display:none;padding:12px 16px;border-bottom:1px solid #30363d">
+<div id="cfglist"></div>
+<div style="display:flex;gap:8px;margin-top:8px">
+<input id="cfgkey" type="password" placeholder="chiave API (non viene mai mostrata)"
+ style="flex:1;background:#0d1117;border:1px solid #30363d;border-radius:8px;color:#e6edf3;padding:8px;font:inherit">
+<button id="cfgsave">salva e usa</button>
+</div>
+<div id="cfgmsg" class="muted" style="margin-top:6px"></div>
+</div>
 <div id="log"></div>
 <div id="bar">
 <input id="in" placeholder="Scrivi ad ATLAS... (invio per inviare)" autofocus>
@@ -79,7 +91,7 @@ function add(cls, text){ const d = document.createElement('div');
 async function poll(){
   if (polling) return; polling = true;
   try {
-    const r = await fetch('/api/state'); const s = await r.json();
+    const r = await fetch('api/state'); const s = await r.json();
     if (s.seq !== lastSeq) {
       lastSeq = s.seq;
       if (s.question) add('atlas', s.question + '\\nRispondi "yes" per confermare, altro per annullare.');
@@ -93,7 +105,7 @@ async function poll(){
 async function send(){
   const text = inp.value.trim(); if (!text) return;
   inp.value = ''; add('me', text);
-  const r = await fetch('/api/chat', {method:'POST',
+  const r = await fetch('api/chat', {method:'POST',
     headers:{'Content-Type':'application/json'}, body:JSON.stringify({message:text})});
   const s = await r.json();
   if (s.reply) add('atlas', s.reply);
@@ -102,11 +114,44 @@ async function send(){
 document.getElementById('send').onclick = send;
 inp.onkeydown = e => { if (e.key === 'Enter') send(); };
 document.getElementById('stop').onclick = async () => {
-  const r = await fetch('/api/stop', {method:'POST'}); const s = await r.json();
+  const r = await fetch('api/stop', {method:'POST'}); const s = await r.json();
   if (s.reply) add('sys', s.reply); poll(); };
-fetch('/api/history').then(r => r.json()).then(h => {
+fetch('api/history').then(r => r.json()).then(h => {
   for (const m of h.messages) add(m.role === 'user' ? 'me' : 'atlas', m.content);
 });
+let cfgProvider = null;
+async function cfgLoad(){
+  const r = await fetch('api/config'); const c = await r.json();
+  const list = document.getElementById('cfglist'); list.innerHTML = '';
+  for (const p of c.providers) {
+    const row = document.createElement('div');
+    const sel = p.name === c.active ? ' \u25c9 ' : ' \u25cb ';
+    const key = p.needs_key ? (p.key_set ? 'chiave salvata' : 'chiave mancante') : 'senza chiave';
+    row.textContent = sel + p.name + ' (' + p.model + ') - ' + key + (p.usable ? '' : ' [' + p.reason + ']');
+    row.style.cursor = 'pointer'; row.style.padding = '3px 0';
+    row.onclick = () => { cfgProvider = p.name;
+      document.getElementById('cfgmsg').textContent = 'selezionato: ' + p.name; };
+    list.appendChild(row);
+  }
+  cfgProvider = cfgProvider || c.active;
+}
+document.getElementById('gear').onclick = () => {
+  const c = document.getElementById('cfg');
+  c.style.display = c.style.display === 'none' ? 'block' : 'none';
+  if (c.style.display === 'block') cfgLoad();
+};
+document.getElementById('cfgsave').onclick = async () => {
+  if (!cfgProvider) return;
+  const key = document.getElementById('cfgkey').value;
+  const r = await fetch('api/config/provider', {method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({name:cfgProvider, api_key:key})});
+  const s = await r.json();
+  document.getElementById('cfgmsg').textContent = s.ok ?
+    'provider attivo: ' + s.active : ('errore: ' + s.error);
+  document.getElementById('cfgkey').value = '';
+  cfgLoad();
+};
 </script></body></html>"""
 
 
@@ -264,7 +309,110 @@ class ChatIn(BaseModel):
     message: str
 
 
-def create_app(session: WebUISession):
+class ProviderIn(BaseModel):
+    name: str
+    api_key: str = ""
+
+
+class AgentAlreadyRunning(RuntimeError):
+    """Lo stack agente su questo workspace e' gia' attivo in un altro
+    processo (CLI, web UI o app desktop): una sola istanza alla volta."""
+
+
+class AgentLock:
+    """Lockfile con PID nel workspace: dedup istanze CLI/web/desktop."""
+
+    def __init__(self, workspace: Path):
+        self._path = workspace / "agent.lock"
+        self._held = False
+
+    def acquire(self) -> None:
+        self._path.parent.mkdir(parents=True, exist_ok=True)
+        if self._path.exists():
+            try:
+                pid = int(self._path.read_text().strip())
+                os.kill(pid, 0)  # esiste ancora?
+            except (ValueError, ProcessLookupError, PermissionError):
+                self._path.unlink(missing_ok=True)  # lock stale
+            else:
+                raise AgentAlreadyRunning(
+                    f"agente gia' attivo (pid {pid}) su questo workspace")
+        try:
+            fd = os.open(self._path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        except FileExistsError as exc:
+            raise AgentAlreadyRunning("agente gia' attivo (lock appena "
+                                      "creato)") from exc
+        with os.fdopen(fd, "w") as fh:
+            fh.write(str(os.getpid()))
+        self._held = True
+
+    def release(self) -> None:
+        if self._held:
+            self._path.unlink(missing_ok=True)
+            self._held = False
+
+
+class ConfigAPI:
+    """Provisioning provider/chiavi dalla superficie web.
+
+    Le chiavi si SCRIVONO soltanto (.env nel workspace, 0600 + ambiente del
+    processo): non vengono mai restituite, loggate o mostrate. key_set dice
+    solo se una chiave e' presente."""
+
+    def __init__(self, registry: ProviderRegistry, workspace: Path,
+                 get_active, set_active):
+        self._registry = registry
+        self._workspace = workspace
+        self._get_active = get_active
+        self._set_active = set_active
+
+    def info(self) -> dict:
+        providers = []
+        for name in self._registry._order:  # noqa: SLF001 - stesso package logico
+            spec = self._registry.spec(name)
+            usable, reason = self._registry.usable(name)
+            providers.append({
+                "name": name, "model": self._registry.current_model(name),
+                "usable": usable, "reason": reason,
+                "key_set": bool(spec.api_key_env)
+                           and bool(os.environ.get(spec.api_key_env, "")),
+                "needs_key": spec.requires_key})
+        return {"active": self._get_active(), "providers": providers}
+
+    def set_provider(self, name: str, api_key: str | None = None) -> dict:
+        try:
+            spec = self._registry.spec(name)
+        except Exception:
+            return {"ok": False, "error": f"provider sconosciuto: {name}"}
+        if api_key:
+            if not spec.api_key_env:
+                return {"ok": False,
+                        "error": f"{name} non usa una chiave API"}
+            os.environ[spec.api_key_env] = api_key
+            self._persist_key(spec.api_key_env, api_key)
+        usable, reason = self._registry.usable(name)
+        if not usable:
+            return {"ok": False, "error": f"{name} non usabile: {reason}"}
+        self._set_active(name)
+        return {"ok": True, "active": name}
+
+    def _persist_key(self, env_name: str, value: str) -> None:
+        env_path = self._workspace / ".env"
+        lines = env_path.read_text().splitlines() if env_path.exists() else []
+        out, done = [], False
+        for line in lines:
+            if line.startswith(f"{env_name}="):
+                out.append(f"{env_name}={value}")
+                done = True
+            else:
+                out.append(line)
+        if not done:
+            out.append(f"{env_name}={value}")
+        env_path.write_text("\n".join(out) + "\n")
+        os.chmod(env_path, 0o600)
+
+
+def create_app(session: WebUISession, config: "ConfigAPI | None" = None):
     """ASGI app della web UI (montabile/testabile senza server)."""
     app = FastAPI(title="atlas-webui")
 
@@ -288,19 +436,48 @@ def create_app(session: WebUISession):
     async def history():
         return {"messages": session.history()}
 
+    if config is not None:
+        @app.get("/api/config")
+        async def config_info():
+            return config.info()
+
+        @app.post("/api/config/provider")
+        async def config_provider(body: ProviderIn):
+            return config.set_provider(body.name, body.api_key or None)
+
     return app
 
 
-def run_webui(registry: ProviderRegistry, *, active: str, workspace: Path,
-              mode: Mode, max_steps: int, secrets: SecretFilter,
-              host: str = "127.0.0.1", port: int = 8321,
-              out: Callable[[str], None] = print) -> int:
-    """Avvia la web UI e blocca. SOLO loopback: rifiuta host non locali."""
-    import uvicorn
+class WebUIStack:
+    """Stack agente completo dietro la web UI: sessione, scheduler,
+    proactive, habits, config API e lock di istanza. shutdown() ferma lo
+    scheduler e rilascia il lock (chiusura pulita del desktop/servizio)."""
 
-    if host not in ("127.0.0.1", "localhost", "::1"):
-        out(f"Errore: la web UI ascolta solo su localhost, non {host}")
-        return 2
+    def __init__(self, session: WebUISession, app, scheduler,
+                 lock: AgentLock, config: ConfigAPI):
+        self.session = session
+        self.app = app
+        self.scheduler = scheduler
+        self.lock = lock
+        self.config = config
+
+    def shutdown(self) -> None:
+        try:
+            self.scheduler.stop()
+        finally:
+            self.lock.release()
+
+
+def build_webui_stack(registry: ProviderRegistry, *, active: str,
+                      workspace: Path, mode: Mode, max_steps: int,
+                      secrets: SecretFilter,
+                      out: Callable[[str], None] = print,
+                      take_lock: bool = True) -> WebUIStack:
+    """Costruisce lo stack agente completo per la web UI (o il mount
+    desktop): una sola istanza per workspace (AgentLock)."""
+    lock = AgentLock(workspace)
+    if take_lock:
+        lock.acquire()
     store = MemoryStore(workspace / "memory.db")
     log = ActionLog(workspace / "logs" / "actions.log", secrets)
     state = {"active": active}
@@ -369,7 +546,34 @@ def run_webui(registry: ProviderRegistry, *, active: str, workspace: Path,
         max_steps=max_steps, scheduler=scheduler, proactive=gate)
     dispatchers["webui"] = lambda sender, text: session.inject(text)
     dispatchers["cli"] = lambda sender, text: out(f"\n[job] {text}")
-    app = create_app(session)
+    config = ConfigAPI(registry, workspace,
+                       lambda: state["active"],
+                       lambda n: state.__setitem__("active", n))
+    app = create_app(session, config)
+    return WebUIStack(session, app, scheduler, lock, config)
+
+
+def run_webui(registry: ProviderRegistry, *, active: str, workspace: Path,
+              mode: Mode, max_steps: int, secrets: SecretFilter,
+              host: str = "127.0.0.1", port: int = 8321,
+              out: Callable[[str], None] = print) -> int:
+    """Avvia la web UI e blocca. SOLO loopback: rifiuta host non locali."""
+    import uvicorn
+
+    if host not in ("127.0.0.1", "localhost", "::1"):
+        out(f"Errore: la web UI ascolta solo su localhost, non {host}")
+        return 2
+    try:
+        stack = build_webui_stack(registry, active=active,
+                                  workspace=workspace, mode=mode,
+                                  max_steps=max_steps, secrets=secrets,
+                                  out=out)
+    except AgentAlreadyRunning as exc:
+        out(f"Errore: {exc}. Chiudi l'altra istanza o usa quella.")
+        return 2
     out(f"web UI su http://{host}:{port} (solo questa macchina; Ctrl-C per uscire)")
-    uvicorn.run(app, host=host, port=port, log_level="warning")
+    try:
+        uvicorn.run(stack.app, host=host, port=port, log_level="warning")
+    finally:
+        stack.shutdown()
     return 0
