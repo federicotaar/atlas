@@ -75,6 +75,24 @@ def test_job_survives_restart_and_runs_once(tmp_path):
     assert len(sent) == 1
 
 
+def test_agent_job_approved_in_quiet_hours_held_then_flushed(tmp_path):
+    """Regressione clock: approvazione in ore silenziose (23:30) — il job e'
+    dovuto ma la consegna non sollecitata resta nel digest fino al mattino,
+    con clock interamente simulato (qualsiasi wall clock reale)."""
+    sent = []
+    jobs, gate, scheduler, dispatch = build(tmp_path, sent)
+    job = scheduler.add_job(kind="cron", schedule="* * * * *",
+                            task="proposta notturna", channel="cli",
+                            sender="locale", source="agent", now=NIGHT)
+    scheduler.approve_job(job.id, now=NIGHT)
+    due = scheduler.list_jobs()[0].next_fire + 1
+    dispatch.now = due
+    assert scheduler.tick(due) == 1
+    assert sent == []  # ore silenziose: trattenuto
+    assert gate.heartbeat(now=MORNING) == 1
+    assert len(sent) == 1 and "proposta notturna" in sent[0][2]
+
+
 def test_unapproved_agent_job_never_runs_even_when_due(tmp_path):
     sent = []
     jobs, gate, scheduler, dispatch = build(tmp_path, sent)
@@ -84,7 +102,11 @@ def test_unapproved_agent_job_never_runs_even_when_due(tmp_path):
     dispatch.now = job.next_fire + 1 if job.next_fire else NOON + 3600
     assert scheduler.tick(NOON + 3600) == 0
     assert sent == []
-    scheduler.approve_job(job.id)
+    # Clock controllato anche in approvazione: senza now=, approve()
+    # ricalcola next_fire dal wall clock reale — di notte il job approvato
+    # finiva in ore silenziose e il gate tratteneva la consegna (test rosso
+    # dopo le 23:00, verde di giorno).
+    scheduler.approve_job(job.id, now=NOON)
     due = scheduler.list_jobs()[0].next_fire + 1
     dispatch.now = due
     assert scheduler.tick(due) == 1
