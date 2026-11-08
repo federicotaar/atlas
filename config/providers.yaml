@@ -1,0 +1,78 @@
+# Provider LLM dell'agente ATLAS (spec sez. 1).
+#
+# Ogni voce: name, type, base_url, model, api_key_env.
+# La chiave API NON sta mai in questo file: api_key_env nomina la variabile
+# (da .env o ambiente) che la contiene. Mai committare .env, mai stampare
+# o loggare i valori delle chiavi.
+#
+# Il provider attivo si cambia a runtime con: /model use <nome[:modello]>
+# Se il provider attivo fallisce o va in rate limit, la catena passa al
+# successivo usabile in questa lista (quelli senza chiave vengono saltati,
+# con il motivo dichiarato).
+providers:
+  - name: ollama_local
+    type: ollama
+    base_url: http://localhost:11434
+    model: llama3.2:3b
+    api_key_env: ""
+    # Tetto alla lunghezza risposta (0 = nessuno): un modello locale che non
+    # si ferma bloccherebbe la chat fino a Ctrl-C.
+    max_tokens: 1024
+
+  # Ollama cloud: togli enabled:false e metti OLLAMA_API_KEY in .env per usarlo.
+  - name: ollama_cloud
+    type: ollama
+    base_url: https://ollama.com
+    model: gpt-oss:120b-cloud
+    api_key_env: OLLAMA_API_KEY
+    enabled: false
+
+  # Provider cloud (stage 2 spec): stesso formato openai_compat. Per attivarne
+  # uno: chiave in .env (mai qui) e enabled: true. Costi addebitati sull'account
+  # del provider di chi configura; domande e memorie escono dal PC solo verso
+  # il provider attivo.
+  - name: groq
+    type: openai_compat
+    base_url: https://api.groq.com/openai/v1
+    model: openai/gpt-oss-120b
+    api_key_env: GROQ_API_KEY
+    enabled: false
+
+  # Gemini via endpoint OpenAI-compatibile di Google.
+  - name: gemini
+    type: openai_compat
+    base_url: https://generativelanguage.googleapis.com/v1beta/openai
+    model: gemini-3.5-flash
+    api_key_env: GEMINI_API_KEY
+    enabled: false
+
+  - name: openai
+    type: openai_compat
+    base_url: https://api.openai.com/v1
+    model: gpt-4o-mini
+    api_key_env: OPENAI_API_KEY
+    enabled: false
+
+  - name: anthropic
+    type: anthropic
+    base_url: https://api.anthropic.com
+    model: claude-sonnet-4-5
+    api_key_env: ANTHROPIC_API_KEY
+    enabled: false
+
+  - name: openrouter
+    type: openai_compat
+    base_url: https://openrouter.ai/api/v1
+    model: openai/gpt-4o-mini
+    api_key_env: OPENROUTER_API_KEY
+    enabled: false
+
+  # Qualunque altro servizio OpenAI-compatibile: copia questa voce e cambia
+  # name, base_url, model, api_key_env (chiave opzionale: lascia api_key_env
+  # vuota per endpoint locali senza auth).
+  # - name: custom_esempio
+  #   type: openai_compat
+  #   base_url: https://esempio.internal/v1
+  #   model: mio-modello
+  #   api_key_env: CUSTOM_API_KEY
+  #   enabled: false
