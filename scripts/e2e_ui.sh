@@ -40,6 +40,19 @@ echo 'modes desktop OK'
 xdotool search --name 'ATLAS' | head -1 | xargs -r xdotool windowactivate --sync || true
 sleep 2
 import -window root /tmp/e2e-1-auth.png
+# Il profilo webview e' condiviso fra le istanze dell'app sul runner: la
+# sessione creata dal test della porta di riserva puo' trovare l'app GIA'
+# loggata (run 42474126750: sessione riserva@example.com ereditata, la
+# "registrazione" digitava dentro una app gia' autenticata e il relogin
+# e2e falliva perche' l'utente non era mai stato creato). Se loggata,
+# uscire PRIMA: la registrazione qui deve essere reale e deterministica.
+if ocr_has /tmp/e2e-1-auth.png 'Esci'; then
+  click_word /tmp/e2e-1-auth.png 'Esci' || { echo 'E2E UI: Esci non cliccabile'; exit 1; }
+  sleep 3
+  import -window root /tmp/e2e-1b-logout.png
+  ocr_has /tmp/e2e-1b-logout.png 'password' || { echo 'E2E UI: form login NON visibile dopo il logout iniziale'; exit 1; }
+  echo 'sessione ereditata rilevata: logout iniziale OK'
+fi
 xdotool key Tab Tab Tab Tab Return
 sleep 1
 xdotool type --delay 30 'e2e@example.com'
@@ -49,6 +62,7 @@ import -window root /tmp/e2e-2-registrazione.png
 xdotool key Tab Return
 sleep 4
 import -window root /tmp/e2e-3-chat.png
+ocr_has /tmp/e2e-3-chat.png 'Esci' || { echo 'E2E UI: registrazione NON riuscita (stato loggato assente)'; exit 1; }
 # La destinazione post-registrazione non e' garantita (vista Chat oppure
 # Dashboard): navigare ESPLICITAMENTE alla Chat col click OCR sulla voce di
 # navigazione. Digitare a occhio chiuso qui finiva nel campo token Telegram
