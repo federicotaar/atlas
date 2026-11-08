@@ -2,7 +2,7 @@ import uuid
 from datetime import date, datetime
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import JSON, CheckConstraint, ForeignKey, Index, Text, Uuid, func
+from sqlalchemy import JSON, BigInteger, Boolean, CheckConstraint, ForeignKey, Index, Text, Uuid, func
 from sqlalchemy.engine import Dialect
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.types import TypeDecorator
@@ -389,3 +389,25 @@ class ConnectorCredential(Base):
     created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now(),
                                                  onupdate=func.now())
+
+
+class TelegramLink(Base):
+    """Collegamento bot Telegram ufficiale dell'utente: token bot cifrato a
+    riposo (Fernet, come i connettori Google), pairing del proprietario con
+    codice monouso via deep-link t.me, offset getUpdates persistente.
+    Un solo bot per utente."""
+
+    __tablename__ = "telegram_links"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("users.id"), nullable=False, unique=True)
+    bot_token_enc: Mapped[str] = mapped_column(Text, nullable=False)
+    bot_username: Mapped[str] = mapped_column(Text, nullable=False)
+    pairing_code: Mapped[str | None] = mapped_column(Text, nullable=True)
+    pairing_expires_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    owner_chat_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    update_offset: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
+    last_update_at: Mapped[datetime | None] = mapped_column(nullable=True)

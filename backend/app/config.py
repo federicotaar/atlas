@@ -60,6 +60,7 @@ class Settings(BaseSettings):
     # Generare con: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
     # Senza chiave le credenziali NON vengono salvate (fail-closed).
     credentials_key: str = ""
+    telegram_polling_enabled: bool = True
 
 
 @lru_cache

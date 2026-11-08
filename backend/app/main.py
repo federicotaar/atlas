@@ -21,6 +21,7 @@ from .routers import (
     settings,
     setup,
     sources,
+    telegram,
     timemachine,
 )
 
@@ -56,6 +57,7 @@ app.include_router(timemachine.router)
 app.include_router(dashboard.router)
 app.include_router(settings.router)
 app.include_router(setup.router)
+app.include_router(telegram.router)
 
 
 @app.get("/health")
@@ -70,3 +72,17 @@ def health() -> dict:
     # servizio qualunque che occupi la porta 8000 (non si uccide mai un server
     # altrui; si riusa solo un'istanza ATLAS con stessa app e API).
     return {"status": "ok", "db": db_status, "app": "atlas", "api": "v1"}
+
+
+@app.on_event("startup")
+def _start_telegram_poller() -> None:
+    from .services.telegram import ensure_poller
+
+    ensure_poller()
+
+
+@app.on_event("shutdown")
+def _stop_telegram_poller() -> None:
+    from .services.telegram import stop_poller
+
+    stop_poller()

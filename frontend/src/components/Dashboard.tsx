@@ -1,6 +1,7 @@
 /** Dashboard (fase 5, spec 5I): ogni elemento mostra da quali dati deriva. */
 import { useEffect, useState } from "react";
 import { api, type DashboardData } from "../api";
+import TelegramCard from "./TelegramCard";
 
 function Provenance({ data }: { data: Record<string, unknown> }) {
   return (
@@ -109,6 +110,8 @@ export default function Dashboard() {
         ))}
         {p.agents.last_runs.length === 0 && <p className="muted">Nessuna esecuzione.</p>}
       </Section>
+
+      <TelegramCard />
 
       <Section title="Automazioni">
         {p.automations.connectors.map((c) => (

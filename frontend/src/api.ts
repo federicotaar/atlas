@@ -41,6 +41,7 @@ async function req<T>(path: string, options: RequestInit = {}): Promise<T> {
     } catch { /* corpo non JSON */ }
     throw new Error(message);
   }
+  if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
 }
 
@@ -125,6 +126,14 @@ export interface ModelSettings {
   providers: ProviderInfo[];
 }
 
+export interface TelegramStatus {
+  connected: boolean;
+  bot_username: string | null;
+  paired: boolean;
+  deep_link: string | null;
+  pairing_expired: boolean;
+}
+
 export interface MigrationStatus {
   state: "not_configured" | "unreachable" | "empty" | "has_data" | "imported" | "dismissed";
   counts: Record<string, number>;
@@ -167,4 +176,14 @@ export const api = {
   getMigrationStatus: () => req<MigrationStatus>("/setup/migration-status"),
   importMigration: () => req<MigrationStatus>("/setup/migration-import", { method: "POST" }),
   dismissMigration: () => req<MigrationStatus>("/setup/migration-dismiss", { method: "POST" }),
+  getTelegramStatus: () => req<TelegramStatus>("/connectors/telegram/status"),
+  connectTelegram: (botToken: string) =>
+    req<TelegramStatus>("/connectors/telegram/connect", {
+      method: "POST",
+      body: JSON.stringify({ bot_token: botToken }),
+    }),
+  disconnectTelegram: () =>
+    req<void>("/connectors/telegram/disconnect", { method: "POST" }),
+  rotateTelegramCode: () =>
+    req<TelegramStatus>("/connectors/telegram/pairing-code", { method: "POST" }),
 };
