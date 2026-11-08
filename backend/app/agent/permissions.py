@@ -13,13 +13,14 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
+from .execsafe import validate as validate_command
 from .safety import is_blocked, resolve_in_workspace
-from .tools import TOOLS_BY_NAME
+from .tools import TOOLS_BY_NAME, _is_protected_path
 
-# Strato di sicurezza: read-only per gli strumenti dell'agente (spec sez. 8,
-# hard limit). Mai modificabile dal loop, in nessun modo - nemmeno via shell
-# (un `echo > safety.py` aggirerebbe il controllo su write_file).
-PROTECTED_PARTS = ("app/agent/safety.py", "app/agent/permissions.py")
+# Strato di sicurezza: TUTTO app/agent/ + agent_cli.py read-only per gli
+# strumenti dell'agente (spec sez. 8, hard limit): safety, permissions,
+# execsafe, seal, loop, tools - chi applica il confine non puo' riscriverlo.
+PROTECTED_PARTS = ("app/agent/", "app/agent_cli.py")
 
 # .env mai in pasto ai tool (spec sez. 6: mai eco di chiavi o .env). Il token
 # deve essere esattamente ".env": .env.example resta leggibile.
@@ -93,6 +94,17 @@ def decide(mode: Mode, tool_name: str, args: dict[str, Any],
         protected = _touches_protected(command)
         if protected:
             return Decision.DENY, protected
+        # Superficie ristretta: validazione strutturale PRIMA dell'esecuzione.
+        check = validate_command(command, workspace,
+                                 resolve_in_workspace, _is_protected_path)
+        if not check.ok:
+            return Decision.DENY, check.reason
+        if check.outside_paths:
+            # Fuori workspace: approvazione esplicita del SINGOLO comando in
+            # ogni modo (yolo compreso); non sblocca nient'altro.
+            return Decision.ASK, ("comando con percorsi fuori dal workspace "
+                                  f"({', '.join(check.outside_paths)}): "
+                                  "approvi questo comando specifico?")
 
     if tool_name in ("write_file", "read_file"):
         path = str(args.get("path", ""))
