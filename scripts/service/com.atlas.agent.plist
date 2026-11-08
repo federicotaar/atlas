@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key><string>com.atlas.agent</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>__PYTHON__</string>
+        <string>__ATLAS_DIR__/main.py</string>
+        <string>--headless</string>
+    </array>
+    <key>WorkingDirectory</key><string>__ATLAS_DIR__</string>
+    <key>RunAtLoad</key><true/>
+    <key>KeepAlive</key><true/>
+    <key>StandardOutPath</key><string>__ATLAS_DIR__/logs/service.log</string>
+    <key>StandardErrorPath</key><string>__ATLAS_DIR__/logs/service.log</string>
+</dict>
+</plist>
