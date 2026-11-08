@@ -38,6 +38,7 @@ from .channels.config import channel_enabled, load_channels_config
 from .channels.media import MediaProcessor
 from .channels.pairing import PairingStore
 from .channels.telegram import TelegramChannel
+from .channels.whatsapp import WhatsAppChannel, normalize_number
 from .providers.base import AllProvidersFailed, ProviderError
 from .providers.registry import ConfigError, ProviderRegistry, load_dotenv
 
@@ -54,6 +55,8 @@ HELP_TEXT = """Comandi:
   /pairing challenge           genera un codice monouso per autorizzare Fred
   /pairing approve <n>         autorizza il mittente n (allowlist canali)
   /pairing reject <n>          scarta la richiesta n
+  /whatsapp                    stato del collegamento WhatsApp
+  /whatsapp pair [numero]      QR o codice per collegare il numero dell'agente
   /remember <testo>            salva una nota persistente (spec sez. 5)
   /forget <testo>              rimuove le note che contengono il testo
   /memories                    elenca le note salvate
@@ -103,27 +106,120 @@ def _describe_registry(registry: ProviderRegistry, active: str,
         out(f"  modelli disponibili su {active}: {', '.join(models)}")
 
 
+def _spawn_bridge(bridge_bin: str, addr: str, token: str, workspace: Path,
+                  allow_dms: bool, out):
+    """Avvia il sidecar Go wa-bridge come processo figlio (termina con la
+    CLI via atexit). Il token passa solo come argomento del processo figlio,
+    mai in config/log. Ritorna il Popen o None se non e' partito."""
+    import atexit
+    import subprocess
+    import time as _time
+    import urllib.request
+
+    repo_root = Path(__file__).resolve().parents[2]
+    binary = Path(bridge_bin)
+    if not binary.is_absolute():
+        binary = repo_root / binary
+    if not binary.exists():
+        out(f"bridge whatsapp non trovato: {binary} "
+            "(compilalo con `go build` in wa-bridge/)")
+        return None
+    db_path = workspace / "data" / "wa-session.db"
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    cmd = [str(binary), "-addr", addr, "-token", token, "-db", str(db_path)]
+    if allow_dms:
+        cmd.append("-allow-dms")
+    try:
+        proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL,
+                                stderr=subprocess.DEVNULL)
+    except OSError as exc:
+        out(f"avvio bridge whatsapp fallito: {exc}")
+        return None
+    atexit.register(proc.terminate)
+    deadline = _time.monotonic() + 10
+    while _time.monotonic() < deadline:
+        try:
+            req = urllib.request.Request(
+                f"http://{addr}/healthz", headers={"X-Bridge-Token": token})
+            with urllib.request.urlopen(req, timeout=2):
+                out(f"bridge whatsapp avviato ({addr})")
+                return proc
+        except Exception:
+            if proc.poll() is not None:
+                out("bridge whatsapp terminato subito dopo l'avvio")
+                return None
+            _time.sleep(0.2)
+    out(f"bridge whatsapp avviato ma /healthz non risponde ancora su {addr}: "
+        "il canale riprova da solo")
+    return proc
+
+
 def _maybe_start_channels(*, workspace: Path, registry: ProviderRegistry,
                           get_active, set_active, ctx, store, log, seal,
                           secrets, dotenv: dict, out, max_steps: int,
                           pairing: PairingStore):
-    """Avvia i canali abilitati in config/channels.yaml. Ritorna l'hub o None."""
+    """Avvia i canali abilitati in config/channels.yaml.
+    Ritorna (hub, channels): hub None se nessun canale e' partito."""
     config = load_channels_config(workspace)
-    if not channel_enabled(config, "telegram"):
-        return None
+    tg_on = channel_enabled(config, "telegram")
+    wa_on = channel_enabled(config, "whatsapp_unofficial")
+    if not tg_on and not wa_on:
+        return None, {}
     # ATTENZIONE: il dict di load_dotenv e' REDATTO ("(impostata)") - serve
     # solo per la diagnostica. I valori veri restano in os.environ.
-    token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
-    if not token:
-        out("telegram abilitato ma TELEGRAM_BOT_TOKEN mancante in .env: canale non avviato")
-        return None
-    raw_ids = os.environ.get("ALLOWED_TELEGRAM_IDS", "")
-    # Allowlist = .env + pairing approvati in locale con /pairing approve.
-    allowed = {"telegram": ({s.strip() for s in raw_ids.split(",") if s.strip()}
-                            | pairing.paired_ids("telegram"))}
-    if not allowed["telegram"]:
-        out("ALLOWED_TELEGRAM_IDS vuoto: il canale ignorera' TUTTI i mittenti "
-            "(richieste registrate in locale; approva con /pairing approve)")
+    allowed: dict[str, set[str]] = {}
+
+    tg_token = ""
+    if tg_on:
+        tg_token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+        if not tg_token:
+            out("telegram abilitato ma TELEGRAM_BOT_TOKEN mancante in .env: canale non avviato")
+            tg_on = False
+        else:
+            raw_ids = os.environ.get("ALLOWED_TELEGRAM_IDS", "")
+            # Allowlist = .env + pairing approvati in locale con /pairing approve.
+            allowed["telegram"] = (
+                {s.strip() for s in raw_ids.split(",") if s.strip()}
+                | (pairing.paired_ids("telegram") if pairing is not None else set()))
+            if not allowed["telegram"]:
+                out("ALLOWED_TELEGRAM_IDS vuoto: il canale ignorera' TUTTI i mittenti "
+                    "(richieste registrate in locale; approva con /pairing approve)")
+
+    wa_addr = ""
+    wa_token = ""
+    wa_poll = 2.0
+    if wa_on:
+        wa_cfg = config.get("channels", {}).get("whatsapp_unofficial", {})
+        wa_addr = str(wa_cfg.get("bridge_addr", "127.0.0.1:18741"))
+        wa_poll = float(wa_cfg.get("poll_interval", 2))
+        wa_token = os.environ.get("WA_BRIDGE_TOKEN", "")
+        bridge_bin = str(wa_cfg.get("bridge_bin", "") or "")
+        if bridge_bin:
+            if not wa_token:
+                # Token effimero generato a ogni avvio: mai in config ne' in log.
+                from secrets import token_hex
+                wa_token = token_hex(16)
+            if _spawn_bridge(bridge_bin, wa_addr, wa_token, workspace,
+                             allow_dms=bool(wa_cfg.get("allow_dms", True)),
+                             out=out) is None:
+                wa_on = False
+        if wa_on and not wa_token:
+            out("whatsapp_unofficial abilitato ma WA_BRIDGE_TOKEN mancante in .env "
+                "(o bridge_bin non configurato): canale non avviato")
+            wa_on = False
+        if wa_on:
+            raw_nums = os.environ.get("ALLOWED_WHATSAPP_NUMBERS", "")
+            allowed["whatsapp"] = (
+                {normalize_number(n) for n in raw_nums.split(",") if n.strip()}
+                | (pairing.paired_ids("whatsapp") if pairing is not None else set()))
+            if not allowed["whatsapp"]:
+                out("ALLOWED_WHATSAPP_NUMBERS vuoto: il canale ignorera' TUTTI i "
+                    "mittenti (richieste registrate in locale; approva con "
+                    "/pairing approve)")
+
+    if not tg_on and not wa_on:
+        return None, {}
+
     # Stage 6: vocali (trascrizione Groq), foto (descrizione Gemini) e file.
     # Le chiavi arrivano da .env/ambiente come quelle dei provider; senza
     # chiave il file resta salvato e la nota segnala il servizio mancante.
@@ -137,17 +233,28 @@ def _maybe_start_channels(*, workspace: Path, registry: ProviderRegistry,
         ctx=ctx, store=store, log=log, seal=seal, secrets=secrets,
         channels_log=ChannelLog(workspace / "logs" / "channels.log", secrets),
         allowed=allowed, pairing=pairing, media=media, max_steps=max_steps)
-    tg_cfg = config.get("channels", {}).get("telegram", {})
-    channel = TelegramChannel(
-        token, drop_pending_updates=bool(tg_cfg.get("drop_pending_updates", True)),
-        # Gate del download: `allowed` e' lo stesso dict dell'hub, quindi un
-        # /pairing approve live vale subito anche per gli allegati.
-        allow_check=lambda sender: ChannelHub.is_allowed(sender, "telegram", allowed))
-    channel.on_message(
-        lambda m: hub.handle(m, lambda text: channel.send(m.sender, text)))
-    channel.start()
-    out("canale telegram avviato (long polling)")
-    return hub
+    channels: dict[str, object] = {}
+    if tg_on:
+        tg_cfg = config.get("channels", {}).get("telegram", {})
+        tg_channel = TelegramChannel(
+            tg_token,
+            drop_pending_updates=bool(tg_cfg.get("drop_pending_updates", True)),
+            # Gate del download: `allowed` e' lo stesso dict dell'hub, quindi
+            # un /pairing approve live vale subito anche per gli allegati.
+            allow_check=lambda sender: ChannelHub.is_allowed(sender, "telegram", allowed))
+        tg_channel.on_message(
+            lambda m: hub.handle(m, lambda text: tg_channel.send(m.sender, text)))
+        tg_channel.start()
+        channels["telegram"] = tg_channel
+        out("canale telegram avviato (long polling)")
+    if wa_on:
+        wa_channel = WhatsAppChannel(wa_addr, wa_token, poll_interval=wa_poll)
+        wa_channel.on_message(
+            lambda m: hub.handle(m, lambda text: wa_channel.send(m.sender, text)))
+        wa_channel.start()
+        channels["whatsapp"] = wa_channel
+        out(f"canale whatsapp avviato (bridge {wa_addr})")
+    return hub, channels
 
 
 def _handle_pairing(line: str, pairing: PairingStore, hub, out) -> None:
@@ -198,6 +305,76 @@ def _handle_pairing(line: str, pairing: PairingStore, hub, out) -> None:
     out("Uso: /pairing [list] | /pairing approve <n> | /pairing reject <n>")
 
 
+def _handle_whatsapp(line: str, wa_channel, out) -> None:
+    """/whatsapp [status] | /whatsapp pair [numero] - collegamento
+    dell'account WhatsApp dell'agente. SOLO dalla CLI locale."""
+    if wa_channel is None:
+        out("whatsapp non attivo: abilitalo in config/channels.yaml "
+            "(whatsapp_unofficial).")
+        return
+    parts = line.split()
+    sub = parts[1] if len(parts) > 1 else "status"
+    if sub == "status":
+        try:
+            health = wa_channel.health()
+        except Exception as exc:
+            out(f"bridge non raggiungibile: {exc}")
+            return
+        if health.get("linked"):
+            out(f"WhatsApp collegato: {health.get('pushname', '?')} "
+                f"({health.get('jid', '?')})")
+        else:
+            out("WhatsApp NON collegato: /whatsapp pair per collegare "
+                "il numero dell'agente.")
+        return
+    if sub == "pair":
+        phone = parts[2] if len(parts) > 2 else ""
+        if phone:
+            # Codice numerico: si digita sul telefono del NUMERO DELL'AGENTE
+            # (WhatsApp > Dispositivi collegati > Collega con numero).
+            try:
+                code = wa_channel.pair_code(phone).get("code", "")
+            except Exception as exc:
+                out(f"codice non disponibile: {exc}")
+                return
+            out(f"Codice di collegamento: {code}")
+            out("Sul telefono del numero dell'agente: WhatsApp > Dispositivi "
+                "collegati > Collega dispositivo > Collega invece con numero "
+                "di telefono.")
+            return
+        try:
+            wa_channel.pair()
+        except Exception as exc:
+            out(f"pairing non avviato: {exc}")
+            return
+        out("In attesa del QR (ruota ogni ~20s, validita' ~2 min)...")
+        import time as _time
+        last = ""
+        deadline = _time.monotonic() + 180
+        while _time.monotonic() < deadline:
+            try:
+                qr = wa_channel.qr_state()
+            except Exception as exc:
+                out(f"stato QR non leggibile: {exc}")
+                return
+            if qr.get("state") == "paired":
+                out("WhatsApp collegato.")
+                return
+            if qr.get("state") == "expired":
+                out("QR scaduto: riprova con /whatsapp pair.")
+                return
+            code = qr.get("qr") or ""
+            if code and code != last:
+                last = code
+                out(f"QR (payload testuale): {code}")
+                out("L'app desktop lo mostra come immagine; da CLI serve un "
+                    "generatore QR esterno oppure /whatsapp pair <numero>.")
+            _time.sleep(2)
+        out("Timeout pairing.")
+        return
+    out("Uso: /whatsapp [status] | /whatsapp pair [numero]")
+
+
 def run_cli(registry: ProviderRegistry, *, active: str | None = None,
             once: str | None = None, stream: bool = True,
             workspace: Path | None = None,
@@ -243,12 +420,14 @@ def run_cli(registry: ProviderRegistry, *, active: str | None = None,
     # senza hub attivo vale dal prossimo avvio del canale.
     pairing = PairingStore(workspace / "data" / "pairing.json")
     hub = None
+    wa_channel = None
     if dotenv is not None:
-        hub = _maybe_start_channels(
+        hub, channels = _maybe_start_channels(
             workspace=workspace, registry=registry,
             get_active=lambda: active, set_active=set_active,
             ctx=ctx, store=store, log=log, seal=seal, secrets=secrets,
             dotenv=dotenv, out=out, max_steps=max_steps, pairing=pairing)
+        wa_channel = channels.get("whatsapp")
 
     # Conferme di permesso: il task gira in un thread, ma solo il REPL legge
     # stdin. Quando il worker chiede, la prossima riga non-comando dell'utente
@@ -389,6 +568,11 @@ def run_cli(registry: ProviderRegistry, *, active: str | None = None,
             # Solo CLI locale: la chat non puo' approvare pairing (altrimenti
             # uno sconosciuto potrebbe autorizzarsi da solo).
             _handle_pairing(line, pairing, hub, out)
+            continue
+        if line.startswith("/whatsapp"):
+            # Solo CLI locale: il collegamento dell'account WhatsApp (QR o
+            # codice) e' un'operazione del proprietario, mai dalla chat.
+            _handle_whatsapp(line, wa_channel, out)
             continue
         if line == "/help":
             out(HELP_TEXT)
