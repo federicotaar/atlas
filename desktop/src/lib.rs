@@ -88,8 +88,27 @@ pub fn run() {
                 .sidecar("atlas-backend")
                 .expect("sidecar atlas-backend non trovato nel bundle")
                 .env("ATLAS_DESKTOP_DATA_DIR", &data_dir);
-            let (_rx, child) = sidecar.spawn().expect("avvio sidecar fallito");
+            let (mut rx, child) = sidecar.spawn().expect("avvio sidecar fallito");
             app.manage(Sidecar(Mutex::new(Some(child))));
+            // Drena stdout/stderr del sidecar: errori di avvio visibili, mai morte silenziosa.
+            std::thread::spawn(move || {
+                while let Some(event) = rx.blocking_recv() {
+                    use tauri_plugin_shell::process::CommandEvent;
+                    match event {
+                        CommandEvent::Stdout(line) => {
+                            eprintln!("[sidecar] {}", String::from_utf8_lossy(&line));
+                        }
+                        CommandEvent::Stderr(line) => {
+                            eprintln!("[sidecar:err] {}", String::from_utf8_lossy(&line));
+                        }
+                        CommandEvent::Terminated(status) => {
+                            eprintln!("[sidecar] terminato: {:?}", status);
+                            break;
+                        }
+                        _ => {}
+                    }
+                }
+            });
 
             let handle = app.handle().clone();
             std::thread::spawn(move || {
