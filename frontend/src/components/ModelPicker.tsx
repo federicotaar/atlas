@@ -42,8 +42,13 @@ export default function ModelPicker({ onClose, onSaved }: {
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Errore di CARICAMENTO (separato da quello di salvataggio): se le
+  // impostazioni non arrivano, il form non deve apparire mezzo vuoto -
+  // i campi chiave/consenso dipendono dai metadati del provider caricati.
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  useEffect(() => {
+  function load() {
+    setLoadError(null);
     api.getModelSettings().then((s) => {
       setLoaded(s);
       const b = backendToUi(s.provider);
@@ -53,8 +58,10 @@ export default function ModelPicker({ onClose, onSaved }: {
       setBaseUrl(s.base_url);
       setConsent(s.consent_cloud);
       setConsentFor(s.consent_cloud ? (s.provider === "custom" ? `custom:${s.base_url}` : s.provider) : null);
-    }).catch((e) => setError(e instanceof Error ? e.message : "Errore"));
-  }, []);
+    }).catch((e) => setLoadError(e instanceof Error ? e.message : "Errore"));
+  }
+
+  useEffect(load, []);
 
   const backend = uiToBackend(ui, ollamaMode);
   // Destinazione effettiva dei dati: per gli endpoint personalizzati e' la
@@ -130,7 +137,37 @@ export default function ModelPicker({ onClose, onSaved }: {
     }
   }
 
-  const canSave = !busy && !!meta && (meta.kind !== "cloud" || consent);
+  // Requisiti per salvare, dichiarati all'utente PRIMA del click: il tasto
+  // disabilitato senza spiegazione si legge come "non funziona".
+  const keyMissing = !!meta && meta.needs_key && !hasKey && apiKey.trim() === "";
+  const baseUrlMissing = !!meta && meta.needs_base_url && baseUrl.trim() === "";
+  const consentMissing = !!meta && meta.kind === "cloud" && !consent;
+  const canSave = !busy && !!meta && !keyMissing && !baseUrlMissing && !consentMissing;
+
+  if (!loaded) {
+    return (
+      <div className="mp-overlay" onClick={onClose}>
+        <div className="mp-card" onClick={(e) => e.stopPropagation()}>
+          <div className="mp-title">Modello</div>
+          {loadError ? (
+            <>
+              <div className="err">{loadError}</div>
+              <p className="mp-note">
+                Le impostazioni del modello non si sono caricate. Se il problema
+                continua dopo Riprova, esci e accedi di nuovo.
+              </p>
+              <div className="mp-actions">
+                <button type="button" className="ghost" onClick={onClose}>Annulla</button>
+                <button type="button" className="primary" onClick={load}>Riprova</button>
+              </div>
+            </>
+          ) : (
+            <p className="mp-note">Caricamento…</p>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="mp-overlay" onClick={onClose}>
@@ -204,6 +241,17 @@ export default function ModelPicker({ onClose, onSaved }: {
         )}
 
         {error && <div className="err">{error}</div>}
+
+        {meta && !canSave && !busy && (
+          <div className="mp-note" role="note">
+            Per salvare: {""}
+            {[
+              keyMissing ? `inserisci la tua API key ${meta.label} (resta cifrata su questo PC)` : null,
+              baseUrlMissing ? "inserisci la base URL del servizio" : null,
+              consentMissing ? "spunta la casella del consenso qui sopra" : null,
+            ].filter(Boolean).join("; ")}.
+          </div>
+        )}
 
         <div className="mp-actions">
           <button type="button" className="ghost" onClick={onClose}>Annulla</button>
