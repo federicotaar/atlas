@@ -52,6 +52,7 @@ type bridge struct {
 	sentByUs map[string]bool // ID dei messaggi inviati da QUESTO bridge (anti-eco)
 	bootID   string          // casuale a ogni avvio: il backend azzera l'offset
 	dbPath   string          // per il file .seen.json
+	allowDMs bool            // -allow-dms: cattura anche i DM 1:1, non solo la self-chat
 }
 
 type inboundEvent struct {
@@ -59,6 +60,7 @@ type inboundEvent struct {
 	ID     string `json:"id"`
 	Text   string `json:"text"`
 	Ts     int64  `json:"ts"`
+	From   string `json:"from"`    // numero del mittente (self-chat = account collegato)
 	FromMe bool   `json:"from_me"` // sempre false dopo il filtro; il backend ricontrolla
 }
 
@@ -84,16 +86,25 @@ func (b *bridge) handleEvent(evt interface{}) {
 		if ours {
 			return
 		}
-		// Solo self-chat: il mittente e il chat sono l'account collegato.
-		if v.Info.Chat != v.Info.Sender {
-			return
-		}
 		if b.client == nil || b.client.Store.ID == nil {
 			return
 		}
 		own := *b.client.Store.ID
-		if v.Info.Chat.User != own.User {
-			return // messaggi di/con altri: mai catturare
+		isSelfChat := v.Info.Chat == v.Info.Sender && v.Info.Chat.User == own.User
+		if !isSelfChat {
+			// Default v2.x: solo self-chat, tutto il resto mai catturato.
+			// Con -allow-dms anche i DM 1:1 (chat utente, mai gruppi/canali)
+			// diventano input: l'allowlist dei numeri resta CENTRALE nel
+			// backend ATLAS, che decide chi riceve risposta.
+			if !b.allowDMs {
+				return
+			}
+			if v.Info.Chat.Server != types.DefaultUserServer {
+				return // gruppi, canali, broadcast: mai
+			}
+			if v.Info.IsFromMe {
+				return // l'account del ponte che scrive dal telefono non e' input
+			}
 		}
 		text := v.Message.GetConversation()
 		if ext := v.Message.GetExtendedTextMessage(); ext != nil {
@@ -113,7 +124,7 @@ func (b *bridge) handleEvent(evt interface{}) {
 			b.seenIDs = map[string]bool{v.Info.ID: true}
 		}
 		b.saveSeenLocked()
-		b.events = append(b.events, inboundEvent{Seq: b.nextSeq, ID: v.Info.ID, Text: text, Ts: v.Info.Timestamp.Unix(), FromMe: v.Info.IsFromMe})
+		b.events = append(b.events, inboundEvent{Seq: b.nextSeq, ID: v.Info.ID, Text: text, Ts: v.Info.Timestamp.Unix(), From: v.Info.Sender.User, FromMe: v.Info.IsFromMe})
 		b.nextSeq++
 		if len(b.events) > 500 {
 			b.events = append([]inboundEvent{}, b.events[len(b.events)-500:]...)
@@ -199,6 +210,7 @@ func main() {
 	addr := flag.String("addr", "127.0.0.1:18741", "bind loopback")
 	dbPath := flag.String("db", "wa-session.db", "sqlite sessione whatsmeow")
 	token := flag.String("token", "", "token condiviso richiesto in X-Bridge-Token")
+	allowDMs := flag.Bool("allow-dms", false, "cattura anche i DM 1:1 oltre alla self-chat (l'allowlist resta nel backend)")
 	flag.Parse()
 	if *token == "" {
 		fmt.Fprintln(os.Stderr, "manca -token")
@@ -213,7 +225,7 @@ func main() {
 	}
 	b := &bridge{qrState: "idle", nextSeq: 1, seenIDs: map[string]bool{},
 		sentByUs: map[string]bool{}, bootID: fmt.Sprintf("%d", time.Now().UnixNano()),
-		dbPath: *dbPath}
+		dbPath: *dbPath, allowDMs: *allowDMs}
 	b.loadSeen()
 	b.client = whatsmeow.NewClient(container.NewDevice(), waLog.Noop)
 	b.client.AddEventHandler(b.handleEvent)
@@ -260,9 +272,43 @@ func main() {
 		defer b.mu.Unlock()
 		writeJSON(w, http.StatusOK, map[string]string{"state": b.qrState, "qr": b.qr})
 	}))
+	// Pairing con codice numerico invece del QR: il codice va digitato sul
+	// telefono del NUMERO DELL'AGENTE (Dispositivi collegati > Collega con
+	// numero di telefono). Utile quando il bridge non gira sullo stesso
+	// schermo di chi scansiona.
+	mux.HandleFunc("POST /pair-code", auth(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Phone string `json:"phone"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || strings.TrimSpace(body.Phone) == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "numero mancante"})
+			return
+		}
+		if b.client.IsLoggedIn() {
+			writeJSON(w, http.StatusConflict, map[string]string{"error": "gia' collegato"})
+			return
+		}
+		if !b.client.IsConnected() {
+			if err := b.client.Connect(); err != nil {
+				writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+				return
+			}
+		}
+		code, err := b.client.PairPhone(context.Background(), strings.TrimSpace(body.Phone), true,
+			whatsmeow.PairClientChrome, "Chrome (Linux)")
+		if err != nil {
+			writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+			return
+		}
+		b.mu.Lock()
+		b.qrState = "qr" // in attesa di conferma dal telefono
+		b.mu.Unlock()
+		writeJSON(w, http.StatusOK, map[string]string{"code": code})
+	}))
 	mux.HandleFunc("POST /send", auth(func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
 			Text string `json:"text"`
+			To   string `json:"to"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || strings.TrimSpace(body.Text) == "" {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "testo mancante"})
@@ -272,7 +318,12 @@ func main() {
 			writeJSON(w, http.StatusConflict, map[string]string{"error": "non collegato"})
 			return
 		}
-		self := types.NewJID(b.client.Store.ID.User, types.DefaultUserServer)
+		// Default: self-chat. "to" (solo numero, con o senza +) risponde in DM:
+		// il backend lo usa per rispondere al mittente del messaggio in ingresso.
+		target := types.NewJID(b.client.Store.ID.User, types.DefaultUserServer)
+		if to := strings.TrimSpace(strings.TrimPrefix(body.To, "+")); to != "" {
+			target = types.NewJID(to, types.DefaultUserServer)
+		}
 		msg := &waE2E.Message{Conversation: proto.String(body.Text)}
 		// ID preassegnato e registrato PRIMA dell'invio: se l'eco del nostro
 		// messaggio arriva prima della risposta di rete, e' gia' filtrato.
@@ -283,7 +334,7 @@ func main() {
 			b.sentByUs = map[string]bool{string(msgID): true}
 		}
 		b.mu.Unlock()
-		if _, err := b.client.SendMessage(context.Background(), self, msg,
+		if _, err := b.client.SendMessage(context.Background(), target, msg,
 			whatsmeow.SendRequestExtra{ID: msgID}); err != nil {
 			writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
 			return
