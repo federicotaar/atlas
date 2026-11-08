@@ -139,7 +139,7 @@ export default function Auth({ onLogin }: { onLogin: () => void }) {
             <>
               <p className="auth-sub">{fatal}</p>
               <button
-                className="auth-btn"
+                className="primary"
                 onClick={() => {
                   setFatal(null);
                   initApiBase().catch(() => {});

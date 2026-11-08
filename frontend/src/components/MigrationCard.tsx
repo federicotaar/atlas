@@ -47,7 +47,7 @@ export default function MigrationCard({ onRelogin }: { onRelogin: () => void }) 
             Se usavi ATLAS con Docker (versione 2.0.x), puoi importare memorie,
             fonti e impostazioni. Il vecchio database non viene modificato.
           </p>
-          <button onClick={probe}>Verifica dati precedenti</button>
+          <button className="primary" onClick={probe}>Verifica dati precedenti</button>
         </>
       )}
       {st.kind === "busy" && <p className="muted">Verifica in corso…</p>}
@@ -78,7 +78,7 @@ export default function MigrationCard({ onRelogin }: { onRelogin: () => void }) 
             L&apos;import SOSTITUISCE il profilo attuale (provvisorio): al
             termine accederai con le credenziali originali.
           </p>
-          <button onClick={doImport}>Importa e sostituisci</button>
+          <button className="primary" onClick={doImport}>Importa e sostituisci</button>
           <button className="ghost" onClick={() => setSt({ kind: "idle" })}>
             Annulla
           </button>
@@ -94,7 +94,7 @@ export default function MigrationCard({ onRelogin }: { onRelogin: () => void }) 
                 decifrabili su questa installazione: reinseriscile nelle
                 impostazioni dopo l'accesso.`}
           </p>
-          <button onClick={onRelogin}>Vai all&apos;accesso</button>
+          <button className="primary" onClick={onRelogin}>Vai all&apos;accesso</button>
         </>
       )}
       {st.kind === "error" && (
