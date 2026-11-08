@@ -63,7 +63,8 @@ padding:0 16px;font:inherit;cursor:pointer}
 button:hover{background:#30363d}
 #stop{color:#f85149}
 </style></head><body>
-<header>ATLAS <span id="st">pronto</span>
+<header><button id="back" title="Torna alla dashboard" style="display:none">&laquo; indietro</button>
+ATLAS <span id="st">pronto</span>
 <button id="gear" title="Provider e chiavi" style="float:right">&#9881;</button>
 </header>
 <div id="cfg" style="display:none;padding:12px 16px;border-bottom:1px solid #30363d">
@@ -82,6 +83,13 @@ button:hover{background:#30363d}
 <button id="send">invia</button>
 </div>
 <script>
+/* Ritorno alla dashboard quando la pagina e' aperta da un'altra schermata
+   (app desktop: il link "Apri l'agente" naviga la stessa finestra). */
+if (document.referrer) {
+  const b = document.getElementById('back');
+  b.style.display = 'inline-block';
+  b.onclick = () => history.back();
+}
 const log = document.getElementById('log'), inp = document.getElementById('in'),
       st = document.getElementById('st');
 let lastSeq = 0, polling = false;
