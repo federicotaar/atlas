@@ -125,6 +125,8 @@ jobs:
           npm run build --prefix frontend
       - name: Build sidecar backend (PyInstaller onefile)
         run: bash backend/scripts/build_sidecar.sh
+      - name: Genera icone Tauri dal logo
+        run: npx --yes @tauri-apps/cli@2 icon desktop/app-icon.png -o desktop/icons
       - name: Build app desktop (Tauri)
         working-directory: desktop
         run: npx --yes @tauri-apps/cli@2 build --no-bundle
