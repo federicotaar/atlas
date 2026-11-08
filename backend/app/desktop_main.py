@@ -174,6 +174,15 @@ def _mount_agent(asgi_app, data_dir: Path):
                     registry.set_enabled(n, True)
                 except Exception:
                     pass  # provider rimosso dalla config: ignora
+        # Modelli custom salvati dalla pagina (ATLAS_MODELS nel .env):
+        # "nome=modello,nome2=modello2".
+        for pair in os.environ.get("ATLAS_MODELS", "").split(","):
+            if "=" in pair:
+                n, m = pair.split("=", 1)
+                try:
+                    registry.set_model(n.strip(), m.strip())
+                except Exception:
+                    pass  # provider rimosso dalla config: ignora
         saved = os.environ.get("ATLAS_PROVIDER", "")
         if saved:
             try:
