@@ -26,12 +26,16 @@ from pathlib import Path
 from typing import Callable
 
 from .agent.actionlog import ActionLog
+from .agent.commands import parse_model_target
 from .agent.loop import run_agent_loop
 from .agent.memory import MemoryStore, memories_context
 from .agent.permissions import Mode, parse_mode
 from .agent.safety import SecretFilter
 from .agent.seal import SealGuard
 from .agent.tools import ToolContext
+from .channels.base import ChannelHub, ChannelLog
+from .channels.config import channel_enabled, load_channels_config
+from .channels.telegram import TelegramChannel
 from .providers.base import AllProvidersFailed, ProviderError
 from .providers.registry import ConfigError, ProviderRegistry, load_dotenv
 
@@ -66,21 +70,6 @@ def find_config(start: Path | None = None) -> Path:
     raise ConfigError(f"non trovo {DEFAULT_CONFIG} (esegui dal root del repo o passa --config)")
 
 
-def parse_model_target(arg: str) -> tuple[str, str | None]:
-    """'ollama_local:llama3.2:3b' -> ('ollama_local', 'llama3.2:3b');
-    'ollama_local' -> ('ollama_local', None). Il primo ':' separa il provider:
-    i tag dei modelli Ollama contengono a loro volta ':'."""
-    arg = arg.strip()
-    if not arg:
-        raise ConfigError("uso: /model use <nome[:modello]>")
-    if ":" in arg:
-        name, model = arg.split(":", 1)
-        if not name.strip() or not model.strip():
-            raise ConfigError(f"destinazione non valida: {arg!r}")
-        return name.strip(), model.strip()
-    return arg, None
-
-
 def _first_usable(registry: ProviderRegistry) -> str:
     for name in registry.names():
         if registry.usable(name)[0]:
@@ -108,12 +97,43 @@ def _describe_registry(registry: ProviderRegistry, active: str,
         out(f"  modelli disponibili su {active}: {', '.join(models)}")
 
 
+def _maybe_start_channels(*, workspace: Path, registry: ProviderRegistry,
+                          get_active, set_active, ctx, store, log, seal,
+                          secrets, dotenv: dict, out, max_steps: int):
+    """Avvia i canali abilitati in config/channels.yaml. Ritorna l'hub o None."""
+    config = load_channels_config(workspace)
+    if not channel_enabled(config, "telegram"):
+        return None
+    token = dotenv.get("TELEGRAM_BOT_TOKEN") or os.environ.get("TELEGRAM_BOT_TOKEN", "")
+    if not token:
+        out("telegram abilitato ma TELEGRAM_BOT_TOKEN mancante in .env: canale non avviato")
+        return None
+    raw_ids = (dotenv.get("ALLOWED_TELEGRAM_IDS")
+               or os.environ.get("ALLOWED_TELEGRAM_IDS", ""))
+    allowed = {"telegram": {s.strip() for s in raw_ids.split(",") if s.strip()}}
+    if not allowed["telegram"]:
+        out("ALLOWED_TELEGRAM_IDS vuoto: il canale ignorera' TUTTI i mittenti")
+    hub = ChannelHub(
+        registry=registry, active_getter=get_active, set_active=set_active,
+        describe_registry=_describe_registry,
+        ctx=ctx, store=store, log=log, seal=seal, secrets=secrets,
+        channels_log=ChannelLog(workspace / "logs" / "channels.log", secrets),
+        allowed=allowed, max_steps=max_steps)
+    channel = TelegramChannel(token)
+    channel.on_message(
+        lambda m: hub.handle(m, lambda text: channel.send(m.sender, text)))
+    channel.start()
+    out("canale telegram avviato (long polling)")
+    return hub
+
+
 def run_cli(registry: ProviderRegistry, *, active: str | None = None,
             once: str | None = None, stream: bool = True,
             workspace: Path | None = None,
             mode: Mode = Mode.ASK,
             max_steps: int = 10,
             secrets: SecretFilter | None = None,
+            dotenv: dict | None = None,
             input_fn: Callable[[str], str] = input,
             out: Callable[[str], None] = print,
             write: Callable[[str], None] | None = None) -> int:
@@ -141,6 +161,19 @@ def run_cli(registry: ProviderRegistry, *, active: str | None = None,
     # la CLI e' ("locale", "cli") - piu' note /remember iniettate a richiesta.
     store = MemoryStore(workspace / "memory.db")
     history: list[dict] = store.history("locale", "cli")
+
+    def set_active(name: str) -> None:
+        nonlocal active
+        active = name
+
+    # Canali chat (spec sez. 6): partono solo se abilitati in
+    # config/channels.yaml; token e allowlist arrivano da .env, mai da config.
+    if dotenv is not None:
+        _maybe_start_channels(
+            workspace=workspace, registry=registry,
+            get_active=lambda: active, set_active=set_active,
+            ctx=ctx, store=store, log=log, seal=seal, secrets=secrets,
+            dotenv=dotenv, out=out, max_steps=max_steps)
 
     # Conferme di permesso: il task gira in un thread, ma solo il REPL legge
     # stdin. Quando il worker chiede, la prossima riga non-comando dell'utente
@@ -399,7 +432,7 @@ def main(argv: list[str] | None = None) -> None:
     code = run_cli(registry, active=args.provider, once=args.once,
                    stream=not args.no_stream, workspace=workspace,
                    mode=parse_mode(args.mode), max_steps=args.max_steps,
-                   secrets=secrets)
+                   secrets=secrets, dotenv=dotenv)
     raise SystemExit(code)
 
 
