@@ -112,10 +112,106 @@ def main() -> None:
     # Import statico: PyInstaller non vede import per stringa ("app.main:app").
     from app.main import app as asgi_app
 
+    # Agente ATLAS (stage 1-14) montato sullo STESSO server loopback sotto
+    # /agent: niente porte nuove, niente CORS. Workspace persistente nella
+    # data dir; una sola istanza per workspace (lock CLI/web/desktop).
+    agent_stack = _mount_agent(asgi_app, data_dir)
+
+    @asgi_app.on_event("shutdown")
+    def _agent_shutdown() -> None:
+        if agent_stack is not None:
+            agent_stack.shutdown()
+
     # Porta scelta dal launcher Tauri (8000 se libera, altrimenti una porta
     # di riserva sua): mai contendere 8000 a un server che non e' nostro.
     port = int(os.environ.get("ATLAS_PORT", "8000"))
     uvicorn.run(asgi_app, host="127.0.0.1", port=port, log_level="warning")
+
+
+def _mount_agent(asgi_app, data_dir: Path):
+    """Monta la web UI dell'agente sotto /agent; None se non possibile.
+
+    Fail-closed senza drammi: se lo stack agente non puo' partire (lock
+    gia' preso da CLI/web UI, config mancante) la dashboard resta usabile
+    e /agent mostra una pagina che spiega il motivo."""
+    from fastapi.responses import HTMLResponse
+
+    def mount_notice(title: str, detail: str) -> None:
+        from fastapi import FastAPI
+
+        notice = FastAPI(title="atlas-agent-unavailable")
+
+        @notice.get("/", response_class=HTMLResponse)
+        async def _page():
+            return (f"<html><body style='background:#0d1117;color:#e6edf3;"
+                    f"font-family:system-ui;padding:40px'>"
+                    f"<h2>{title}</h2><p>{detail}</p></body></html>")
+
+        asgi_app.mount("/agent", notice)
+
+    workspace = data_dir / "agent"
+    workspace.mkdir(parents=True, exist_ok=True)
+    try:
+        from .agent.permissions import Mode
+        from .agent.safety import SecretFilter
+        from .providers.registry import ProviderRegistry, load_dotenv
+        from .webui import AgentAlreadyRunning, build_webui_stack
+
+        dotenv = load_dotenv(workspace / ".env")  # provisioning via app
+        config_path = _agent_config(workspace)
+        registry = ProviderRegistry.from_file(config_path)
+        # Se nessun provider e' usabile (installazione pulita, nessuna
+        # chiave): lo stack parte comunque - il pannello di configurazione
+        # nella pagina permette di aggiungere la chiave e attivare il
+        # provider senza toccare file a mano.
+        active = _first_usable(registry) or registry._order[0]  # noqa: SLF001
+        # Il filtro segreti copre .env e le variabili che suonano chiavi.
+        secret_values = list(dotenv.values()) + [
+            v for k, v in os.environ.items()
+            if any(mark in k.upper() for mark in ("API_KEY", "TOKEN", "SECRET"))]
+        stack = build_webui_stack(
+            registry, active=active, workspace=workspace,
+            mode=Mode.ASK, max_steps=10,
+            secrets=SecretFilter(secret_values), out=lambda m: print(m))
+    except AgentAlreadyRunning:
+        mount_notice("Agente gia' attivo",
+                     "L'agente ATLAS su questo workspace e' gia' in esecuzione "
+                     "(CLI o web UI). Chiudi l'altra istanza per usarlo qui.")
+        return None
+    except Exception as exc:  # noqa: BLE001 - il backend v2 deve comunque partire
+        print(f"agente desktop non montato: {exc}")
+        mount_notice("Agente non disponibile",
+                     f"Avvio dello stack agente fallito: "
+                     f"{type(exc).__name__}. La dashboard resta usabile.")
+        return None
+    asgi_app.mount("/agent", stack.app)
+    return stack
+
+
+def _agent_config(workspace: Path) -> Path:
+    """providers.yaml per l'agente desktop: env, bundle PyInstaller, root
+    del repo in dev."""
+    env_path = os.environ.get("ATLAS_AGENT_CONFIG")
+    if env_path and Path(env_path).exists():
+        return Path(env_path)
+    candidates = []
+    meipass = getattr(sys, "_MEIPASS", None)
+    if meipass:
+        candidates.append(Path(meipass) / "config" / "providers.yaml")
+    candidates.append(Path(__file__).resolve().parents[2] / "config"
+                      / "providers.yaml")
+    for cand in candidates:
+        if cand.exists():
+            return cand
+    raise FileNotFoundError("config/providers.yaml non trovato")
+
+
+def _first_usable(registry) -> str | None:
+    for name in registry._order:  # noqa: SLF001 - selezione iniziale
+        usable, _reason = registry.usable(name)
+        if usable:
+            return name
+    return None
 
 
 if __name__ == "__main__":
