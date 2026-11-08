@@ -12,18 +12,29 @@ Modello (decisione di sicurezza):
 - si autorizza l'ID numerico stabile di Telegram (l'username e' mutabile e
   vale solo come aiuto visivo per riconoscersi);
 - le richieste scadono (default 24h) e sono deduplicate per (canale, id).
+- AUTORIZZAZIONE FORTE: nome/username/primo-arrivato NON provano l'identita'.
+  Il percorso preferito e' la challenge monouso (/pairing challenge): un
+  codice generato in locale, condiviso con Fred solo sul suo canale
+  autenticato, che lui incolla al bot. Chi presenta il codice dimostra il
+  possesso del canale fidato e viene abbinato; il codice e' monouso e scade
+  (default 30 min). L'approvazione manuale /pairing approve resta, ma solo
+  dopo aver confermato il candidato con Fred sul canale autenticato.
 
-Stato in data/pairing.json: {"pending": [...], "paired": {canale: [id]}}.
+Stato in data/pairing.json: {"pending": [...], "paired": {canale: [id]},
+"challenge": {"code": ..., "ts": ...}}.
 """
 from __future__ import annotations
 
 import json
+import secrets
 import threading
 import time
 from pathlib import Path
 
 PENDING_TTL = 24 * 3600
 MAX_PENDING = 50
+CHALLENGE_TTL = 30 * 60
+_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # niente 0/O/1/I ambigui
 
 
 class PairingStore:
@@ -103,6 +114,45 @@ class PairingStore:
             self._save(data)
             return entry
 
+    def approve_direct(self, channel: str, sender: str,
+                       display: str = "") -> None:
+        """Abbinamento senza richiesta in sospeso (challenge monouso)."""
+        with self._lock:
+            data = self._load()
+            data["pending"] = [p for p in data["pending"]
+                               if not (p["channel"] == channel and p["sender"] == sender)]
+            ids = data["paired"].setdefault(channel, [])
+            if sender not in ids:
+                ids.append(sender)
+            self._save(data)
+
     def paired_ids(self, channel: str) -> set[str]:
         with self._lock:
             return set(self._load()["paired"].get(channel, []))
+
+    # --- challenge monouso ----------------------------------------------------
+
+    def create_challenge(self, ttl: float = CHALLENGE_TTL) -> str:
+        """Genera un codice monouso (sostituisce il precedente). Da condividere
+        solo sul canale autenticato di Fred; mai nei log."""
+        code = "ATLAS-" + "".join(secrets.choice(_ALPHABET) for _ in range(8))
+        with self._lock:
+            data = self._load()
+            data["challenge"] = {"code": code, "ts": time.time(), "ttl": ttl}
+            self._save(data)
+        return code
+
+    def consume_challenge(self, text: str) -> bool:
+        """True se `text` e' la challenge attiva: la invalida (monouso)."""
+        with self._lock:
+            data = self._load()
+            ch = data.get("challenge")
+            if not ch:
+                return False
+            if time.time() - ch.get("ts", 0) > ch.get("ttl", CHALLENGE_TTL):
+                return False
+            if not secrets.compare_digest(text, ch.get("code", "")):
+                return False
+            data.pop("challenge")
+            self._save(data)
+            return True
