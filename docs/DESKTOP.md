@@ -39,11 +39,23 @@ avvio. Al login l'app mostra un banner:
 - l'import avviene solo su un profilo nuovo e vuoto, mai sopra dati
   esistenti, e non modifica ne' cancella mai il Postgres di origine.
 
+## Sidecar wa-bridge (WhatsApp)
+
+Il connettore WhatsApp usa un secondo binario, `wa-bridge` (Go, whatsmeow,
+statico), distribuito come externalBin accanto al backend
+(`desktop/bin/wa-bridge-<triple>`, build CI con `actions/setup-go`).
+All'avvio `desktop_main` lo risolve accanto all'eseguibile del backend e
+imposta sessione e dedup nella app-data dir; il bridge ascolta solo su
+127.0.0.1 con token effimero di processo e viene avviato solo quando
+l'utente collega WhatsApp dalle impostazioni. Rotta non ufficiale: vedi
+l'avviso rischio in README.
+
 ## Sviluppo
 
 ```
 npm run build --prefix frontend
 bash backend/scripts/build_sidecar.sh   # produce desktop/bin/atlas-backend-<triple>
+cd wa-bridge && CGO_ENABLED=0 go build -o ../desktop/bin/wa-bridge-<triple> .
 cd desktop && npx @tauri-apps/cli@2 dev
 ```
 
