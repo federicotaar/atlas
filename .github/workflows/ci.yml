@@ -133,6 +133,28 @@ jobs:
       - name: Lancio reale dell'app e verifica backend sidecar
         run: |
           set -e
+          ss -ltnp 2>/dev/null | grep ':8000' || echo 'porta 8000 libera'
+          export ATLAS_DESKTOP_DATA_DIR=/tmp/atlas-ci-direct
+          SIDECAR=$(ls desktop/bin/atlas-backend-* | head -1)
+          "$SIDECAR" > /tmp/sidecar-direct.log 2>&1 &
+          DPID=$!
+          direct=0
+          for i in $(seq 1 45); do
+            sleep 1
+            if curl -s http://127.0.0.1:8000/health | grep -q '"app":"atlas"'; then direct=1; break; fi
+          done
+          echo "sidecar diretto: $([ $direct = 1 ] && echo OK || echo FALLITO)"
+          head -15 /tmp/sidecar-direct.log || true
+          kill -9 $DPID 2>/dev/null || true
+          pkill -9 -f 'atlas-backend' 2>/dev/null || true
+          for i in $(seq 1 15); do
+            sleep 1
+            curl -s http://127.0.0.1:8000/health >/dev/null 2>&1 || break
+          done
+          if ss -ltnp 2>/dev/null | grep -q ':8000'; then
+            echo 'porta 8000 ancora occupata dopo pulizia' >&2
+            exit 1
+          fi
           xvfb-run -a ./desktop/target/release/atlas-desktop > /tmp/atlas-desktop.log 2>&1 &
           ok=0
           for i in $(seq 1 90); do
@@ -146,6 +168,7 @@ jobs:
           done
           if [ "$ok" != "1" ]; then
             echo "backend non avviato dall'app desktop" >&2
+            ps aux | grep -i atlas | grep -v grep >&2 || true
             tail -50 /tmp/atlas-desktop.log >&2 || true
             exit 1
           fi
