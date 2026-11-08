@@ -93,8 +93,12 @@ def test_memory_isolated_per_sender_and_channel(tmp_path):
                           allowed={"telegram": {"111", "222"}})
     replies, reply = collect()
     hub.handle(ChannelMessage("111", "telegram", "messaggio di 111"), reply)
-    hub.handle(ChannelMessage("222", "telegram", "messaggio di 222"), reply)
     deadline = time.time() + 5
+    while not replies and time.time() < deadline:
+        time.sleep(0.02)
+    # Le risposte finte sono in ordine di chiamata: una conversazione alla
+    # volta per non dipendere dallo scheduling dei thread.
+    hub.handle(ChannelMessage("222", "telegram", "messaggio di 222"), reply)
     while len(replies) < 2 and time.time() < deadline:
         time.sleep(0.02)
     assert [m["content"] for m in store.history("111", "telegram")] == \
@@ -187,8 +191,9 @@ def test_channel_log_records_in_and_out(tmp_path):
 # --- canale Telegram con client finto ---------------------------------------
 
 class FakeTGClient:
-    def __init__(self, token):
+    def __init__(self, token, drop_pending_updates=True):
         self.token = token
+        self.drop_pending_updates = drop_pending_updates
         self.sent = []
         self._cb = None
 
@@ -205,7 +210,7 @@ class FakeTGClient:
 def test_telegram_channel_maps_updates_and_sends(tmp_path):
     made = []
 
-    def factory(token):
+    def factory(token, drop_pending_updates=True):
         client = FakeTGClient(token)
         made.append(client)
         return client
@@ -376,3 +381,21 @@ def test_unknown_sender_text_not_logged(tmp_path):
     # nemmeno il pairing store trattiene il testo
     raw = (tmp_path / "data" / "pairing.json").read_text()
     assert "contenuto privato" not in raw
+
+
+def test_channel_token_never_from_redacted_dotenv(tmp_path, monkeypatch):
+    """Regressione: load_dotenv ritorna valori REDATTI ('(impostata)') solo
+    per diagnostica; il token del canale deve arrivare da os.environ."""
+    import app.agent_cli as cli
+    (tmp_path / "config").mkdir()
+    (tmp_path / "config" / "channels.yaml").write_text(
+        "channels:\n  telegram:\n    enabled: true\n")
+    monkeypatch.delenv("TELEGRAM_BOT_TOKEN", raising=False)
+    out_lines = []
+    hub = cli._maybe_start_channels(
+        workspace=tmp_path, registry=None, get_active=lambda: "x",
+        set_active=lambda n: None, ctx=None, store=None, log=None, seal=None,
+        secrets=None, dotenv={"TELEGRAM_BOT_TOKEN": "(impostata)"},
+        out=out_lines.append, max_steps=1, pairing=None)
+    assert hub is None
+    assert any("mancante" in line for line in out_lines)
