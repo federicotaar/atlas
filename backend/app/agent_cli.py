@@ -39,6 +39,7 @@ from .channels.media import MediaProcessor
 from .channels.pairing import PairingStore
 from .channels.telegram import TelegramChannel
 from .channels.whatsapp import WhatsAppChannel, normalize_number
+from .channels.whatsapp_official import WEBHOOK_PATH, WhatsAppOfficialChannel
 from .providers.base import AllProvidersFailed, ProviderError
 from .providers.registry import ConfigError, ProviderRegistry, load_dotenv
 
@@ -163,7 +164,12 @@ def _maybe_start_channels(*, workspace: Path, registry: ProviderRegistry,
     config = load_channels_config(workspace)
     tg_on = channel_enabled(config, "telegram")
     wa_on = channel_enabled(config, "whatsapp_unofficial")
-    if not tg_on and not wa_on:
+    wo_on = channel_enabled(config, "whatsapp_official")
+    if wa_on and wo_on:
+        out("whatsapp_unofficial e whatsapp_official non possono essere attivi "
+            "insieme: nessun canale whatsapp avviato")
+        wa_on = wo_on = False
+    if not tg_on and not wa_on and not wo_on:
         return None, {}
     # ATTENZIONE: il dict di load_dotenv e' REDATTO ("(impostata)") - serve
     # solo per la diagnostica. I valori veri restano in os.environ.
@@ -207,17 +213,33 @@ def _maybe_start_channels(*, workspace: Path, registry: ProviderRegistry,
             out("whatsapp_unofficial abilitato ma WA_BRIDGE_TOKEN mancante in .env "
                 "(o bridge_bin non configurato): canale non avviato")
             wa_on = False
-        if wa_on:
-            raw_nums = os.environ.get("ALLOWED_WHATSAPP_NUMBERS", "")
-            allowed["whatsapp"] = (
-                {normalize_number(n) for n in raw_nums.split(",") if n.strip()}
-                | (pairing.paired_ids("whatsapp") if pairing is not None else set()))
-            if not allowed["whatsapp"]:
-                out("ALLOWED_WHATSAPP_NUMBERS vuoto: il canale ignorera' TUTTI i "
-                    "mittenti (richieste registrate in locale; approva con "
-                    "/pairing approve)")
+    wo_listen = ""
+    wo_env: dict[str, str] = {}
+    if wo_on:
+        wo_cfg = config.get("channels", {}).get("whatsapp_official", {})
+        wo_listen = str(wo_cfg.get("listen", "127.0.0.1:8765"))
+        wo_env = {k: os.environ.get(k, "") for k in (
+            "WHATSAPP_PHONE_NUMBER_ID", "WHATSAPP_ACCESS_TOKEN",
+            "WHATSAPP_APP_SECRET", "WHATSAPP_VERIFY_TOKEN")}
+        missing = [k for k, v in wo_env.items() if not v]
+        if missing:
+            out(f"whatsapp_official abilitato ma mancano in .env: "
+                f"{', '.join(missing)}: canale non avviato")
+            wo_on = False
 
-    if not tg_on and not wa_on:
+    if wa_on or wo_on:
+        # Allowlist condivisa dai due backend (stesso nome canale "whatsapp"):
+        # .env + pairing approvati in locale con /pairing approve.
+        raw_nums = os.environ.get("ALLOWED_WHATSAPP_NUMBERS", "")
+        allowed["whatsapp"] = (
+            {normalize_number(n) for n in raw_nums.split(",") if n.strip()}
+            | (pairing.paired_ids("whatsapp") if pairing is not None else set()))
+        if not allowed["whatsapp"]:
+            out("ALLOWED_WHATSAPP_NUMBERS vuoto: il canale ignorera' TUTTI i "
+                "mittenti (richieste registrate in locale; approva con "
+                "/pairing approve)")
+
+    if not tg_on and not wa_on and not wo_on:
         return None, {}
 
     # Stage 6: vocali (trascrizione Groq), foto (descrizione Gemini) e file.
@@ -254,6 +276,20 @@ def _maybe_start_channels(*, workspace: Path, registry: ProviderRegistry,
         wa_channel.start()
         channels["whatsapp"] = wa_channel
         out(f"canale whatsapp avviato (bridge {wa_addr})")
+    if wo_on:
+        wo_channel = WhatsAppOfficialChannel(
+            phone_number_id=wo_env["WHATSAPP_PHONE_NUMBER_ID"],
+            access_token=wo_env["WHATSAPP_ACCESS_TOKEN"],
+            app_secret=wo_env["WHATSAPP_APP_SECRET"],
+            verify_token=wo_env["WHATSAPP_VERIFY_TOKEN"],
+            listen=wo_listen)
+        wo_channel.on_message(
+            lambda m: hub.handle(m, lambda text: wo_channel.send(m.sender, text)))
+        wo_channel.start()
+        channels["whatsapp"] = wo_channel
+        out(f"canale whatsapp (official) in ascolto su {wo_listen}{WEBHOOK_PATH}: "
+            "esponilo con un tunnel (cloudflared/ngrok) e registra l'URL "
+            "nel pannello Meta")
     return hub, channels
 
 
@@ -310,7 +346,11 @@ def _handle_whatsapp(line: str, wa_channel, out) -> None:
     dell'account WhatsApp dell'agente. SOLO dalla CLI locale."""
     if wa_channel is None:
         out("whatsapp non attivo: abilitalo in config/channels.yaml "
-            "(whatsapp_unofficial).")
+            "(whatsapp_unofficial o whatsapp_official).")
+        return
+    if not isinstance(wa_channel, WhatsAppChannel):
+        out("backend whatsapp official (Cloud API): il collegamento si gestisce "
+            "dal pannello Meta, niente QR o pairing locale qui.")
         return
     parts = line.split()
     sub = parts[1] if len(parts) > 1 else "status"
