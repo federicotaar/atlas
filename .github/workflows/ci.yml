@@ -155,7 +155,9 @@ jobs:
             echo 'porta 8000 ancora occupata dopo pulizia' >&2
             exit 1
           fi
-          xvfb-run -a ./desktop/target/release/atlas-desktop > /tmp/atlas-desktop.log 2>&1 &
+          Xvfb :99 -screen 0 1280x800x24 > /tmp/xvfb.log 2>&1 &
+          sleep 2
+          DISPLAY=:99 ./desktop/target/release/atlas-desktop > /tmp/atlas-desktop.log 2>&1 &
           ok=0
           for i in $(seq 1 90); do
             sleep 1
@@ -174,7 +176,7 @@ jobs:
           fi
       - name: Cattura screenshot app in esecuzione
         run: |
-          sleep 3
+          sleep 6
           sudo apt-get install -y imagemagick xdotool >/dev/null
           DISPLAY=:99 import -window root /tmp/atlas-screenshot.png
           DISPLAY=:99 xdotool search --name 'ATLAS|atlas' 2>/dev/null && echo 'finestra app presente' || echo 'nessuna finestra trovata'
