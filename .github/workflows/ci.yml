@@ -69,9 +69,17 @@ jobs:
       - name: Installa Ollama
         run: |
           # install.sh di ollama.com punta a un asset .tgz non piu' pubblicato
-          # (404): installiamo dal tarball ufficiale dei GitHub Releases.
-          curl -fsSL https://github.com/ollama/ollama/releases/latest/download/ollama-linux-amd64.tar.zst -o /tmp/ollama.tar.zst
-          sudo tar -I zstd -xf /tmp/ollama.tar.zst -C /usr/local
+          # (404): installiamo dal tarball ufficiale dei GitHub Releases,
+          # con retry per i 504 intermittenti del download.
+          ok=0
+          for i in 1 2 3 4; do
+            if curl -fsSL --retry 3 https://github.com/ollama/ollama/releases/latest/download/ollama-linux-amd64.tar.zst -o /tmp/ollama.tar.zst; then
+              sudo tar -I zstd -xf /tmp/ollama.tar.zst -C /usr/local && ok=1 && break
+            fi
+            echo "download tarball fallito (tentativo $i), riprovo..."
+            sleep 10
+          done
+          [ "$ok" = 1 ]
           command -v ollama
       - name: Server + modelli
         run: |
