@@ -9,7 +9,7 @@
 #      verifica, spiegare onestamente l'irraggiungibile (senza credenziali).
 # Chiamato da ci.yml prima del lancio "normale" (che richiede 8000 libera).
 set -e
-sudo apt-get install -y xdotool tesseract-ocr imagemagick >/dev/null
+sudo apt-get install -y xdotool tesseract-ocr imagemagick wmctrl >/dev/null
 export DISPLAY=:98
 export ATLAS_DESKTOP_DATA_DIR=/tmp/atlas-ci-reserve
 
@@ -173,7 +173,14 @@ fi
 echo "chiusura normale: sidecar terminato dall'app, porta 8100 liberata"
 # La vecchia API non deve MAI essere toccata, nemmeno dal percorso di chiusura.
 kill -0 $MPID 2>/dev/null || { echo "FALLITO: la chiusura dell'app ha terminato la vecchia API" >&2; exit 1; }
-curl -s http://127.0.0.1:8000/health | grep -q '"app":"atlas"' || { echo 'FALLITO: 8000 non risponde piu come la vecchia API' >&2; exit 1; }
+if ! curl -s --max-time 5 http://127.0.0.1:8000/health | grep -q '"app":"atlas"'; then
+  echo 'FALLITO: 8000 non risponde piu come la vecchia API' >&2
+  curl -v --max-time 5 http://127.0.0.1:8000/health >&2 || true
+  ss -ltnp 2>/dev/null | grep ':8000' >&2 || true
+  echo '--- log mock (ultime 30 righe) ---' >&2
+  tail -30 /tmp/mock-old-api.log >&2 || true
+  exit 1
+fi
 echo 'vecchia API ancora viva dopo la chiusura: mai toccata'
 # Teardown fixture: solo il PID del mock.
 kill $MPID 2>/dev/null || true

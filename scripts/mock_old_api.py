@@ -9,6 +9,8 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 
 
 class H(BaseHTTPRequestHandler):
+    protocol_version = "HTTP/1.1"
+
     def _json(self, obj, code=200):
         b = json.dumps(obj).encode()
         self.send_response(code)
@@ -28,4 +30,8 @@ class H(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    HTTPServer(("127.0.0.1", 8000), H).serve_forever()
+    # Threading: sonda ripetute dal frontend (fetch/CORS del webview) non
+    # devono mai bloccare il mock su una connessione sola.
+    from http.server import ThreadingHTTPServer
+
+    ThreadingHTTPServer(("127.0.0.1", 8000), H).serve_forever()
