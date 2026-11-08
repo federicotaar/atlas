@@ -91,7 +91,7 @@ ocr_has /tmp/e2e-7-richiamo-riavvio.png 'Briciola' || { echo 'E2E UI: risposta B
 xdotool mousemove 1145 55 click 1
 sleep 3
 shot /tmp/e2e-8-logout.png
-ocr_has /tmp/e2e-8-logout.png 'Entra' || { echo 'E2E UI: form login NON visibile dopo Esci'; exit 1; }
+ocr_has /tmp/e2e-8-logout.png 'password' || { echo 'E2E UI: form login NON visibile dopo Esci (campo password assente)'; exit 1; }
 xdotool mousemove 640 410 click 1
 xdotool type --delay 30 'e2e@example.com'
 xdotool key Tab
