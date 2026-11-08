@@ -167,6 +167,13 @@ def _mount_agent(asgi_app, data_dir: Path):
         # Provider salvato dalla pagina (ATLAS_PROVIDER nel .env del
         # workspace) ha priorita'; poi il primo usabile, poi il primo
         # definito (la pagina permette di aggiungere la chiave).
+        for n in os.environ.get("ATLAS_ENABLED_PROVIDERS", "").split(","):
+            n = n.strip()
+            if n:
+                try:
+                    registry.set_enabled(n, True)
+                except Exception:
+                    pass  # provider rimosso dalla config: ignora
         saved = os.environ.get("ATLAS_PROVIDER", "")
         if saved:
             try:
