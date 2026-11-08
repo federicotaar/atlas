@@ -11,19 +11,23 @@ Isolamento REALE, a due livelli:
 1. static gate (sempre): il codice che importa subprocess/socket/ctypes/
    multiprocessing/signal o usa __import__/eval/exec/compile non arriva
    nemmeno ai test;
-2. esecuzione dei test: con bubblewrap (bwrap) i test girano in un
-   namespace senza rete, filesystem di sistema in sola lettura, scrittura
-   possibile solo nella dir della proposta, ambiente pulito dai segreti;
-   senza bwrap si ripiega su rlimit + env scrubbed e la proposta resta
-   marcata isolation="reduced" (MAI spacciata per sandbox completa).
+2. esecuzione SEMPRE e solo sotto bubblewrap (bwrap): namespace senza
+   rete, filesystem di sistema in sola lettura, scrittura possibile solo
+   nella dir delle proposte, ambiente pulito dai segreti. Se bwrap non e'
+   disponibile l'esecuzione e' DISABILITATA (fail-closed): la proposta
+   resta registrata con isolation="unavailable" e non si attiva. Il gate
+   statico non e' una boundary di sicurezza: l'unico perimetro e' bwrap.
 
-Il codice NON approvato non viene mai eseguito con accesso a token, al
-workspace reale o ai file dell'utente: i test vedono solo tools_generated.
+Il codice generato non viene MAI eseguito nel processo dell'agente: ne'
+ai test, ne' all'approvazione (il controllo dell'interfaccia gira in
+bwrap), ne' a runtime (ogni chiamata di un tool approvato e' un processo
+bwrap che risponde via JSON su stdout). Niente segreti o percorsi
+protetti nei mount: dentro si vedono solo /usr /lib /bin in lettura,
+l'interprete e tools_generated.
 """
 from __future__ import annotations
 
 import json
-import os
 import re
 import subprocess
 import sys
@@ -64,7 +68,14 @@ def static_gate(code: str) -> str | None:
 
 
 def _bwrap_cmd(workdir: Path) -> list[str] | None:
-    """Comando bubblewrap per l'isolamento vero, o None se bwrap manca."""
+    """Comando bubblewrap per l'isolamento vero, o None se bwrap manca.
+
+    Mount visibili nel namespace: /usr /lib /lib64 /bin (read-only),
+    l'interprete Python e le sue site-packages (read-only), il runner
+    (file, read-only) e workdir montata su /work (UNICA parte scrivibile).
+    Niente home, workspace dell'utente, .env, data/ o codice protetto:
+    semplicemente non esistono nel namespace. Rete assente (--unshare-all).
+    """
     import shutil as _sh
     bwrap = _sh.which("bwrap")
     if bwrap is None:
@@ -86,6 +97,9 @@ def _bwrap_cmd(workdir: Path) -> list[str] | None:
     # la tmpfs /tmp qui sotto coprirebbe un bind dentro /tmp.
     binds += ["--ro-bind", str(venv_root), "/pyenv"]
     binds += ["--ro-bind", str(real.parent.parent), "/pyreal"]
+    runner = Path(__file__).with_name("_forge_runner.py")
+    if runner.exists():
+        binds += ["--ro-bind", str(runner), "/runner.py"]
     return [bwrap, "--unshare-all", "--die-with-parent", "--clearenv",
             "--setenv", "PATH", "/usr/bin:/bin",
             "--setenv", "HOME", "/work",
@@ -96,6 +110,65 @@ def _bwrap_cmd(workdir: Path) -> list[str] | None:
             "--dev", "/dev",
             "--chdir", "/work",
             "--", f"/pyreal/bin/{real.name}"]
+
+
+def _run_in_bwrap(workdir: Path, argv: list[str],
+                  timeout: int = 60,
+                  stdin: str = "") -> subprocess.CompletedProcess | None:
+    """Esegue argv dentro bwrap; None se bwrap non e' disponibile."""
+    cmd_prefix = _bwrap_cmd(workdir)
+    if cmd_prefix is None:
+        return None
+    return subprocess.run(cmd_prefix + argv, timeout=timeout, input=stdin,
+                          capture_output=True, text=True)
+
+
+def inspect_interface(workdir: Path, name: str,
+                      timeout: int = 30) -> dict | None:
+    """Carica il modulo in bwrap e ritorna l'interfaccia come dict.
+
+    None se bwrap non e' disponibile (attivazione disabilitata);
+    {"error": ...} se il modulo non si carica.
+    """
+    try:
+        proc = _run_in_bwrap(workdir,
+                             ["/runner.py", "inspect", name],
+                             timeout=timeout)
+    except (subprocess.TimeoutExpired, FileNotFoundError) as exc:
+        return {"error": str(exc)}
+    if proc is None:
+        return None
+    try:
+        return json.loads(proc.stdout.strip().splitlines()[-1])
+    except (ValueError, IndexError):
+        return {"error": (proc.stdout + proc.stderr).strip()[-300:]}
+
+
+def invoke_isolated(workdir: Path, name: str, args: dict,
+                    timeout: int = 60) -> str:
+    """Esegue run(args, None) del tool approvato in un processo bwrap.
+
+    Il tool non ha accesso al contesto dell'agente, alla rete, ai segreti
+    o ai file fuori da tools_generated: risponde via JSON su stdout.
+    """
+    try:
+        proc = _run_in_bwrap(workdir, ["/runner.py", "invoke", name],
+                             timeout=timeout,
+                             stdin=json.dumps(args, ensure_ascii=False))
+    except subprocess.TimeoutExpired:
+        return f"errore: il tool '{name}' ha superato il timeout"
+    if proc is None:
+        return (f"errore: isolamento non disponibile, il tool '{name}' "
+                "non puo' essere eseguito su questo host")
+    try:
+        payload = json.loads(proc.stdout.strip().splitlines()[-1])
+    except (ValueError, IndexError):
+        return f"errore: output non valido dal tool: {proc.stderr[-200:]}"
+    if not payload.get("ok"):
+        return f"errore nel tool '{name}': {payload.get('error', '?')}"
+    result = payload.get("result")
+    return result if isinstance(result, str) else json.dumps(
+        result, ensure_ascii=False)
 
 
 class ToolForge:
@@ -156,36 +229,22 @@ class ToolForge:
         scrivibile solo la dir della proposta, env pulito) se disponibile;
         altrimenti rlimit + env scrubbed marcato isolation="reduced"."""
         cmd_prefix = _bwrap_cmd(self._dir)
-        if cmd_prefix is not None:
-            cmd = cmd_prefix + ["-m", "pytest", f"/work/test_{name}.py",
-                                "-q", "--no-header", "-p", "no:cacheprovider"]
-            env, cwd, preexec = None, None, None
-            isolation = "bwrap"
-        else:
-            import resource
-
-            def limits() -> None:
-                resource.setrlimit(resource.RLIMIT_CPU, (30, 30))
-                resource.setrlimit(resource.RLIMIT_AS,
-                                   (512 * 1024 * 1024,) * 2)
-                resource.setrlimit(resource.RLIMIT_FSIZE,
-                                   (10 * 1024 * 1024,) * 2)
-                resource.setrlimit(resource.RLIMIT_NOFILE, (64, 64))
-
-            cmd = [sys.executable, "-m", "pytest", f"test_{name}.py", "-q",
-                   "--no-header", "-p", "no:cacheprovider"]
-            env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"),
-                   "PYTHONPATH": str(self._dir), "HOME": str(self._dir)}
-            cwd, preexec, isolation = self._dir, limits, "reduced"
+        if cmd_prefix is None:
+            # fail-closed: senza isolamento reale NON si esegue nulla
+            return {"ok": False, "isolation": "unavailable",
+                    "out": ("esecuzione disabilitata: bubblewrap (bwrap) non "
+                            "disponibile su questo host; la proposta resta "
+                            "registrata ma non viene eseguita ne' attivata")}
+        cmd = cmd_prefix + ["-m", "pytest", f"/work/test_{name}.py",
+                            "-q", "--no-header", "-p", "no:cacheprovider"]
         try:
             proc = subprocess.run(
-                cmd, cwd=cwd, env=env, timeout=timeout,
-                preexec_fn=preexec, capture_output=True, text=True)
+                cmd, timeout=timeout, capture_output=True, text=True)
             out = (proc.stdout + proc.stderr).strip()
             return {"ok": proc.returncode == 0, "out": out,
-                    "isolation": isolation}
+                    "isolation": "bwrap"}
         except (subprocess.TimeoutExpired, FileNotFoundError) as exc:
-            return {"ok": False, "out": str(exc), "isolation": isolation}
+            return {"ok": False, "out": str(exc), "isolation": "bwrap"}
 
     def list(self) -> list[dict]:
         return [{"name": name, **info}
@@ -218,20 +277,24 @@ class ToolForge:
             self._save_meta(meta)
             return {"ok": False,
                     "error": f"i test non passano: {result['out'][-200:]}"}
-        namespace: dict = {}
-        try:
-            code = (self._dir / f"{name}.py").read_text()
-            exec(compile(code, f"<tools_generated/{name}.py>", "exec"),
-                 namespace)
-        except Exception as exc:
-            return {"ok": False, "error": f"il modulo non si carica: {exc}"}
-        missing = [attr for attr in REQUIRED_INTERFACE
-                   if attr not in namespace]
+        # Il controllo dell'interfaccia carica il modulo DENTRO bwrap:
+        # mai eseguire codice generato nel processo dell'agente.
+        iface = inspect_interface(self._dir, name)
+        if iface is None:
+            return {"ok": False,
+                    "error": ("isolamento non disponibile: attivazione "
+                              "disabilitata finche' bwrap non c'e'")}
+        if "error" in iface:
+            return {"ok": False,
+                    "error": f"il modulo non si carica: {iface['error']}"}
+        missing = [attr for attr in REQUIRED_INTERFACE if attr not in iface]
         if missing:
             return {"ok": False,
                     "error": f"interfaccia incompleta: manca {missing}"}
         info["status"] = "approved"
         info["tests_ok"] = True
+        info["interface"] = {k: iface[k] for k in
+                             ("name", "description", "parameters")}
         self._save_meta(meta)
         return {"ok": True, "name": name}
 
@@ -244,17 +307,28 @@ class ToolForge:
         return True
 
     def load_approved(self) -> dict[str, dict]:
-        """I tool approvati come namespace caricati (per la registrazione)."""
+        """I tool approvati come DESCRITTORI per la registrazione.
+
+        Il modulo generato non viene importato nel processo: l'interfaccia
+        (name/description/parameters) e' quella registrata all'approvazione
+        e run e' una chiusura che esegue il tool in un processo bwrap.
+        """
         loaded = {}
         for item in self.list():
             if item["status"] != "approved":
                 continue
-            namespace: dict = {}
-            try:
-                code = (self._dir / f"{item['name']}.py").read_text()
-                exec(compile(code, f"<{item['name']}.py>", "exec"), namespace)
-                if all(attr in namespace for attr in REQUIRED_INTERFACE):
-                    loaded[item["name"]] = namespace
-            except Exception:
-                continue  # un tool che non si carica resta inattivo
+            iface = item.get("interface") or {}
+            if not all(k in iface for k in
+                       ("name", "description", "parameters")):
+                continue  # approvato prima del controllo in bwrap: inattivo
+            tool_name = item["name"]
+
+            def _run(args: dict, ctx: object,
+                     _name: str = tool_name) -> object:
+                return invoke_isolated(self._dir, _name, args)
+
+            loaded[tool_name] = {"name": iface["name"],
+                                 "description": iface["description"],
+                                 "parameters": iface["parameters"],
+                                 "run": _run}
         return loaded
