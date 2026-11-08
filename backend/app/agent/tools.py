@@ -26,6 +26,21 @@ MAX_OUTPUT = 4000   # caratteri restituiti al modello per chiamata
 class ToolContext:
     workspace: Path
     secrets: SecretFilter
+    # Stage 10: scheduler per il tool schedule_job (None = tool non disponibile);
+    # channel/sender = conversazione a cui consegnare l'output dei job creati
+    # da questo contesto (l'hub li sostituisce per messaggio).
+    scheduler: object | None = None
+    # Stage 11: guardrail proattivita' per il tool proactive_feedback.
+    proactive: object | None = None
+    # Stage 13: abitudini apprese (observe/summarize).
+    habits: object | None = None
+    # Stage 14: libreria skill e forge dei tool auto-generati.
+    skills: object | None = None
+    forge: object | None = None
+    # callback dopo una proposta salvata (commit git + notifica a Fred)
+    selfmod_hook: object | None = None
+    channel: str = "cli"
+    sender: str = "local"
 
 
 @dataclass(frozen=True)
@@ -210,5 +225,159 @@ SHELL = Tool(
     run=_shell,
 )
 
-ALL_TOOLS: tuple[Tool, ...] = (READ_FILE, WRITE_FILE, LIST_DIR, SHELL)
+def _proactive_feedback(args: dict[str, Any], ctx: ToolContext) -> str:
+    if ctx.proactive is None:
+        return "errore: messaggi proattivi non attivi in questa interfaccia"
+    score = ctx.proactive.feedback(args["category"],
+                                   more=args["action"] == "more")
+    direction = "alzata" if args["action"] == "more" else "abbassata"
+    return f"Importanza di '{args['category']}' {direction} a {score}."
+
+
+PROACTIVE_FEEDBACK = Tool(
+    name="proactive_feedback",
+    description=("Registra il feedback di Fred sui messaggi proattivi: piu' o "
+                 "meno di una categoria (job, brief, heads-up, reminder, digest). "
+                 "Usa quando dice 'meno di questo', 'troppi messaggi su X' o "
+                 "'voglio piu' aggiornamenti su Y'."),
+    parameters={"type": "object",
+                "properties": {
+                    "category": {"type": "string",
+                                 "description": "categoria del messaggio proattivo"},
+                    "action": {"type": "string", "enum": ["more", "less"]}},
+                "required": ["category", "action"]},
+    run=_proactive_feedback,
+)
+
+
+def _schedule_job(args: dict[str, Any], ctx: ToolContext) -> str:
+    """Crea un job ricorrente o un promemoria (spec sez. 8). I job RICORRENTI
+    creati dall'agente nascono NON approvati: il si' di Fred arriva con
+    /jobs approve <id>, in qualunque modo permessi."""
+    if ctx.scheduler is None:
+        return "errore: scheduler non disponibile in questa interfaccia"
+    kind = str(args.get("kind", "")).strip()
+    schedule = str(args.get("schedule", "")).strip()
+    task = str(args.get("task", "")).strip()
+    if kind not in ("cron", "once") or not schedule or not task:
+        return "errore: servono kind (cron|once), schedule e task"
+    try:
+        job = ctx.scheduler.add_job(kind=kind, schedule=schedule, task=task,
+                                    channel=ctx.channel, sender=ctx.sender,
+                                    source="agent")
+    except ValueError as exc:
+        return f"errore: {exc}"
+    import time as _time
+    next_at = _time.strftime("%Y-%m-%d %H:%M", _time.localtime(job.next_fire))
+    if not job.approved:
+        return (f"job #{job.id} creato ma IN ATTESA DI APPROVAZIONE: i job "
+                "ricorrenti proposti dall'agente partono solo dopo il si' di "
+                "Fred (/jobs approve). Mostragli la proposta adesso.")
+    return f"promemoria #{job.id} creato: esecuzione {next_at}."
+
+
+SCHEDULE_JOB = Tool(
+    name="schedule_job",
+    description=("Crea un promemoria una tantum (kind=once, schedule='YYYY-MM-DD HH:MM') "
+                 "o un job ricorrente (kind=cron, schedule='<5 campi cron>'). I job "
+                 "ricorrenti richiedono l'approvazione di Fred prima di partire."),
+    parameters={"type": "object",
+                "properties": {
+                    "kind": {"type": "string", "enum": ["cron", "once"]},
+                    "schedule": {"type": "string",
+                                 "description": "espressione cron a 5 campi oppure data/ora ISO locale"},
+                    "task": {"type": "string", "description": "cosa deve fare l'agente quando scatta"},
+                },
+                "required": ["kind", "schedule", "task"]},
+    run=_schedule_job,
+)
+
+def _save_skill(args: dict[str, Any], ctx: ToolContext) -> str:
+    if ctx.skills is None:
+        return "errore: libreria skill non attiva"
+    try:
+        ctx.skills.save(args["name"], args["procedure"],
+                        source_task=args.get("source_task", ""))
+    except ValueError as exc:
+        return f"errore: {exc}"
+    if ctx.selfmod_hook is not None:
+        ctx.selfmod_hook(f"nuova skill proposta: {args['name']}")
+    return (f"skill '{args['name']}' salvata come PROPOSTA: sara' riusabile "
+            "solo dopo l'approvazione di Fred (/skills approve "
+            f"{args['name']}). Digli che l'hai preparata.")
+
+
+SAVE_SKILL = Tool(
+    name="save_skill",
+    description=("Salva la procedura di un task a piu' passi riuscito come "
+                 "skill riusabile. Nasce come proposta: Fred la attiva con "
+                 "/skills approve. Usala dopo aver completato con successo "
+                 "un procedimento che potrebbe ripetersi."),
+    parameters={"type": "object",
+                "properties": {
+                    "name": {"type": "string",
+                             "description": "nome breve a trattini (es. brief-mattutino)"},
+                    "procedure": {"type": "string",
+                                  "description": "i passi da riusare, in elenco"},
+                    "source_task": {"type": "string",
+                                    "description": "il task da cui l'hai imparata"}},
+                "required": ["name", "procedure"]},
+    run=_save_skill,
+)
+
+
+def _propose_tool(args: dict[str, Any], ctx: ToolContext) -> str:
+    if ctx.forge is None:
+        return "errore: tool auto-generati non attivi"
+    try:
+        result = ctx.forge.propose(args["name"], args["code"], args["tests"])
+    except ValueError as exc:
+        return f"errore: {exc}"
+    if ctx.selfmod_hook is not None:
+        ctx.selfmod_hook(f"nuovo tool proposto: {args['name']}")
+    tests = "i suoi test passano" if result["tests_ok"] else         "ATTENZIONE: i suoi test NON passano"
+    return (f"tool '{args['name']}' proposto ({tests}). E' INATTIVO finche' "
+            f"Fred non lo approva (/tools approve {args['name']}); il codice "
+            f"e' in tools_generated/{args['name']}.py, visibile con "
+            "/tools diff. Presentaglielo: non usarlo prima del si'.")
+
+
+PROPOSE_TOOL = Tool(
+    name="propose_tool",
+    description=("Proponi un nuovo tool auto-generato: scrivi codice Python "
+                 "(deve esporre name, description, parameters e "
+                 "run(args, ctx)) e i suoi test. I test girano in sandbox "
+                 "subito; il tool resta INATTIVO finche' Fred non lo "
+                 "approva. Non proporre tool che toccano app/, la "
+                 "sicurezza, .env o i log."),
+    parameters={"type": "object",
+                "properties": {
+                    "name": {"type": "string",
+                             "description": "nome snake_case del tool"},
+                    "code": {"type": "string",
+                             "description": "codice del modulo del tool"},
+                    "tests": {"type": "string",
+                              "description": "test pytest del tool"}},
+                "required": ["name", "code", "tests"]},
+    run=_propose_tool,
+)
+
+
+ALL_TOOLS: tuple[Tool, ...] = (READ_FILE, WRITE_FILE, LIST_DIR, SHELL,
+                               SCHEDULE_JOB, PROACTIVE_FEEDBACK, SAVE_SKILL,
+                               PROPOSE_TOOL)
 TOOLS_BY_NAME: dict[str, Tool] = {t.name: t for t in ALL_TOOLS}
+
+
+def register_generated_tools(namespaces: dict) -> int:
+    """Registra i tool auto-generati APPROVATI nel set attivo. Ogni
+    namespace deve esporre name/description/parameters/run."""
+    added = 0
+    for key, ns in namespaces.items():
+        if key in TOOLS_BY_NAME:
+            continue
+        TOOLS_BY_NAME[key] = Tool(
+            name=str(ns["name"]), description=str(ns["description"]),
+            parameters=ns["parameters"], run=ns["run"])
+        added += 1
+    return added
