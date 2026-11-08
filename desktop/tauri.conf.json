@@ -18,7 +18,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' http://127.0.0.1:8000"
+      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' http://127.0.0.1:8000 http://127.0.0.1:8100 http://127.0.0.1:8101 http://127.0.0.1:8102 http://127.0.0.1:8103 http://127.0.0.1:8104 http://127.0.0.1:8105 http://127.0.0.1:8106 http://127.0.0.1:8107 http://127.0.0.1:8108"
     }
   },
   "bundle": {
