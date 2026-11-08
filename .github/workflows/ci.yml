@@ -69,11 +69,12 @@ jobs:
       - name: Installa Ollama
         run: |
           # install.sh di ollama.com punta a un asset .tgz non piu' pubblicato
-          # (404): installiamo dal tarball ufficiale dei GitHub Releases,
-          # con retry per i 504 intermittenti del download.
+          # (404) e i browser_download_url dei Releases riescono 504:
+          # scarichiamo l'asset via endpoint API di GitHub (verificato attivo).
+          ASSET_URL=$(curl -fsSL https://api.github.com/repos/ollama/ollama/releases/latest             | python3 -c "import sys,json; d=json.load(sys.stdin); print(next(a['url'] for a in d['assets'] if a['name']=='ollama-linux-amd64.tar.zst'))")
           ok=0
-          for i in 1 2 3 4; do
-            if curl -fsSL --retry 3 https://github.com/ollama/ollama/releases/latest/download/ollama-linux-amd64.tar.zst -o /tmp/ollama.tar.zst; then
+          for i in 1 2 3; do
+            if curl -fsSL --retry 3 -H 'Accept: application/octet-stream' "$ASSET_URL" -o /tmp/ollama.tar.zst; then
               sudo tar -I zstd -xf /tmp/ollama.tar.zst -C /usr/local && ok=1 && break
             fi
             echo "download tarball fallito (tentativo $i), riprovo..."
