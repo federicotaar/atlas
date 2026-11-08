@@ -24,6 +24,18 @@ class CommandContext:
     get_active: Callable[[], str]
     set_active: Callable[[str], None]
     describe_registry: Callable[[ProviderRegistry, str, Callable[[str], None]], None]
+    # Stage 10: scheduler dei jobs (None = comandi /schedule e /jobs disabiliti).
+    # channel/sender identificano dove consegnare l'output dei job creati da qui.
+    scheduler: object | None = None
+    # Stage 13: abitudini apprese (None = /habits disabilitato).
+    habits: object | None = None
+    # Stage 14: skill / tool generati / rollback auto-modifiche.
+    skills: object | None = None
+    forge: object | None = None
+    rollback_fn: object | None = None
+    post_approve_fn: object | None = None  # registra tool + health check
+    channel: str = "cli"
+    sender: str = "local"
 
 
 def parse_model_target(arg: str) -> tuple[str, str | None]:
@@ -39,8 +51,127 @@ def parse_model_target(arg: str) -> tuple[str, str | None]:
     return arg, None
 
 
+def _handle_habits(line: str, cc: CommandContext) -> bool:
+    if cc.habits is None:
+        cc.out("Abitudini non attive in questa interfaccia.")
+        return True
+    arg = line[len("/habits"):].strip()
+    if arg == "off":
+        cc.habits.set_enabled(False)
+        cc.out("Apprendimento abitudini SPENTO e dati raccolti cancellati. "
+               "Riattiva con /habits on.")
+        return True
+    if arg == "on":
+        cc.habits.set_enabled(True)
+        cc.out("Apprendimento abitudini attivo.")
+        return True
+    if arg.startswith("forget"):
+        keyword = arg[len("forget"):].strip()
+        if not keyword:
+            cc.out("Uso: /habits forget <parola>")
+            return True
+        removed = cc.habits.forget(keyword)
+        cc.out(f"Rimossi {removed} elementi su '{keyword}'.")
+        return True
+    if arg:
+        cc.out("Uso: /habits [off|on|forget <parola>]")
+        return True
+    items = cc.habits.summarize()
+    if not cc.habits.enabled():
+        cc.out("Apprendimento abitudini spento (/habits on per riattivare).")
+    if not items:
+        cc.out("Ancora nessuna abitudine con abbastanza evidenze.")
+    else:
+        cc.out("Abitudini apprese (suggerimenti, non fatti):")
+        import time as _time
+        for item in items:
+            seen = _time.strftime("%Y-%m-%d",
+                                  _time.localtime(item["last_seen"]))
+            cc.out(f"- {item['text']} (evidenze: {item['evidence']}, "
+                   f"ultima: {seen})")
+    return True
+
+
+def _handle_skills(line: str, cc: CommandContext) -> bool:
+    if cc.skills is None:
+        cc.out("Libreria skill non attiva in questa interfaccia.")
+        return True
+    arg = line[len("/skills"):].strip()
+    if arg.startswith("approve"):
+        name = arg[len("approve"):].strip()
+        if cc.skills.approve(name):
+            cc.out(f"Skill '{name}' approvata: d'ora in poi la riuso "
+                   "quando serve.")
+        else:
+            cc.out(f"Nessuna skill '{name}'.")
+        return True
+    if arg.startswith("reject"):
+        name = arg[len("reject"):].strip()
+        cc.out(f"Skill '{name}' scartata." if cc.skills.reject(name)
+               else f"Nessuna skill '{name}'.")
+        return True
+    items = cc.skills.list()
+    if not items:
+        cc.out("Nessuna skill salvata.")
+    else:
+        for item in items:
+            cc.out(f"- {item['name']} [{item['status']}]")
+        cc.out("Le skill proposte si attivano con /skills approve <nome>.")
+    return True
+
+
+def _handle_tools(line: str, cc: CommandContext) -> bool:
+    if cc.forge is None:
+        cc.out("Tool auto-generati non attivi in questa interfaccia.")
+        return True
+    arg = line[len("/tools"):].strip()
+    if arg.startswith("approve"):
+        name = arg[len("approve"):].strip()
+        result = cc.forge.approve(name)
+        if result["ok"]:
+            cc.out(f"Tool '{name}' approvato e attivo.")
+            if cc.post_approve_fn is not None:
+                cc.post_approve_fn(name)
+        else:
+            cc.out(f"Attivazione rifiutata: {result['error']}")
+        return True
+    if arg.startswith("reject"):
+        name = arg[len("reject"):].strip()
+        cc.out(f"Tool '{name}' scartato." if cc.forge.reject(name)
+               else f"Nessuna proposta '{name}'.")
+        return True
+    if arg.startswith("diff"):
+        name = arg[len("diff"):].strip()
+        text = cc.forge.diff(name)
+        cc.out(text if text else f"Nessuna proposta '{name}'.")
+        return True
+    items = cc.forge.list()
+    if not items:
+        cc.out("Nessun tool proposto.")
+    else:
+        for item in items:
+            tests = "test ok" if item.get("tests_ok") else "test FALLITI"
+            cc.out(f"- {item['name']} [{item['status']}, {tests}]")
+        cc.out("Attiva con /tools approve <nome>; vedi il codice con "
+               "/tools diff <nome>.")
+    return True
+
+
 def handle_command(line: str, cc: CommandContext) -> bool:
     """True se `line` era un comando condiviso gestito."""
+    if line.startswith("/habits"):
+        return _handle_habits(line, cc)
+    if line.startswith("/skills"):
+        return _handle_skills(line, cc)
+    if line.startswith("/tools"):
+        return _handle_tools(line, cc)
+    if line == "/rollback":
+        if cc.rollback_fn is None:
+            cc.out("Rollback non disponibile in questa interfaccia.")
+            return True
+        ok, message = cc.rollback_fn()
+        cc.out(message)
+        return True
     if line == "/model":
         cc.out(f"provider: {cc.get_active()}  modello: {cc.registry.current_model(cc.get_active())}")
         return True
@@ -107,4 +238,95 @@ def handle_command(line: str, cc: CommandContext) -> bool:
             for note_id, text in notes:
                 cc.out(f"  #{note_id} {text}")
         return True
+    if line.startswith("/schedule"):
+        _handle_schedule(line, cc)
+        return True
+    if line.startswith("/jobs"):
+        _handle_jobs(line, cc)
+        return True
     return False
+
+
+def _handle_schedule(line: str, cc: CommandContext) -> None:
+    """/schedule <frase> - crea un job da linguaggio naturale (spec sez. 8).
+    La frase passa dal modello attivo per diventare cron/una-tantum; il job
+    creato qui e' dell'UTENTE: attivo subito (l'approvazione riguarda i job
+    ricorrenti proposti dall'agente, non quelli chiesti da Fred)."""
+    import time as _time
+
+    from .scheduler import parse_schedule_phrase
+
+    if cc.scheduler is None:
+        cc.out("Scheduler non attivo in questa interfaccia.")
+        return
+    phrase = line[len("/schedule"):].strip()
+    if not phrase:
+        cc.out("Uso: /schedule <quando> <cosa> - es. /schedule ogni giorno "
+               "feriale alle 8 mandami il brief")
+        return
+    try:
+        parsed = parse_schedule_phrase(cc.registry, cc.get_active(), phrase)
+        job = cc.scheduler.add_job(
+            kind=parsed["kind"], schedule=parsed["schedule"],
+            task=parsed["task"], channel=cc.channel, sender=cc.sender,
+            source="user")
+    except ValueError as exc:
+        cc.out(f"Errore: {exc}")
+        return
+    next_at = _time.strftime("%Y-%m-%d %H:%M", _time.localtime(job.next_fire))
+    kind_it = "ricorrente" if job.kind == "cron" else "una tantum"
+    cc.out(f"Job #{job.id} creato ({kind_it}): \"{job.task}\" - "
+           f"prossima esecuzione {next_at}.")
+
+
+def _handle_jobs(line: str, cc: CommandContext) -> None:
+    """/jobs | /jobs pause|resume|delete|approve <id> (spec sez. 8)."""
+    import time as _time
+
+    if cc.scheduler is None:
+        cc.out("Scheduler non attivo in questa interfaccia.")
+        return
+    parts = line.split()
+    if len(parts) == 1:
+        jobs = cc.scheduler.list_jobs()
+        if not jobs:
+            cc.out("Nessun job. /schedule <quando> <cosa> per crearne uno.")
+            return
+        for job in jobs:
+            flags = []
+            if job.paused:
+                flags.append("in pausa")
+            if not job.approved:
+                flags.append("DA APPROVARE (/jobs approve "
+                             f"{job.id})")
+            next_at = (_time.strftime("%Y-%m-%d %H:%M",
+                                      _time.localtime(job.next_fire))
+                       if job.next_fire else "-")
+            flag_txt = f"  [{', '.join(flags)}]" if flags else ""
+            cc.out(f"  #{job.id} ({job.kind}) {job.schedule} - \"{job.task}\""
+                   f" - prossima: {next_at}{flag_txt}")
+        return
+    action = parts[1]
+    if action in ("pause", "resume", "delete", "approve") and len(parts) > 2:
+        try:
+            job_id = int(parts[2])
+        except ValueError:
+            cc.out(f"Id non valido: {parts[2]}")
+            return
+        fn = {"pause": cc.scheduler.pause_job,
+              "resume": cc.scheduler.resume_job,
+              "approve": cc.scheduler.approve_job}.get(action)
+        if action == "delete":
+            cc.out((f"Job #{job_id} eliminato." if cc.scheduler.delete_job(job_id)
+                    else f"Job #{job_id} non trovato."))
+            return
+        job = fn(job_id)
+        if job is None:
+            cc.out(f"Job #{job_id} non trovato.")
+        else:
+            verb = {"pause": "in pausa", "resume": "riattivato",
+                    "approve": "approvato e attivo"}[action]
+            cc.out(f"Job #{job_id} {verb}.")
+        return
+    cc.out("Uso: /jobs | /jobs pause <id> | /jobs resume <id> | "
+           "/jobs delete <id> | /jobs approve <id>")
