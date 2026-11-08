@@ -170,3 +170,92 @@ def test_env_scrub_keeps_secrets_out_of_child_env(tmp_path):
         assert "segretissimo" not in out
     finally:
         del os.environ["TEST_ATLAS_API_KEY_SCRUB"]
+
+
+# --- git senza configurazione: helper configurati non partono MAI ---
+
+def _init_repo(ws: Path) -> None:
+    import subprocess
+    subprocess.run(["git", "init", "-q"], cwd=ws, check=True,
+                   capture_output=True)
+    subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t",
+                    "commit", "-q", "--allow-empty", "-m", "init"],
+                   cwd=ws, check=True, capture_output=True)
+
+
+def test_git_configured_external_diff_never_runs(tmp_path):
+    """Un .git/config malevolo (anche piantato prima) configura un helper che
+    scrive un marker: la superficie lo ignora perche' TUTTE le sorgenti di
+    config sono neutralizzate nell'ambiente figlio."""
+    import subprocess
+    _init_repo(tmp_path)
+    (tmp_path / "a.txt").write_text("uno", encoding="utf-8")
+    subprocess.run(["git", "add", "a.txt"], cwd=tmp_path, check=True,
+                   capture_output=True)
+    subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t",
+                    "commit", "-q", "-m", "a"], cwd=tmp_path, check=True,
+                   capture_output=True)
+    (tmp_path / "a.txt").write_text("due", encoding="utf-8")  # diff reale
+    marker = tmp_path / "PWNED"
+    (tmp_path / ".git" / "config").write_text(
+        '[diff]\n\texternal = /usr/bin/touch ' + str(marker) + '\n',
+        encoding="utf-8")
+    out = _shell({"command": "git diff -- a.txt"}, ctx(tmp_path))
+    assert not marker.exists(), out
+
+
+def test_git_configured_alias_never_runs(tmp_path):
+    _init_repo(tmp_path)
+    marker = tmp_path / "PWNED"
+    (tmp_path / ".git" / "config").write_text(
+        '[alias]\n\tstatus = !/usr/bin/touch ' + str(marker) + '\n',
+        encoding="utf-8")
+    out = _shell({"command": "git status"}, ctx(tmp_path))
+    assert not marker.exists(), out
+
+
+def test_git_textconv_never_runs(tmp_path):
+    import subprocess
+    _init_repo(tmp_path)
+    (tmp_path / "b.bin").write_bytes(b"\x00\x01")
+    subprocess.run(["git", "add", "b.bin"], cwd=tmp_path, check=True,
+                   capture_output=True)
+    subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t",
+                    "commit", "-q", "-m", "b"], cwd=tmp_path, check=True,
+                   capture_output=True)
+    (tmp_path / "b.bin").write_bytes(b"\x00\x02")
+    marker = tmp_path / "PWNED"
+    (tmp_path / ".git" / "config").write_text(
+        '[diff "x"]\n\ttextconv = /usr/bin/touch ' + str(marker) + '\n',
+        encoding="utf-8")
+    (tmp_path / ".gitattributes").write_text("*.bin diff=x\n", encoding="utf-8")
+    out = _shell({"command": "git diff -- b.bin"}, ctx(tmp_path))
+    assert not marker.exists(), out
+
+
+def test_git_hook_never_runs_via_tools(tmp_path):
+    _init_repo(tmp_path)
+    marker = tmp_path / "PWNED"
+    hook = tmp_path / ".git" / "hooks" / "post-checkout"
+    hook.write_text("#!/bin/sh\ntouch " + str(marker) + "\n", encoding="utf-8")
+    hook.chmod(0o755)
+    _shell({"command": "git status"}, ctx(tmp_path))
+    _shell({"command": "git log --oneline"}, ctx(tmp_path))
+    assert not marker.exists()
+
+
+def test_write_file_cannot_touch_git_internals(tmp_path):
+    d, reason = decide(Mode.YOLO, "write_file",
+                       {"path": ".git/config", "content": "x"}, tmp_path)
+    assert d is Decision.DENY
+    d, _ = decide(Mode.YOLO, "write_file",
+                  {"path": ".git/hooks/pre-commit", "content": "x"}, tmp_path)
+    assert d is Decision.DENY
+    out = _shell({"command": "cat .git/config"}, ctx(tmp_path))
+    assert "NON DISPONIBILE" in out or "protetto" in out or "negat" in out.lower()
+
+
+def test_git_works_on_normal_repo(tmp_path):
+    _init_repo(tmp_path)
+    out = _shell({"command": "git status"}, ctx(tmp_path))
+    assert "exit 0" in out
