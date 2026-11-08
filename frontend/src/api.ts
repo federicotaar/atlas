@@ -65,11 +65,25 @@ export async function probeTauriBase(
 
 /** In Tauri senza override esplicito: scopre la porta reale del backend
  * (il launcher puo' averne scelta una di riserva). Chiamata una volta
- * all'avvio prima del render; in caso di fallimento resta il default. */
+ * all'avvio prima del render. Il sidecar impiega secondi ad avviarsi: si
+ * RIPROVA con backoff fino a 60s, altrimenti la prima sonda (backend non
+ * ancora su) inchioderebbe l'app sulla porta di default - dove potrebbe
+ * rispondere un VECCHIO backend incompatibile - con splash infinita.
+ * Passati 60s si renderizza comunque con il default: il launcher mostra
+ * il suo errore (backend-failed) e Auth continua a riprovare. */
 export async function initApiBase(): Promise<void> {
   if (!IS_TAURI || import.meta.env.VITE_API_URL) return;
-  const found = await probeTauriBase(fetch.bind(window), TAURI_PORT_CANDIDATES, MIN_BACKEND_VERSION);
-  if (found) BASE = found;
+  const deadline = Date.now() + 60_000;
+  let delay = 400;
+  while (Date.now() < deadline) {
+    const found = await probeTauriBase(fetch.bind(window), TAURI_PORT_CANDIDATES, MIN_BACKEND_VERSION);
+    if (found) {
+      BASE = found;
+      return;
+    }
+    await new Promise((r) => setTimeout(r, delay));
+    delay = Math.min(delay * 2, 3_000);
+  }
 }
 
 let token: string | null =
