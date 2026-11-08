@@ -47,9 +47,12 @@ bash backend/scripts/build_sidecar.sh   # produce desktop/bin/atlas-backend-<tri
 cd desktop && npx @tauri-apps/cli@2 dev
 ```
 
-La CI (job `desktop`) compila frontend + sidecar + shell Rust e lancia
-l'app in headless (xvfb) verificando che il backend sidecar risponda con
-identita' ATLAS su `/health`.
+La CI (job `desktop`) compila frontend + sidecar + shell Rust, lancia
+l'app pacchettata in headless (xvfb) e verifica end-to-end: bind solo su
+127.0.0.1, modalita' auth `local_password`, registrazione di un profilo
+locale guidata via UI (xdotool), salvataggio e richiamo con citazione via
+UI, riavvio dell'app, nuovo login del profilo esistente via UI e
+persistenza delle memorie (via UI e via `/me/export`).
 
 ## Modalita' Docker (sviluppo/backend-only)
 

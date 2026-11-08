@@ -42,7 +42,32 @@ for i in $(seq 1 30); do
   xdotool search --name 'ATLAS' >/dev/null 2>&1 && break
 done
 sleep 5
+# La finestra post-riavvio va riattivata esplicitamente: su Xvfb nudo
+# altrimenti lo screenshot puo' venire vuoto e il focus non e' nella app.
+xdotool search --name 'ATLAS' | head -1 | xargs -r xdotool windowactivate --sync || true
+sleep 2
 import -window root /tmp/e2e-6-riavvio.png
+# Reopen via UI: login del profilo esistente (form login locale: email ->
+# password -> Entra). Tab 1 porta il focus sul campo email (nessun autoFocus
+# nel form di login), poi i campi in ordine.
+xdotool key Tab
+sleep 1
+xdotool type --delay 30 'e2e@example.com'
+xdotool key Tab
+xdotool type --delay 30 'password-locale-e2e'
+xdotool key Tab Return
+sleep 5
+xdotool search --name 'ATLAS' | head -1 | xargs -r xdotool windowactivate --sync || true
+sleep 1
+import -window root /tmp/e2e-7-relogin.png
+# Dopo il login il composer ha il focus (come nel primo avvio): richiamo
+# della memoria salvata prima del riavvio, questa volta via UI riaperta.
+xdotool type --delay 20 'come si chiama il mio gatto?'
+xdotool key Tab Return
+sleep 5
+xdotool search --name 'ATLAS' | head -1 | xdotool windowactivate --sync 2>/dev/null || true
+sleep 1
+import -window root /tmp/e2e-8-richiamo-relogin.png
 TOKEN=$(curl -s -X POST http://127.0.0.1:8000/auth/login -H 'content-type: application/json' -d '{"email":"e2e@example.com","password":"password-locale-e2e"}' | python3 -c 'import sys,json; print(json.load(sys.stdin)["token"])')
 curl -s http://127.0.0.1:8000/me/export -H "Authorization: Bearer $TOKEN" | tee /tmp/e2e-export.json | grep -i briciola || { echo 'Briciola NON trovata in /me/export:'; cat /tmp/e2e-export.json; exit 1; }
-echo 'E2E UI: registrazione + salvataggio + riavvio + persistenza OK'
+echo 'E2E UI: registrazione + salvataggio + riavvio + relogin UI + persistenza OK'
