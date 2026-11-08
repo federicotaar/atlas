@@ -18,59 +18,59 @@ pixel login: mean=4329.62 stddev=8763.42 size=1280x800
      0x200175 (has no name): ()  1102x785+89+7  +89+7
 
 --- processi app/webkit:
-999         2767  0.0  0.1 223364 19608 ?        Ss   12:18   0:00 postgres: atlas atlas 172.18.0.1(48244) idle
-999         2768  0.0  0.1 223188 17152 ?        Ss   12:18   0:00 postgres: atlas atlas 172.18.0.1(48258) idle
-runner      4422  0.0  0.0   5128  2288 ?        S    12:18   0:00 dbus-run-session -- env WEBKIT_DISABLE_DMABUF_RENDERER=1 WEBKIT_DISABLE_COMPOSITING_MODE=1 NO_AT_BRIDGE=1 GDK_BACKEND=x11 RUST_LOG=info /tmp/squashfs-root/AppRun
-runner      4429  0.8  0.9 74199668 153724 ?     Sl   12:18   0:00 atlas-desktop
-runner      4483  0.2  0.4 73711168 77960 ?      SLl  12:18   0:00 ././/lib/x86_64-linux-gnu/webkit2gtk-4.1/WebKitNetworkProcess 1 13
-runner      4486  1.5  1.1 73794604 180284 ?     SLl  12:18   0:00 ././/lib/x86_64-linux-gnu/webkit2gtk-4.1/WebKitWebProcess 4 13
+999         2960  0.0  0.1 223360 19672 ?        Ss   13:27   0:00 postgres: atlas atlas 172.18.0.1(52854) idle
+999         2961  0.0  0.1 223188 17140 ?        Ss   13:27   0:00 postgres: atlas atlas 172.18.0.1(52862) idle
+runner      4596  0.0  0.0   5128  2336 ?        S    13:27   0:00 dbus-run-session -- env WEBKIT_DISABLE_DMABUF_RENDERER=1 WEBKIT_DISABLE_COMPOSITING_MODE=1 NO_AT_BRIDGE=1 GDK_BACKEND=x11 RUST_LOG=info /tmp/squashfs-root/AppRun
+runner      4604  1.1  0.9 74199668 153668 ?     Sl   13:27   0:00 atlas-desktop
+runner      4658  0.4  0.4 73711168 78376 ?      SLl  13:27   0:00 ././/lib/x86_64-linux-gnu/webkit2gtk-4.1/WebKitNetworkProcess 1 13
+runner      4661  2.1  1.0 73827376 179540 ?     SLl  13:27   0:00 ././/lib/x86_64-linux-gnu/webkit2gtk-4.1/WebKitWebProcess 4 13
 --- memoria:
                total        used        free      shared  buff/cache   available
-Mem:           15983        1245       11777          75        3368       14737
+Mem:           15982        1328       11753          74        3308       14653
 Swap:           3071           0        3071
 --- log app (stdout+stderr):
-dbus-daemon[4424]: [session uid=1001 pid=4424 pidfd=5] Activating service name='org.freedesktop.portal.Desktop' requested by ':1.0' (uid=1001 pid=4434 comm="dbus-send --session --dest=org.freedesktop.portal." label="unconfined")
-dbus-daemon[4424]: [session uid=1001 pid=4424 pidfd=5] Activating service name='org.freedesktop.impl.portal.PermissionStore' requested by ':1.1' (uid=1001 pid=4439 comm="/usr/libexec/xdg-desktop-portal" label="unconfined")
-dbus-daemon[4424]: [session uid=1001 pid=4424 pidfd=5] Successfully activated service 'org.freedesktop.impl.portal.PermissionStore'
-dbus-daemon[4424]: [session uid=1001 pid=4424 pidfd=5] Activating service name='org.freedesktop.portal.Documents' requested by ':1.1' (uid=1001 pid=4439 comm="/usr/libexec/xdg-desktop-portal" label="unconfined")
-dbus-daemon[4424]: [session uid=1001 pid=4424 pidfd=5] Successfully activated service 'org.freedesktop.portal.Documents'
+dbus-daemon[4598]: [session uid=1001 pid=4598 pidfd=5] Activating service name='org.freedesktop.portal.Desktop' requested by ':1.0' (uid=1001 pid=4608 comm="dbus-send --session --dest=org.freedesktop.portal." label="unconfined")
+dbus-daemon[4598]: [session uid=1001 pid=4598 pidfd=5] Activating service name='org.freedesktop.impl.portal.PermissionStore' requested by ':1.1' (uid=1001 pid=4613 comm="/usr/libexec/xdg-desktop-portal" label="unconfined")
+dbus-daemon[4598]: [session uid=1001 pid=4598 pidfd=5] Successfully activated service 'org.freedesktop.impl.portal.PermissionStore'
+dbus-daemon[4598]: [session uid=1001 pid=4598 pidfd=5] Activating service name='org.freedesktop.portal.Documents' requested by ':1.1' (uid=1001 pid=4613 comm="/usr/libexec/xdg-desktop-portal" label="unconfined")
+dbus-daemon[4598]: [session uid=1001 pid=4598 pidfd=5] Successfully activated service 'org.freedesktop.portal.Documents'
 
-(/usr/libexec/xdg-desktop-portal:4439): xdg-desktop-portal-WARNING **: 12:18:54.871: Choosing gtk.portal for org.freedesktop.impl.portal.Lockdown as a last-resort fallback
-dbus-daemon[4424]: [session uid=1001 pid=4424 pidfd=5] Activating service name='org.freedesktop.impl.portal.desktop.gtk' requested by ':1.1' (uid=1001 pid=4439 comm="/usr/libexec/xdg-desktop-portal" label="unconfined")
+(/usr/libexec/xdg-desktop-portal:4613): xdg-desktop-portal-WARNING **: 13:27:42.825: Choosing gtk.portal for org.freedesktop.impl.portal.Lockdown as a last-resort fallback
+dbus-daemon[4598]: [session uid=1001 pid=4598 pidfd=5] Activating service name='org.freedesktop.impl.portal.desktop.gtk' requested by ':1.1' (uid=1001 pid=4613 comm="/usr/libexec/xdg-desktop-portal" label="unconfined")
 
-(xdg-desktop-portal-gtk:4461): dbind-WARNING **: 12:18:55.002: AT-SPI: Error retrieving accessibility bus address: org.freedesktop.DBus.Error.ServiceUnknown: The name org.a11y.Bus was not provided by any .service files
-dbus-daemon[4424]: [session uid=1001 pid=4424 pidfd=5] Successfully activated service 'org.freedesktop.impl.portal.desktop.gtk'
+(xdg-desktop-portal-gtk:4635): dbind-WARNING **: 13:27:43.306: AT-SPI: Error retrieving accessibility bus address: org.freedesktop.DBus.Error.ServiceUnknown: The name org.a11y.Bus was not provided by any .service files
+dbus-daemon[4598]: [session uid=1001 pid=4598 pidfd=5] Successfully activated service 'org.freedesktop.impl.portal.desktop.gtk'
 
-(/usr/libexec/xdg-desktop-portal:4439): xdg-desktop-portal-WARNING **: 12:18:55.007: Choosing gtk.portal for org.freedesktop.impl.portal.Access as a last-resort fallback
+(/usr/libexec/xdg-desktop-portal:4613): xdg-desktop-portal-WARNING **: 13:27:43.318: Choosing gtk.portal for org.freedesktop.impl.portal.Access as a last-resort fallback
 
-(/usr/libexec/xdg-desktop-portal:4439): xdg-desktop-portal-WARNING **: 12:18:55.014: Failed to load RealtimeKit property: GDBus.Error:org.freedesktop.DBus.Error.ServiceUnknown: The name org.freedesktop.RealtimeKit1 was not provided by any .service files
+(/usr/libexec/xdg-desktop-portal:4613): xdg-desktop-portal-WARNING **: 13:27:43.327: Failed to load RealtimeKit property: GDBus.Error:org.freedesktop.DBus.Error.ServiceUnknown: The name org.freedesktop.RealtimeKit1 was not provided by any .service files
 
-(/usr/libexec/xdg-desktop-portal:4439): xdg-desktop-portal-WARNING **: 12:18:55.015: Failed to load RealtimeKit property: GDBus.Error:org.freedesktop.DBus.Error.ServiceUnknown: The name org.freedesktop.RealtimeKit1 was not provided by any .service files
+(/usr/libexec/xdg-desktop-portal:4613): xdg-desktop-portal-WARNING **: 13:27:43.327: Failed to load RealtimeKit property: GDBus.Error:org.freedesktop.DBus.Error.ServiceUnknown: The name org.freedesktop.RealtimeKit1 was not provided by any .service files
 
-(/usr/libexec/xdg-desktop-portal:4439): xdg-desktop-portal-WARNING **: 12:18:55.015: Failed to load RealtimeKit property: GDBus.Error:org.freedesktop.DBus.Error.ServiceUnknown: The name org.freedesktop.RealtimeKit1 was not provided by any .service files
+(/usr/libexec/xdg-desktop-portal:4613): xdg-desktop-portal-WARNING **: 13:27:43.327: Failed to load RealtimeKit property: GDBus.Error:org.freedesktop.DBus.Error.ServiceUnknown: The name org.freedesktop.RealtimeKit1 was not provided by any .service files
 
-(/usr/libexec/xdg-desktop-portal:4439): xdg-desktop-portal-WARNING **: 12:18:55.015: Choosing gtk.portal for org.freedesktop.impl.portal.Settings as a last-resort fallback
+(/usr/libexec/xdg-desktop-portal:4613): xdg-desktop-portal-WARNING **: 13:27:43.327: Choosing gtk.portal for org.freedesktop.impl.portal.Settings as a last-resort fallback
 
-(/usr/libexec/xdg-desktop-portal:4439): xdg-desktop-portal-WARNING **: 12:18:55.015: Choosing gtk.portal for org.freedesktop.impl.portal.FileChooser as a last-resort fallback
+(/usr/libexec/xdg-desktop-portal:4613): xdg-desktop-portal-WARNING **: 13:27:43.328: Choosing gtk.portal for org.freedesktop.impl.portal.FileChooser as a last-resort fallback
 
-(/usr/libexec/xdg-desktop-portal:4439): xdg-desktop-portal-WARNING **: 12:18:55.016: Choosing gtk.portal for org.freedesktop.impl.portal.AppChooser as a last-resort fallback
+(/usr/libexec/xdg-desktop-portal:4613): xdg-desktop-portal-WARNING **: 13:27:43.329: Choosing gtk.portal for org.freedesktop.impl.portal.AppChooser as a last-resort fallback
 
-(/usr/libexec/xdg-desktop-portal:4439): xdg-desktop-portal-WARNING **: 12:18:55.016: Choosing gtk.portal for org.freedesktop.impl.portal.Print as a last-resort fallback
+(/usr/libexec/xdg-desktop-portal:4613): xdg-desktop-portal-WARNING **: 13:27:43.329: Choosing gtk.portal for org.freedesktop.impl.portal.Print as a last-resort fallback
 
-(/usr/libexec/xdg-desktop-portal:4439): xdg-desktop-portal-WARNING **: 12:18:55.016: Choosing gtk.portal for org.freedesktop.impl.portal.Notification as a last-resort fallback
+(/usr/libexec/xdg-desktop-portal:4613): xdg-desktop-portal-WARNING **: 13:27:43.330: Choosing gtk.portal for org.freedesktop.impl.portal.Notification as a last-resort fallback
 
-(/usr/libexec/xdg-desktop-portal:4439): xdg-desktop-portal-WARNING **: 12:18:55.017: Choosing gtk.portal for org.freedesktop.impl.portal.Inhibit as a last-resort fallback
-[W][12:18:55.017886] pw.conf      | [          conf.c: 1182 try_load_conf()] can't load config client.conf: No such file or directory
-[E][12:18:55.017934] pw.conf      | [          conf.c: 1215 pw_conf_load_conf_for_context()] can't load config client.conf: No such file or directory
+(/usr/libexec/xdg-desktop-portal:4613): xdg-desktop-portal-WARNING **: 13:27:43.330: Choosing gtk.portal for org.freedesktop.impl.portal.Inhibit as a last-resort fallback
+[W][13:27:43.331650] pw.conf      | [          conf.c: 1182 try_load_conf()] can't load config client.conf: No such file or directory
+[E][13:27:43.331696] pw.conf      | [          conf.c: 1215 pw_conf_load_conf_for_context()] can't load config client.conf: No such file or directory
 
-(/usr/libexec/xdg-desktop-portal:4439): xdg-desktop-portal-WARNING **: 12:18:55.017: Failed to connect to PipeWire: Couldn't create PipeWire context
+(/usr/libexec/xdg-desktop-portal:4613): xdg-desktop-portal-WARNING **: 13:27:43.331: Failed to connect to PipeWire: Couldn't create PipeWire context
 
-(/usr/libexec/xdg-desktop-portal:4439): xdg-desktop-portal-WARNING **: 12:18:55.017: Choosing gtk.portal for org.freedesktop.impl.portal.Account as a last-resort fallback
+(/usr/libexec/xdg-desktop-portal:4613): xdg-desktop-portal-WARNING **: 13:27:43.331: Choosing gtk.portal for org.freedesktop.impl.portal.Account as a last-resort fallback
 
-(/usr/libexec/xdg-desktop-portal:4439): xdg-desktop-portal-WARNING **: 12:18:55.018: Choosing gtk.portal for org.freedesktop.impl.portal.Email as a last-resort fallback
+(/usr/libexec/xdg-desktop-portal:4613): xdg-desktop-portal-WARNING **: 13:27:43.332: Choosing gtk.portal for org.freedesktop.impl.portal.Email as a last-resort fallback
 
-(/usr/libexec/xdg-desktop-portal:4439): xdg-desktop-portal-WARNING **: 12:18:55.018: Choosing gtk.portal for org.freedesktop.impl.portal.DynamicLauncher as a last-resort fallback
-dbus-daemon[4424]: [session uid=1001 pid=4424 pidfd=5] Successfully activated service 'org.freedesktop.portal.Desktop'
+(/usr/libexec/xdg-desktop-portal:4613): xdg-desktop-portal-WARNING **: 13:27:43.333: Choosing gtk.portal for org.freedesktop.impl.portal.DynamicLauncher as a last-resort fallback
+dbus-daemon[4598]: [session uid=1001 pid=4598 pidfd=5] Successfully activated service 'org.freedesktop.portal.Desktop'
 libEGL warning: DRI3 error: Could not get DRI3 device
 libEGL warning: Ensure your X server supports DRI3 to get accelerated rendering
 --- log openbox:
@@ -94,84 +94,84 @@ schermata cambiata dopo login: si
      0x200175 (has no name): ()  1102x785+89+7  +89+7
 
 --- processi app/webkit:
-999         2767  0.0  0.1 223364 19752 ?        Ss   12:18   0:00 postgres: atlas atlas 172.18.0.1(48244) idle
-999         2768  0.0  0.1 223188 17152 ?        Ss   12:18   0:00 postgres: atlas atlas 172.18.0.1(48258) idle
-runner      4422  0.0  0.0   5128  2288 ?        S    12:18   0:00 dbus-run-session -- env WEBKIT_DISABLE_DMABUF_RENDERER=1 WEBKIT_DISABLE_COMPOSITING_MODE=1 NO_AT_BRIDGE=1 GDK_BACKEND=x11 RUST_LOG=info /tmp/squashfs-root/AppRun
-runner      4429  0.6  0.9 74199668 153956 ?     Sl   12:18   0:00 atlas-desktop
-runner      4483  0.1  0.4 73711200 78356 ?      SLl  12:18   0:00 ././/lib/x86_64-linux-gnu/webkit2gtk-4.1/WebKitNetworkProcess 1 13
-runner      4486  1.4  1.1 73795152 188336 ?     SLl  12:18   0:00 ././/lib/x86_64-linux-gnu/webkit2gtk-4.1/WebKitWebProcess 4 13
-999         4739  0.0  0.1 222600 17328 ?        Ss   12:19   0:00 postgres: atlas atlas 172.18.0.1(59408) idle
+999         2960  0.0  0.1 223360 19816 ?        Ss   13:27   0:00 postgres: atlas atlas 172.18.0.1(52854) idle
+999         2961  0.0  0.1 223188 17140 ?        Ss   13:27   0:00 postgres: atlas atlas 172.18.0.1(52862) idle
+runner      4596  0.0  0.0   5128  2336 ?        S    13:27   0:00 dbus-run-session -- env WEBKIT_DISABLE_DMABUF_RENDERER=1 WEBKIT_DISABLE_COMPOSITING_MODE=1 NO_AT_BRIDGE=1 GDK_BACKEND=x11 RUST_LOG=info /tmp/squashfs-root/AppRun
+runner      4604  0.8  0.9 74199668 153904 ?     Sl   13:27   0:00 atlas-desktop
+runner      4658  0.1  0.4 73711200 78908 ?      SLl  13:27   0:00 ././/lib/x86_64-linux-gnu/webkit2gtk-4.1/WebKitNetworkProcess 1 13
+runner      4661  1.9  1.1 73811484 187640 ?     SLl  13:27   0:00 ././/lib/x86_64-linux-gnu/webkit2gtk-4.1/WebKitWebProcess 4 13
+999         4911  0.0  0.1 222600 17492 ?        Ss   13:28   0:00 postgres: atlas atlas 172.18.0.1(52140) idle
 --- log app (stdout+stderr):
-dbus-daemon[4424]: [session uid=1001 pid=4424 pidfd=5] Activating service name='org.freedesktop.portal.Desktop' requested by ':1.0' (uid=1001 pid=4434 comm="dbus-send --session --dest=org.freedesktop.portal." label="unconfined")
-dbus-daemon[4424]: [session uid=1001 pid=4424 pidfd=5] Activating service name='org.freedesktop.impl.portal.PermissionStore' requested by ':1.1' (uid=1001 pid=4439 comm="/usr/libexec/xdg-desktop-portal" label="unconfined")
-dbus-daemon[4424]: [session uid=1001 pid=4424 pidfd=5] Successfully activated service 'org.freedesktop.impl.portal.PermissionStore'
-dbus-daemon[4424]: [session uid=1001 pid=4424 pidfd=5] Activating service name='org.freedesktop.portal.Documents' requested by ':1.1' (uid=1001 pid=4439 comm="/usr/libexec/xdg-desktop-portal" label="unconfined")
-dbus-daemon[4424]: [session uid=1001 pid=4424 pidfd=5] Successfully activated service 'org.freedesktop.portal.Documents'
+dbus-daemon[4598]: [session uid=1001 pid=4598 pidfd=5] Activating service name='org.freedesktop.portal.Desktop' requested by ':1.0' (uid=1001 pid=4608 comm="dbus-send --session --dest=org.freedesktop.portal." label="unconfined")
+dbus-daemon[4598]: [session uid=1001 pid=4598 pidfd=5] Activating service name='org.freedesktop.impl.portal.PermissionStore' requested by ':1.1' (uid=1001 pid=4613 comm="/usr/libexec/xdg-desktop-portal" label="unconfined")
+dbus-daemon[4598]: [session uid=1001 pid=4598 pidfd=5] Successfully activated service 'org.freedesktop.impl.portal.PermissionStore'
+dbus-daemon[4598]: [session uid=1001 pid=4598 pidfd=5] Activating service name='org.freedesktop.portal.Documents' requested by ':1.1' (uid=1001 pid=4613 comm="/usr/libexec/xdg-desktop-portal" label="unconfined")
+dbus-daemon[4598]: [session uid=1001 pid=4598 pidfd=5] Successfully activated service 'org.freedesktop.portal.Documents'
 
-(/usr/libexec/xdg-desktop-portal:4439): xdg-desktop-portal-WARNING **: 12:18:54.871: Choosing gtk.portal for org.freedesktop.impl.portal.Lockdown as a last-resort fallback
-dbus-daemon[4424]: [session uid=1001 pid=4424 pidfd=5] Activating service name='org.freedesktop.impl.portal.desktop.gtk' requested by ':1.1' (uid=1001 pid=4439 comm="/usr/libexec/xdg-desktop-portal" label="unconfined")
+(/usr/libexec/xdg-desktop-portal:4613): xdg-desktop-portal-WARNING **: 13:27:42.825: Choosing gtk.portal for org.freedesktop.impl.portal.Lockdown as a last-resort fallback
+dbus-daemon[4598]: [session uid=1001 pid=4598 pidfd=5] Activating service name='org.freedesktop.impl.portal.desktop.gtk' requested by ':1.1' (uid=1001 pid=4613 comm="/usr/libexec/xdg-desktop-portal" label="unconfined")
 
-(xdg-desktop-portal-gtk:4461): dbind-WARNING **: 12:18:55.002: AT-SPI: Error retrieving accessibility bus address: org.freedesktop.DBus.Error.ServiceUnknown: The name org.a11y.Bus was not provided by any .service files
-dbus-daemon[4424]: [session uid=1001 pid=4424 pidfd=5] Successfully activated service 'org.freedesktop.impl.portal.desktop.gtk'
+(xdg-desktop-portal-gtk:4635): dbind-WARNING **: 13:27:43.306: AT-SPI: Error retrieving accessibility bus address: org.freedesktop.DBus.Error.ServiceUnknown: The name org.a11y.Bus was not provided by any .service files
+dbus-daemon[4598]: [session uid=1001 pid=4598 pidfd=5] Successfully activated service 'org.freedesktop.impl.portal.desktop.gtk'
 
-(/usr/libexec/xdg-desktop-portal:4439): xdg-desktop-portal-WARNING **: 12:18:55.007: Choosing gtk.portal for org.freedesktop.impl.portal.Access as a last-resort fallback
+(/usr/libexec/xdg-desktop-portal:4613): xdg-desktop-portal-WARNING **: 13:27:43.318: Choosing gtk.portal for org.freedesktop.impl.portal.Access as a last-resort fallback
 
-(/usr/libexec/xdg-desktop-portal:4439): xdg-desktop-portal-WARNING **: 12:18:55.014: Failed to load RealtimeKit property: GDBus.Error:org.freedesktop.DBus.Error.ServiceUnknown: The name org.freedesktop.RealtimeKit1 was not provided by any .service files
+(/usr/libexec/xdg-desktop-portal:4613): xdg-desktop-portal-WARNING **: 13:27:43.327: Failed to load RealtimeKit property: GDBus.Error:org.freedesktop.DBus.Error.ServiceUnknown: The name org.freedesktop.RealtimeKit1 was not provided by any .service files
 
-(/usr/libexec/xdg-desktop-portal:4439): xdg-desktop-portal-WARNING **: 12:18:55.015: Failed to load RealtimeKit property: GDBus.Error:org.freedesktop.DBus.Error.ServiceUnknown: The name org.freedesktop.RealtimeKit1 was not provided by any .service files
+(/usr/libexec/xdg-desktop-portal:4613): xdg-desktop-portal-WARNING **: 13:27:43.327: Failed to load RealtimeKit property: GDBus.Error:org.freedesktop.DBus.Error.ServiceUnknown: The name org.freedesktop.RealtimeKit1 was not provided by any .service files
 
-(/usr/libexec/xdg-desktop-portal:4439): xdg-desktop-portal-WARNING **: 12:18:55.015: Failed to load RealtimeKit property: GDBus.Error:org.freedesktop.DBus.Error.ServiceUnknown: The name org.freedesktop.RealtimeKit1 was not provided by any .service files
+(/usr/libexec/xdg-desktop-portal:4613): xdg-desktop-portal-WARNING **: 13:27:43.327: Failed to load RealtimeKit property: GDBus.Error:org.freedesktop.DBus.Error.ServiceUnknown: The name org.freedesktop.RealtimeKit1 was not provided by any .service files
 
-(/usr/libexec/xdg-desktop-portal:4439): xdg-desktop-portal-WARNING **: 12:18:55.015: Choosing gtk.portal for org.freedesktop.impl.portal.Settings as a last-resort fallback
+(/usr/libexec/xdg-desktop-portal:4613): xdg-desktop-portal-WARNING **: 13:27:43.327: Choosing gtk.portal for org.freedesktop.impl.portal.Settings as a last-resort fallback
 
-(/usr/libexec/xdg-desktop-portal:4439): xdg-desktop-portal-WARNING **: 12:18:55.015: Choosing gtk.portal for org.freedesktop.impl.portal.FileChooser as a last-resort fallback
+(/usr/libexec/xdg-desktop-portal:4613): xdg-desktop-portal-WARNING **: 13:27:43.328: Choosing gtk.portal for org.freedesktop.impl.portal.FileChooser as a last-resort fallback
 
-(/usr/libexec/xdg-desktop-portal:4439): xdg-desktop-portal-WARNING **: 12:18:55.016: Choosing gtk.portal for org.freedesktop.impl.portal.AppChooser as a last-resort fallback
+(/usr/libexec/xdg-desktop-portal:4613): xdg-desktop-portal-WARNING **: 13:27:43.329: Choosing gtk.portal for org.freedesktop.impl.portal.AppChooser as a last-resort fallback
 
-(/usr/libexec/xdg-desktop-portal:4439): xdg-desktop-portal-WARNING **: 12:18:55.016: Choosing gtk.portal for org.freedesktop.impl.portal.Print as a last-resort fallback
+(/usr/libexec/xdg-desktop-portal:4613): xdg-desktop-portal-WARNING **: 13:27:43.329: Choosing gtk.portal for org.freedesktop.impl.portal.Print as a last-resort fallback
 
-(/usr/libexec/xdg-desktop-portal:4439): xdg-desktop-portal-WARNING **: 12:18:55.016: Choosing gtk.portal for org.freedesktop.impl.portal.Notification as a last-resort fallback
+(/usr/libexec/xdg-desktop-portal:4613): xdg-desktop-portal-WARNING **: 13:27:43.330: Choosing gtk.portal for org.freedesktop.impl.portal.Notification as a last-resort fallback
 
-(/usr/libexec/xdg-desktop-portal:4439): xdg-desktop-portal-WARNING **: 12:18:55.017: Choosing gtk.portal for org.freedesktop.impl.portal.Inhibit as a last-resort fallback
-[W][12:18:55.017886] pw.conf      | [          conf.c: 1182 try_load_conf()] can't load config client.conf: No such file or directory
-[E][12:18:55.017934] pw.conf      | [          conf.c: 1215 pw_conf_load_conf_for_context()] can't load config client.conf: No such file or directory
+(/usr/libexec/xdg-desktop-portal:4613): xdg-desktop-portal-WARNING **: 13:27:43.330: Choosing gtk.portal for org.freedesktop.impl.portal.Inhibit as a last-resort fallback
+[W][13:27:43.331650] pw.conf      | [          conf.c: 1182 try_load_conf()] can't load config client.conf: No such file or directory
+[E][13:27:43.331696] pw.conf      | [          conf.c: 1215 pw_conf_load_conf_for_context()] can't load config client.conf: No such file or directory
 
-(/usr/libexec/xdg-desktop-portal:4439): xdg-desktop-portal-WARNING **: 12:18:55.017: Failed to connect to PipeWire: Couldn't create PipeWire context
+(/usr/libexec/xdg-desktop-portal:4613): xdg-desktop-portal-WARNING **: 13:27:43.331: Failed to connect to PipeWire: Couldn't create PipeWire context
 
-(/usr/libexec/xdg-desktop-portal:4439): xdg-desktop-portal-WARNING **: 12:18:55.017: Choosing gtk.portal for org.freedesktop.impl.portal.Account as a last-resort fallback
+(/usr/libexec/xdg-desktop-portal:4613): xdg-desktop-portal-WARNING **: 13:27:43.331: Choosing gtk.portal for org.freedesktop.impl.portal.Account as a last-resort fallback
 
-(/usr/libexec/xdg-desktop-portal:4439): xdg-desktop-portal-WARNING **: 12:18:55.018: Choosing gtk.portal for org.freedesktop.impl.portal.Email as a last-resort fallback
+(/usr/libexec/xdg-desktop-portal:4613): xdg-desktop-portal-WARNING **: 13:27:43.332: Choosing gtk.portal for org.freedesktop.impl.portal.Email as a last-resort fallback
 
-(/usr/libexec/xdg-desktop-portal:4439): xdg-desktop-portal-WARNING **: 12:18:55.018: Choosing gtk.portal for org.freedesktop.impl.portal.DynamicLauncher as a last-resort fallback
-dbus-daemon[4424]: [session uid=1001 pid=4424 pidfd=5] Successfully activated service 'org.freedesktop.portal.Desktop'
+(/usr/libexec/xdg-desktop-portal:4613): xdg-desktop-portal-WARNING **: 13:27:43.333: Choosing gtk.portal for org.freedesktop.impl.portal.DynamicLauncher as a last-resort fallback
+dbus-daemon[4598]: [session uid=1001 pid=4598 pidfd=5] Successfully activated service 'org.freedesktop.portal.Desktop'
 libEGL warning: DRI3 error: Could not get DRI3 device
 libEGL warning: Ensure your X server supports DRI3 to get accelerated rendering
 --- log backend (ultime 30 righe):
-INFO:     Started server process [2756]
+INFO:     Started server process [2950]
 INFO:     Waiting for application startup.
 INFO:     Application startup complete.
 INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
-INFO:     127.0.0.1:51212 - "GET /health HTTP/1.1" 200 OK
-INFO:     127.0.0.1:51218 - "GET /health HTTP/1.1" 200 OK
-INFO:     127.0.0.1:51224 - "POST /auth/codes/request HTTP/1.1" 200 OK
-INFO:     127.0.0.1:51226 - "POST /auth/codes/check HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51600 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51612 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51622 - "POST /auth/codes/request HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51634 - "POST /auth/codes/check HTTP/1.1" 200 OK
 /opt/hostedtoolcache/Python/3.12.16/x64/lib/python3.12/site-packages/jwt/api_jwt.py:149: InsecureKeyLengthWarning: The HMAC key is 16 bytes long, which is below the minimum recommended length of 32 bytes for SHA256. See RFC 7518 Section 3.2.
   return self._jws.encode(
-INFO:     127.0.0.1:51234 - "POST /auth/register HTTP/1.1" 201 Created
-INFO:     127.0.0.1:51244 - "OPTIONS /me/export HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51640 - "POST /auth/register HTTP/1.1" 201 Created
+INFO:     127.0.0.1:51644 - "OPTIONS /me/export HTTP/1.1" 200 OK
 /opt/hostedtoolcache/Python/3.12.16/x64/lib/python3.12/site-packages/jwt/api_jwt.py:370: InsecureKeyLengthWarning: The HMAC key is 16 bytes long, which is below the minimum recommended length of 32 bytes for SHA256. See RFC 7518 Section 3.2.
   decoded = self.decode_complete(
-INFO:     127.0.0.1:51248 - "GET /me/export HTTP/1.1" 200 OK
-INFO:     127.0.0.1:51252 - "GET /me/export HTTP/1.1" 200 OK
-INFO:     127.0.0.1:57724 - "GET /health HTTP/1.1" 200 OK
-INFO:     127.0.0.1:57730 - "GET /health HTTP/1.1" 200 OK
-INFO:     127.0.0.1:57730 - "OPTIONS /auth/modes HTTP/1.1" 200 OK
-INFO:     127.0.0.1:57730 - "GET /auth/modes HTTP/1.1" 200 OK
-INFO:     127.0.0.1:37404 - "OPTIONS /auth/login HTTP/1.1" 200 OK
-INFO:     127.0.0.1:37408 - "POST /auth/login HTTP/1.1" 200 OK
-INFO:     127.0.0.1:37408 - "OPTIONS /setup/migration-status HTTP/1.1" 200 OK
-INFO:     127.0.0.1:37404 - "OPTIONS /settings/model HTTP/1.1" 200 OK
-INFO:     127.0.0.1:37408 - "GET /setup/migration-status HTTP/1.1" 200 OK
-INFO:     127.0.0.1:37404 - "GET /settings/model HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51656 - "GET /me/export HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51664 - "GET /me/export HTTP/1.1" 200 OK
+INFO:     127.0.0.1:48108 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:48122 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:48122 - "OPTIONS /auth/modes HTTP/1.1" 200 OK
+INFO:     127.0.0.1:48122 - "GET /auth/modes HTTP/1.1" 200 OK
+INFO:     127.0.0.1:39802 - "OPTIONS /auth/login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:39816 - "POST /auth/login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:39816 - "OPTIONS /setup/migration-status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:39802 - "OPTIONS /settings/model HTTP/1.1" 200 OK
+INFO:     127.0.0.1:39816 - "GET /setup/migration-status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:39802 - "GET /settings/model HTTP/1.1" 200 OK
 --- log openbox:
 Openbox-Message: Unable to find a valid menu file "/var/lib/openbox/debian-menu.xml"
