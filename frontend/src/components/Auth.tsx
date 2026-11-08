@@ -5,7 +5,7 @@ type Mode = "login" | "register";
 type LoginMethod = null | "password" | "code";
 type RegisterStep = "email" | "code" | "password";
 
-export default function Auth({ onLogin }: { onLogin: () => void }) {
+export default function Auth({ onLogin, sessionNotice }: { onLogin: () => void; sessionNotice?: string | null }) {
   const [mode, setMode] = useState<Mode>("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -166,6 +166,7 @@ export default function Auth({ onLogin }: { onLogin: () => void }) {
         <img src="/atlas-logo.png" alt="ATLAS" className="auth-logo" />
         <h1 className="auth-title">ATLAS</h1>
         <p className="auth-sub">Ricorda, ragiona e prevede.</p>
+        {sessionNotice && <p className="auth-note" role="alert">{sessionNotice}</p>}
 
         {mode === "login" && method === null && !local && (
           <div className="auth">
