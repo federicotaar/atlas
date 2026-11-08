@@ -63,26 +63,50 @@ export async function probeTauriBase(
   return null;
 }
 
-/** In Tauri senza override esplicito: scopre IN BACKGROUND la porta reale
- * del backend (il launcher puo' averne scelta una di riserva) e aggiorna
- * BASE appena la trova. Mai una finestra a tempo: il sidecar puo' impiegare
- * anche un minuto ad avviarsi e una scadenza inchioderebbe l'app sulla
- * porta di default, dove potrebbe rispondere un VECCHIO backend
- * incompatibile (splash infinita). Il render non aspetta la scoperta:
- * Auth mostra "Avvio in corso..." e riprova /auth/modes; quando BASE
- * cambia, il tentativo successivo va a buon fine. */
+/** In Tauri senza override esplicito, NESSUNA richiesta API parte prima
+ * che la scoperta abbia scelto un backend compatibile (>= 2.1.1): altrimenti
+ * /auth/modes, register o le memorie potrebbero finire contro un VECCHIO
+ * backend sulla porta di default. Il render non aspetta la scoperta: Auth
+ * mostra "Avvio in corso..." mentre req() resta in attesa sul gate. La
+ * scoperta ha un limite di 120s (il launcher stesso dichiara fallimento a
+ * 30s): se nessun backend compatibile risponde, le richieste falliscono con
+ * un errore esplicito e Auth mostra il messaggio con un tasto Riprova
+ * invece di una scoperta silenziosa infinita. Una volta risolta, BASE non
+ * cambia piu': nessun salto tra istanze compatibili dopo l'avvio. */
+const DISCOVERY_TIMEOUT_MS = 120_000;
+
+let discoveryGate: Promise<void> | null = null;
+let discoveryFailed = false;
+
+/** true se la scoperta del backend e' fallita oltre il limite (errore
+ * terminale: mostrare un messaggio, non riprovare in silenzio). */
+export function apiDiscoveryFailed(): boolean {
+  return discoveryFailed;
+}
+
 export async function initApiBase(): Promise<void> {
   if (!IS_TAURI || import.meta.env.VITE_API_URL) return;
+  discoveryFailed = false;
+  let resolveGate!: () => void;
+  let rejectGate!: (e: Error) => void;
+  discoveryGate = new Promise<void>((res, rej) => {
+    resolveGate = res;
+    rejectGate = rej;
+  });
+  const deadline = Date.now() + DISCOVERY_TIMEOUT_MS;
   let delay = 400;
-  for (;;) {
+  while (Date.now() < deadline) {
     const found = await probeTauriBase(fetch.bind(window), TAURI_PORT_CANDIDATES, MIN_BACKEND_VERSION);
     if (found) {
       BASE = found;
+      resolveGate();
       return;
     }
     await new Promise((r) => setTimeout(r, delay));
     delay = Math.min(delay * 2, 3_000);
   }
+  discoveryFailed = true;
+  rejectGate(new Error("backend ATLAS non trovato entro il tempo previsto"));
 }
 
 let token: string | null =
@@ -99,6 +123,9 @@ export function hasToken() {
 }
 
 async function req<T>(path: string, options: RequestInit = {}): Promise<T> {
+  // In Tauri attende che la scoperta abbia selezionato un backend
+  // compatibile: nessuna richiesta raggiunge mai un vecchio server.
+  if (discoveryGate) await discoveryGate;
   const res = await fetch(`${BASE}${path}`, {
     ...options,
     headers: {

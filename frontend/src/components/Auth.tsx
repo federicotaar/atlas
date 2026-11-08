@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, setToken } from "../api";
+import { api, apiDiscoveryFailed, initApiBase, setToken } from "../api";
 
 type Mode = "login" | "register";
 type LoginMethod = null | "password" | "code";
@@ -22,6 +22,9 @@ export default function Auth({ onLogin }: { onLogin: () => void }) {
   // finche' non risponde, altrimenti la prima schermata mostrerebbe scelte
   // sbagliate (es. codice email su installazione locale).
   const [modes, setModes] = useState<string[] | null>(null);
+  // Errore terminale di avvio (backend non trovato oltre il limite): messaggio
+  // esplicito con Riprova invece di una splash silenziosa infinita.
+  const [fatal, setFatal] = useState<string | null>(null);
   const local = modes?.includes("local_password") ?? false;
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -35,7 +38,16 @@ export default function Auth({ onLogin }: { onLogin: () => void }) {
           if (alive) setModes(r.modes);
         })
         .catch(() => {
-          if (alive) setTimeout(load, 1000);
+          if (!alive) return;
+          // Il gate di scoperta ha fallito in via definitiva: fermare il
+          // retry silenzioso e mostrare l'errore con un tasto Riprova.
+          if (apiDiscoveryFailed()) {
+            setFatal(
+              "Il backend locale non e' stato trovato. Chiudi e riapri ATLAS; se il problema continua, riavvia il computer.",
+            );
+            return;
+          }
+          setTimeout(load, 1000);
         });
     };
     load();
@@ -123,7 +135,26 @@ export default function Auth({ onLogin }: { onLogin: () => void }) {
         <div className="auth-card">
           <img src="/atlas-logo.png" alt="ATLAS" className="auth-logo" />
           <h1 className="auth-title">ATLAS</h1>
-          <p className="auth-sub">Avvio in corso…</p>
+          {fatal ? (
+            <>
+              <p className="auth-sub">{fatal}</p>
+              <button
+                className="auth-btn"
+                onClick={() => {
+                  setFatal(null);
+                  initApiBase().catch(() => {});
+                  api
+                    .modes()
+                    .then((r) => setModes(r.modes))
+                    .catch(() => setFatal(fatal));
+                }}
+              >
+                Riprova
+              </button>
+            </>
+          ) : (
+            <p className="auth-sub">Avvio in corso…</p>
+          )}
         </div>
       </div>
     );

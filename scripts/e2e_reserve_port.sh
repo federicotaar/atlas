@@ -31,6 +31,7 @@ Xvfb :98 -screen 0 1280x800x24 > /tmp/xvfb98.log 2>&1 &
 sleep 2
 DISPLAY=:98 openbox > /tmp/openbox98.log 2>&1 &
 sleep 2
+echo "T_app_launch $(date +%T.%3N)"
 DISPLAY=:98 ./desktop/target/release/atlas-desktop > /tmp/atlas-reserve.log 2>&1 &
 
 ok=0
@@ -43,9 +44,11 @@ for i in $(seq 1 90); do
 done
 if [ "$ok" != 1 ]; then
   echo 'FALLITO: backend NON avviato sulla porta di riserva 8100' >&2
+  echo "T_fail $(date +%T.%3N)" >&2
   tail -40 /tmp/atlas-reserve.log >&2 || true
   exit 1
 fi
+echo "T_sidecar_health_ok $(date +%T.%3N)"
 echo "backend di riserva attivo: $BODY"
 
 # --- la vecchia API resta viva e intoccata ----------------------------------
@@ -104,6 +107,8 @@ shot /tmp/reserve-2-login.png
 # il frontend sta parlando col backend di riserva su 8100.
 ocr_has /tmp/reserve-2-login.png 'Esci' || {
   echo 'E2E riserva: registrazione NON riuscita (frontend NON connesso al backend di riserva?)' >&2
+  echo "T_ui_fail $(date +%T.%3N)" >&2
+  tail -40 /tmp/atlas-reserve.log >&2 || true
   exit 1
 }
 echo 'registrazione via UI OK: frontend connesso al backend di riserva'
