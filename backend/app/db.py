@@ -36,7 +36,11 @@ def get_engine():
 
             dbapi_conn.execute("PRAGMA journal_mode=WAL")
             dbapi_conn.execute("PRAGMA foreign_keys=ON")
+            # Alcuni build di sqlite3 richiedono l'autorizzazione esplicita
+            # prima di load_extension (senza, OperationalError "not authorized").
+            dbapi_conn.enable_load_extension(True)
             sqlite_vec.load(dbapi_conn)
+            dbapi_conn.enable_load_extension(False)
 
         with engine.begin() as conn:
             from .models import Base
