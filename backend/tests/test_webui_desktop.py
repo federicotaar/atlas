@@ -18,20 +18,36 @@ class FakeSpec:
     api_key_env = "ATLAS_TEST_KEY"
 
 
+class FakeSpecDisabled:
+    type = "fake"
+    requires_key = True
+    api_key_env = "ATLAS_TEST_KEY2"
+    enabled = False
+
+
 class FakeRegistryForConfig:
     def __init__(self):
-        self._order = ["fake"]
+        self._order = ["fake", "cloud"]
+        self._enabled_overrides = {}
 
     def spec(self, name):
-        if name != "fake":
-            raise KeyError(name)
-        return FakeSpec()
+        if name == "fake":
+            return FakeSpec()
+        if name == "cloud":
+            return FakeSpecDisabled()
+        raise KeyError(name)
+
+    def set_enabled(self, name, enabled=True):
+        self.spec(name)
+        self._enabled_overrides[name] = enabled
 
     def usable(self, name):
-        self.spec(name)
-        if os.environ.get("ATLAS_TEST_KEY"):
+        spec = self.spec(name)
+        if not self._enabled_overrides.get(name, getattr(spec, "enabled", True)):
+            return False, "disabilitato in config"
+        if os.environ.get(spec.api_key_env):
             return True, ""
-        return False, "chiave mancante (ATLAS_TEST_KEY non impostata)"
+        return False, f"chiave mancante ({spec.api_key_env} non impostata)"
 
     def current_model(self, name):
         return "fake-1"
@@ -147,3 +163,30 @@ def test_provider_choice_persisted(tmp_path, monkeypatch):
     load_dotenv(tmp_path / ".env")
     assert os.environ.get("ATLAS_PROVIDER") == "fake"
     assert os.environ.get("ATLAS_TEST_KEY") == "sk-live-abcdefgh"
+
+
+def test_enable_disabled_provider_with_key(tmp_path, monkeypatch):
+    """Un provider disabilitato nel YAML si attiva dalla pagina quando si
+    salva la chiave: override runtime + persistenza, YAML mai toccato."""
+    monkeypatch.delenv("ATLAS_TEST_KEY2", raising=False)
+    config, state = make_config(tmp_path)
+    refused = config.set_provider("cloud")  # senza chiave resta disabilitato
+    assert refused["ok"] is False and "disabilitato" in refused["error"]
+    ok = config.set_provider("cloud", "sk-cloud-xyz123")
+    assert ok == {"ok": True, "active": "cloud"}
+    env_text = (tmp_path / ".env").read_text()
+    assert "ATLAS_ENABLED_PROVIDERS=cloud" in env_text
+    assert "ATLAS_PROVIDER=cloud" in env_text
+    assert "sk-cloud-xyz123" not in config.info().__repr__()
+
+
+def test_page_escapes_model_html_and_renders_markdown(tmp_path):
+    """La pagina fa SEMPRE escape dell'HTML del modello e applica solo
+   **grassetto** e `codice` generati da lei: niente HTML grezzo."""
+    session, _store = make_session(tmp_path, [])
+    from fastapi.testclient import TestClient
+    page = TestClient(create_app(session)).get("/").text
+    assert "function esc(s)" in page and "function md(s)" in page
+    assert "d.innerHTML = md(text)" in page
+    assert "d.textContent = text" not in page
+    assert "<strong>" not in page.split("function md")[0]  # niente markup atteso nel chrome
