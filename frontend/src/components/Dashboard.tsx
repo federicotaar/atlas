@@ -119,7 +119,10 @@ export default function Dashboard({ onRelogin }: { onRelogin: () => void }) {
           stessa superficie della web UI, servita dal backend di questa
           installazione.
         </div>
-        <a className="ghost" href={`${apiBase()}/agent/`} target="_blank" rel="noreferrer">
+        {/* Stessa finestra: target=_blank e' un no-op nel webview Tauri
+            (provato dal click-through E2E in CI). La pagina agente offre
+            "indietro" (history.back) per tornare alla dashboard. */}
+        <a className="ghost" href={`${apiBase()}/agent/`}>
           Apri l'agente
         </a>
       </Section>
