@@ -26,6 +26,27 @@ previsioni che stima con intervalli e registra l'esito reale alla data di
 verifica. Tutto gira in locale: nessuna chiamata a pagamento, nessun dato che
 esce dalla macchina senza permesso.
 
+## Agente locale (CLI)
+
+L'agente con provider LLM intercambiabili (spec `Local Agent`, stage 1 di 14):
+un'astrazione unica `LLMProvider`, configurazione in `config/providers.yaml`,
+chiavi API solo in `.env`, fallback automatico al provider successivo se
+quello attivo fallisce o va in rate limit.
+
+Setup da checkout pulito:
+
+1. **Dipendenze Python** (3.12+): `pip install httpx pyyaml`
+2. **Ollama**: installa da <https://ollama.com/download>, poi scarica un modello:
+   `ollama pull llama3.2:3b`
+3. **Avvio**: `python main.py` dal root del repo. La CLI risponde in streaming.
+
+Comandi: `/model list` (provider configurati e modelli disponibili),
+`/model use <nome[:modello]>` (cambio a runtime), `/help`, `/quit`.
+
+Per Ollama cloud: togli `enabled: false` in `config/providers.yaml` e metti
+`OLLAMA_API_KEY` in `.env` (vedi `.env.example`). Le chiavi non finiscono mai
+nel codice, nei log o nei messaggi.
+
 ## Cosa fa oggi
 
 - **Memoria verificabile**: fonti, confidenza, date, sostituzioni invece di sovrascritture; rilevamento di contraddizioni.
