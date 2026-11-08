@@ -74,6 +74,11 @@ ATLAS <span id="st">pronto</span>
  style="flex:1;background:#0d1117;border:1px solid #30363d;border-radius:8px;color:#e6edf3;padding:8px;font:inherit">
 <button id="cfgsave">salva e usa</button>
 </div>
+<div style="display:flex;gap:8px;margin-top:8px">
+<input id="cfgmodel" placeholder="modello (es. llama3.2:3b)"
+ style="flex:1;background:#0d1117;border:1px solid #30363d;border-radius:8px;color:#e6edf3;padding:8px;font:inherit">
+<button id="cfgmodelsave">imposta modello</button>
+</div>
 <div id="cfgmsg" class="muted" style="margin-top:6px"></div>
 </div>
 <div id="log"></div>
@@ -149,6 +154,8 @@ async function cfgLoad(){
     row.textContent = sel + p.name + ' (' + p.model + ') - ' + key + (p.usable ? '' : ' [' + p.reason + ']');
     row.style.cursor = 'pointer'; row.style.padding = '3px 0';
     row.onclick = () => { cfgProvider = p.name;
+      document.getElementById('cfgmodel').value = p.model;
+      document.getElementById('cfgmodel').focus();
       document.getElementById('cfgmsg').textContent = 'selezionato: ' + p.name; };
     list.appendChild(row);
   }
@@ -169,6 +176,17 @@ document.getElementById('cfgsave').onclick = async () => {
   document.getElementById('cfgmsg').textContent = s.ok ?
     'provider attivo: ' + s.active : ('errore: ' + s.error);
   document.getElementById('cfgkey').value = '';
+  cfgLoad();
+};
+document.getElementById('cfgmodelsave').onclick = async () => {
+  if (!cfgProvider) return;
+  const model = document.getElementById('cfgmodel').value;
+  const r = await fetch('api/config/model', {method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({name:cfgProvider, model:model})});
+  const s = await r.json();
+  document.getElementById('cfgmsg').textContent = s.ok ?
+    'modello impostato: ' + s.name + ' = ' + s.model : ('errore: ' + s.error);
   cfgLoad();
 };
 </script></body></html>"""
@@ -333,6 +351,11 @@ class ProviderIn(BaseModel):
     api_key: str = ""
 
 
+class ModelIn(BaseModel):
+    name: str
+    model: str
+
+
 class AgentAlreadyRunning(RuntimeError):
     """Lo stack agente su questo workspace e' gia' attivo in un altro
     processo (CLI, web UI o app desktop): una sola istanza alla volta."""
@@ -428,6 +451,31 @@ class ConfigAPI:
         os.environ["ATLAS_PROVIDER"] = name
         return {"ok": True, "active": name}
 
+    def set_model(self, name: str, model: str) -> dict:
+        """Modello custom per un provider (es. tag Ollama): runtime +
+        persistenza in ATLAS_MODELS nel .env del workspace, riapplicato al
+        boot. Il YAML non si tocca."""
+        model = (model or "").strip()
+        if not model:
+            return {"ok": False, "error": "modello vuoto"}
+        if "=" in model or "," in model:
+            return {"ok": False, "error": "modello non valido"}
+        try:
+            self._registry.spec(name)
+        except Exception:
+            return {"ok": False, "error": f"provider sconosciuto: {name}"}
+        self._registry.set_model(name, model)
+        models: dict[str, str] = {}
+        for pair in os.environ.get("ATLAS_MODELS", "").split(","):
+            if "=" in pair:
+                n, m = pair.split("=", 1)
+                models[n] = m
+        models[name] = model
+        value = ",".join(f"{n}={m}" for n, m in sorted(models.items()))
+        self._persist_key("ATLAS_MODELS", value)
+        os.environ["ATLAS_MODELS"] = value
+        return {"ok": True, "name": name, "model": model}
+
     def _persist_key(self, env_name: str, value: str) -> None:
         env_path = self._workspace / ".env"
         lines = env_path.read_text().splitlines() if env_path.exists() else []
@@ -476,6 +524,10 @@ def create_app(session: WebUISession, config: "ConfigAPI | None" = None):
         @app.post("/api/config/provider")
         async def config_provider(body: ProviderIn):
             return config.set_provider(body.name, body.api_key or None)
+
+        @app.post("/api/config/model")
+        async def config_model(body: ModelIn):
+            return config.set_model(body.name, body.model)
 
     return app
 
