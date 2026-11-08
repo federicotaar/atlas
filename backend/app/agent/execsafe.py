@@ -129,7 +129,9 @@ def validate(command: str, workspace: Path, resolve, is_protected) -> Validation
                 ok=False,
                 reason="git diff senza pathspec esplicito non disponibile: "
                        "mostrerebbe anche file protetti")
-        rest = ["--no-pager", *rest]  # mai pager esterni
+        # --no-pager: mai pager esterni. -c safe.directory=*: config di sistema,
+        # globale e locale sono neutralizzate via ambiente (vedi tools._shell),
+        # quindi qui resta solo il nostro flag fidato.
 
     dangerous = DANGEROUS_FLAGS.get(exe_name, frozenset())
     for token in rest:
@@ -168,4 +170,6 @@ def validate(command: str, workspace: Path, resolve, is_protected) -> Validation
                 ok=False, reason=f"percorso protetto ({target.name}): negato sempre")
         if not inside:
             outside.append(str(target))
+    if exe_name == "git":
+        rest = ["-c", "safe.directory=*", "--no-pager", *rest]
     return Validation(ok=True, argv=[str(real), *rest], outside_paths=outside)
