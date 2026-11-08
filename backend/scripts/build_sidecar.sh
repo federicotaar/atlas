@@ -20,6 +20,7 @@ pyinstaller --onefile --name "atlas-backend-${TARGET}" \
   --paths . \
   --hidden-import sqlite_vec \
   --collect-all sqlite_vec \
+  --collect-submodules app \
   desktop_main.py
 mkdir -p ../desktop/bin
 mv "dist/atlas-backend-${TARGET}"* ../desktop/bin/
