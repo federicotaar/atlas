@@ -129,3 +129,21 @@ def test_agent_lock_recycles_stale_pid(tmp_path):
     lock.acquire()  # lock stale riciclato senza errore
     assert (tmp_path / "agent.lock").read_text() == str(os.getpid())
     lock.release()
+
+
+def test_provider_choice_persisted(tmp_path, monkeypatch):
+    """Il provider scelto finisce in .env (ATLAS_PROVIDER) e sopravvive
+    a un nuovo ConfigAPI (simula riavvio), senza mai esporre la chiave."""
+    monkeypatch.delenv("ATLAS_TEST_KEY", raising=False)
+    monkeypatch.delenv("ATLAS_PROVIDER", raising=False)
+    config, state = make_config(tmp_path)
+    config.set_provider("fake", "sk-live-abcdefgh")
+    text = (tmp_path / ".env").read_text()
+    assert "ATLAS_PROVIDER=fake" in text
+    assert os.environ["ATLAS_PROVIDER"] == "fake"
+    # riavvio: il .env e' la fonte
+    monkeypatch.delenv("ATLAS_PROVIDER", raising=False)
+    from app.providers.registry import load_dotenv
+    load_dotenv(tmp_path / ".env")
+    assert os.environ.get("ATLAS_PROVIDER") == "fake"
+    assert os.environ.get("ATLAS_TEST_KEY") == "sk-live-abcdefgh"
