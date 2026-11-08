@@ -140,10 +140,16 @@ echo "$PROBE" | grep -qi 'atlas:atlas@' && {
 pkill -f 'target/release/atlas-desktop' || true
 pkill -f 'WebKitWebProcess' || true
 pkill -f 'WebKitNetworkProcess' || true
+# Anche il sidecar: altrimenti resta orfano con la porta di riserva occupata.
+pkill -f 'atlas-backend' || true
 kill $MPID 2>/dev/null || true
-for i in $(seq 1 15); do
+for i in $(seq 1 30); do
   sleep 1
   curl -s http://127.0.0.1:8000/health >/dev/null 2>&1 || break
+done
+for i in $(seq 1 30); do
+  sleep 1
+  ss -ltn | grep -q ':8100' || break
 done
 if ss -ltn | grep -q ':8000'; then
   echo 'porta 8000 ancora occupata dopo pulizia' >&2
@@ -151,6 +157,7 @@ if ss -ltn | grep -q ':8000'; then
 fi
 if ss -ltn | grep -q ':8100'; then
   echo 'porta 8100 ancora occupata dopo pulizia' >&2
+  ps aux | grep -i 'atlas-backend' | grep -v grep >&2 || true
   exit 1
 fi
 echo 'E2E porta di riserva: OK (8100 usata, vecchia API intoccata, UI connessa, import visibile, probe onesto)'
