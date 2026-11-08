@@ -58,6 +58,19 @@ PROMPT_TEMPLATE = (
     "Memorie:\n{context}\n\nDomanda: {question}\nRisposta:"
 )
 
+# Chat generale: il provider scelto risponde anche senza memorie pertinenti
+# (le memorie aiutano la risposta, non decidono se rispondere). Onesta':
+# niente fatti inventati sull'utente; se chiede delle sue memorie e non ne
+# arrivano, il modello lo dice invece di fingere di ricordare.
+GENERAL_PROMPT_TEMPLATE = (
+    "Sei ATLAS, l'assistente personale dell'utente: rispondi in italiano, "
+    "naturale e conciso. In questa risposta NON ti arriva nessuna memoria "
+    "salvata: non inventare fatti sulla vita o sui dati dell'utente. Se la "
+    "domanda riguarda cose che l'utente potrebbe averti detto in passato, "
+    "spiega che non trovi memorie pertinenti e invitalo a ricordartele.\n\n"
+    "Messaggio: {question}\nRisposta:"
+)
+
 
 # Tetto alla lunghezza della risposta: senza, un modello che non si ferma
 # tiene la richiesta appesa fino al timeout e la chat sembra bloccata.
@@ -73,7 +86,18 @@ def chat_completion(provider: str, model: str, base_url: str, api_key: str,
                     question: str, memories: list[dict], timeout: float) -> str:
     """Una sola chiamata chat verso il provider scelto. Rilancia ModelUnavailable
     su errore di rete/provider; la chiave non finisce mai nel messaggio d'errore."""
-    prompt = _prompt(question, memories)
+    return _chat(provider, model, base_url, api_key, _prompt(question, memories), timeout)
+
+
+def chat_general(provider: str, model: str, base_url: str, api_key: str,
+                 question: str, timeout: float) -> str:
+    """Risposta di chat generale senza memorie: stesso provider, prompt onesto."""
+    return _chat(provider, model, base_url, api_key,
+                 GENERAL_PROMPT_TEMPLATE.format(question=question), timeout)
+
+
+def _chat(provider: str, model: str, base_url: str, api_key: str,
+          prompt: str, timeout: float) -> str:
     try:
         if provider in ("ollama_local", "ollama_cloud"):
             base = OLLAMA_CLOUD_BASE if provider == "ollama_cloud" else base_url.rstrip("/")
@@ -170,6 +194,10 @@ class UserGenerator:
     def answer(self, question: str, memories: list[dict]) -> str:
         return chat_completion(self.provider, self.model, self.base_url, self.api_key,
                                question, memories, self.timeout)
+
+    def answer_general(self, question: str) -> str:
+        return chat_general(self.provider, self.model, self.base_url, self.api_key,
+                            question, self.timeout)
 
 
 def get_pref(db: Session, user_id) -> UserModelSetting | None:
