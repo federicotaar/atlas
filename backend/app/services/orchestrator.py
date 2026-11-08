@@ -9,12 +9,14 @@ import uuid
 from sqlalchemy.orm import Session
 
 from ..config import Settings
+from ..errors import AtlasError
 from ..models import Conversation, Event, Message, Project, User
 from ..routers.sources import get_or_create_chat_source
 from ..schemas import AskOut, CitationOut, MemoryOut, SourceOut
 from ..services.classifier import classify, extract_statement
 from ..services.contradictions import find_contradictions_for
 from ..services.memory import create_memory, log_action
+from ..services.embeddings import ModelUnavailable
 from ..services.retrieval import MemoryHit, search_memories
 from ..services.router import ModelRouter
 
@@ -161,6 +163,24 @@ def handle_ask(db: Session, settings: Settings, user: User, text: str,
     relevant = [h for h in hits if h.relevance >= settings.ask_min_relevance]
 
     if not relevant:
+        if user_gen is not None:
+            # Provider generativo scelto: la chat normale risponde sempre, le
+            # memorie aiutano ma non decidono se rispondere. Prompt generale
+            # onesto: niente fatti inventati sull'utente. Un provider non
+            # raggiungibile e' un errore visibile, non un "Non lo so" muto.
+            try:
+                answer = user_gen.answer_general(text)
+            except ModelUnavailable as exc:
+                raise AtlasError(
+                    "model_unavailable",
+                    f"Il provider scelto ({user_gen.provider}) non e' raggiungibile "
+                    "in questo momento: riprova tra poco o controlla le impostazioni "
+                    f"modello. ({exc})", status=502) from exc
+            log_action(db, user.id, "ask.answered_general", {})
+            out = AskOut(classification=classification, answer=answer,
+                         model=user_gen.name, conversation_id=conv.id)
+            _save_turn(db, conv, text, out.answer)
+            return out
         log_action(db, user.id, "ask.idk", {})
         out = AskOut(classification=classification, answer=IDK_ANSWER, conversation_id=conv.id)
         _save_turn(db, conv, text, out.answer)
