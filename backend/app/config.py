@@ -9,6 +9,9 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="ATLAS_", env_file=".env", extra="ignore")
 
     database_url: str = "postgresql+psycopg://atlas:atlas@localhost:5432/atlas"
+    # Postgres precedente da cui migrare (desktop standalone primo avvio).
+    # Vuoto = nessuna origine configurata: profilo nuovo senza prompt.
+    legacy_database_url: str = ""
     jwt_secret: str = "dev-secret-change-me"
     jwt_ttl_minutes: int = 60 * 24
 

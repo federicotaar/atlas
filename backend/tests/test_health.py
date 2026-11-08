@@ -1,7 +1,7 @@
 def test_health(client):
     r = client.get("/health")
     assert r.status_code == 200
-    assert r.json() == {"status": "ok", "db": "up"}
+    assert r.json() == {"status": "ok", "db": "up", "app": "atlas", "api": "v1"}
 
 
 def test_health_no_auth_needed(client):

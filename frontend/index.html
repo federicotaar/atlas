@@ -38,6 +38,20 @@
       #root { min-height: 100vh; display: flex; flex-direction: column; }
 
       /* ---- Barra superiore ---- */
+      .migration-banner {
+        display: flex; gap: 12px; align-items: center; justify-content: space-between;
+        margin: 10px auto 0; max-width: 860px; padding: 12px 16px;
+        background: #121214; border: 1px solid #232327; border-radius: 12px;
+        color: #ededef; font-size: 14px;
+      }
+      .migration-banner span { color: #8c8c95; flex: 1; }
+      .migration-banner button {
+        background: #7b94ff; color: #0a0a0b; border: 0; border-radius: 999px;
+        padding: 7px 14px; font-weight: 600; cursor: pointer; white-space: nowrap;
+      }
+      .migration-banner button.ghost {
+        background: transparent; color: #ededef; border: 1px solid #232327;
+      }
       .topbar {
         position: sticky;
         top: 0;

@@ -3,6 +3,7 @@ import { hasToken, setToken } from "./api";
 import Auth from "./components/Auth";
 import Chat from "./components/Chat";
 import Dashboard from "./components/Dashboard";
+import MigrationBanner from "./components/MigrationBanner";
 
 export default function App() {
   const [logged, setLogged] = useState(hasToken());
@@ -42,6 +43,7 @@ export default function App() {
         </nav>
         <button className="ghost" onClick={logout}>Esci</button>
       </header>
+      <MigrationBanner />
       <main className={view === "chat" ? "view view-chat" : "view"}>
         {view === "chat" ? <Chat /> : <Dashboard />}
       </main>

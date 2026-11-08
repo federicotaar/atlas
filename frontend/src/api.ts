@@ -125,6 +125,12 @@ export interface ModelSettings {
   providers: ProviderInfo[];
 }
 
+export interface MigrationStatus {
+  state: "not_configured" | "unreachable" | "empty" | "has_data" | "imported" | "dismissed";
+  counts: Record<string, number>;
+  error: string;
+}
+
 export const api = {
   requestCode: (email: string, purpose: "register" | "login", turnstileToken = "") =>
     req<{ ok: boolean; ttl_seconds: number }>("/auth/codes/request", {
@@ -157,4 +163,7 @@ export const api = {
     req<ModelSettings>("/settings/model", { method: "PUT", body: JSON.stringify(body) }),
   listModels: (provider: string) =>
     req<{ models: string[] }>(`/settings/models?provider=${encodeURIComponent(provider)}`),
+  getMigrationStatus: () => req<MigrationStatus>("/setup/migration-status"),
+  importMigration: () => req<MigrationStatus>("/setup/migration-import", { method: "POST" }),
+  dismissMigration: () => req<MigrationStatus>("/setup/migration-dismiss", { method: "POST" }),
 };
