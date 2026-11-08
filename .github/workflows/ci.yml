@@ -182,6 +182,43 @@ jobs:
           sudo apt-get install -y imagemagick xdotool >/dev/null
           DISPLAY=:99 import -window root /tmp/atlas-screenshot.png
           DISPLAY=:99 xdotool search --name 'ATLAS|atlas' 2>/dev/null && echo 'finestra app presente' || echo 'nessuna finestra trovata'
+      - name: "E2E UI reale: registrazione, memoria, riavvio"
+        run: |
+          set -e
+          sudo apt-get install -y xdotool >/dev/null
+          export DISPLAY=:99
+          xdotool search --name 'ATLAS' | head -1 | xargs -r xdotool windowactivate --sync || true
+          sleep 2
+          import -window root /tmp/e2e-1-auth.png
+          xdotool key Tab Tab Tab Tab Return
+          sleep 1
+          xdotool type --delay 30 'e2e@atlas.local'
+          xdotool key Tab
+          xdotool type --delay 30 'password-locale-e2e'
+          import -window root /tmp/e2e-2-registrazione.png
+          xdotool key Tab Return
+          sleep 4
+          import -window root /tmp/e2e-3-chat.png
+          xdotool type --delay 20 'ricorda che il gatto si chiama Briciola'
+          xdotool key Tab Return
+          sleep 5
+          import -window root /tmp/e2e-4-salvato.png
+          xdotool type --delay 20 'come si chiama il mio gatto?'
+          xdotool key Tab Return
+          sleep 5
+          import -window root /tmp/e2e-5-richiamo.png
+          pkill -f 'target/release/atlas-desktop' || true
+          sleep 3
+          DISPLAY=:99 ./desktop/target/release/atlas-desktop >> /tmp/atlas-desktop.log 2>&1 &
+          for i in $(seq 1 60); do
+            sleep 1
+            curl -s http://127.0.0.1:8000/health | grep -q '"app":"atlas"' && break
+          done
+          sleep 5
+          import -window root /tmp/e2e-6-riavvio.png
+          TOKEN=$(curl -s -X POST http://127.0.0.1:8000/auth/login -H 'content-type: application/json' -d '{"email":"e2e@atlas.local","password":"password-locale-e2e"}' | python3 -c 'import sys,json; print(json.load(sys.stdin)["token"])')
+          curl -s http://127.0.0.1:8000/memories -H "Authorization: Bearer $TOKEN" | tee /tmp/e2e-memorie.json | grep -i briciola
+          echo 'E2E UI: registrazione + salvataggio + riavvio + persistenza OK'
       - name: Carica artefatto screenshot
         if: always()
         uses: actions/upload-artifact@v4
@@ -198,6 +235,7 @@ jobs:
           git checkout --orphan ci-artifacts-local
           git rm -rf . >/dev/null 2>&1 || true
           cp /tmp/atlas-screenshot.png atlas-screenshot.png
-          git add atlas-screenshot.png
+          for f in /tmp/e2e-*.png; do [ -e "$f" ] && cp "$f" . || true; done
+          git add -A '*.png'
           git commit -q -m "ci: screenshot app desktop (run $GITHUB_RUN_ID) [skip ci]"
           git push -f origin HEAD:refs/heads/ci-artifacts
