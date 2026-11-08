@@ -168,18 +168,33 @@ class ChannelHub:
     def handle(self, msg: ChannelMessage, reply: Callable[[str], None]) -> None:
         """Punto unico di ingresso. `reply` manda testo al mittente sullo
         stesso canale (log outbound + redaction inclusi)."""
-        self._channels_log.record("in", msg.channel, msg.sender, msg.text)
-
         if not self.is_allowed(msg.sender, msg.channel, self._allowed):
+            # Challenge monouso (condivisa solo con Fred sul canale autenticato):
+            # chi la presenta dimostra il possesso e viene abbinato. Solo DOPO
+            # l'abbinamento il bot risponde una prima volta.
+            if self._pairing is not None and self._pairing.consume_challenge(
+                    msg.text.strip()):
+                self._allowed.setdefault(msg.channel, set()).add(msg.sender)
+                self._pairing.approve_direct(msg.channel, msg.sender, msg.display)
+                self._channels_log.record("in", msg.channel, msg.sender, "<pairing challenge>")
+                safe = self._secrets.redact(
+                    "Pairing confermato: questo account ora e' autorizzato.")
+                self._channels_log.record("out", msg.channel, msg.sender, safe)
+                reply(safe)
+                return
             # Ignorato in silenzio (spec sez. 6): nessuna risposta, mai.
-            # L'evento resta registrato in locale come richiesta di pairing,
-            # approvabile SOLO dalla CLI locale (mai dalla chat).
+            # In locale resta solo il MINIMO: richiesta di pairing (id+display,
+            # approvabile SOLO dalla CLI) e log senza testo. Il contenuto di un
+            # mittente sconosciuto non entra in log ne' nel contesto del modello.
             if self._pairing is not None:
                 self._pairing.record(msg.channel, msg.sender, msg.display)
+            self._channels_log.record("in", msg.channel, msg.sender,
+                                      "<mittente non autorizzato: testo non registrato>")
             return
         if not self._rate.allow(msg.sender):
             return  # oltre il rate limit: ignora in silenzio
 
+        self._channels_log.record("in", msg.channel, msg.sender, msg.text)
         convo = self._convo(msg.sender, msg.channel)
 
         def send_reply(text: str) -> None:
