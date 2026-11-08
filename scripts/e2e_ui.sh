@@ -31,7 +31,14 @@ xdotool key Tab Return
 sleep 5
 import -window root /tmp/e2e-5-richiamo.png
 pkill -f 'target/release/atlas-desktop' || true
-sleep 3
+# Anche i processi figli WebKit: se sopravvivono tengono il lock del profilo
+# e la finestra del secondo avvio non viene mai disegnata (screenshot nero).
+pkill -f 'WebKitWebProcess' || true
+pkill -f 'WebKitNetworkProcess' || true
+for i in $(seq 1 15); do
+  sleep 1
+  pgrep -f 'target/release/atlas-desktop|WebKitWebProcess' >/dev/null 2>&1 || break
+done
 DISPLAY=:99 ./desktop/target/release/atlas-desktop >> /tmp/atlas-desktop.log 2>&1 &
 for i in $(seq 1 60); do
   sleep 1
@@ -44,9 +51,23 @@ done
 sleep 5
 # La finestra post-riavvio va riattivata esplicitamente: su Xvfb nudo
 # altrimenti lo screenshot puo' venire vuoto e il focus non e' nella app.
-xdotool search --name 'ATLAS' | head -1 | xargs -r xdotool windowactivate --sync || true
-sleep 2
-import -window root /tmp/e2e-6-riavvio.png
+# shot(): cattura onesta — riprova l'attivazione e FALLISCE se il PNG resta
+# nero/vuoto, mai uno screenshot finto-verde.
+shot() {
+  local out="$1"
+  for i in 1 2 3 4 5; do
+    xdotool search --name 'ATLAS' | head -1 | xargs -r xdotool windowactivate --sync 2>/dev/null || true
+    sleep 2
+    import -window root "$out"
+    if [ "$(stat -c%s "$out" 2>/dev/null || echo 0)" -gt 10000 ]; then
+      return 0
+    fi
+    sleep 2
+  done
+  echo "E2E UI: screenshot $out vuoto/nero dopo 5 tentativi: cattura fallita"
+  exit 1
+}
+shot /tmp/e2e-6-riavvio.png
 # Reopen via UI: login del profilo esistente (form login locale: email ->
 # password -> Entra). Tab 1 porta il focus sul campo email (nessun autoFocus
 # nel form di login), poi i campi in ordine.
@@ -57,17 +78,19 @@ xdotool key Tab
 xdotool type --delay 30 'password-locale-e2e'
 xdotool key Tab Return
 sleep 5
-xdotool search --name 'ATLAS' | head -1 | xargs -r xdotool windowactivate --sync || true
-sleep 1
-import -window root /tmp/e2e-7-relogin.png
+shot /tmp/e2e-7-relogin.png
 # Dopo il login il composer ha il focus (come nel primo avvio): richiamo
 # della memoria salvata prima del riavvio, questa volta via UI riaperta.
 xdotool type --delay 20 'come si chiama il mio gatto?'
 xdotool key Tab Return
 sleep 5
-xdotool search --name 'ATLAS' | head -1 | xdotool windowactivate --sync 2>/dev/null || true
-sleep 1
-import -window root /tmp/e2e-8-richiamo-relogin.png
+shot /tmp/e2e-8-richiamo-relogin.png
+# La schermata dopo il richiamo deve differire da quella post-login (risposta
+# renderizzata): due catture identiche = UI non verificata, fallire.
+if cmp -s /tmp/e2e-7-relogin.png /tmp/e2e-8-richiamo-relogin.png; then
+  echo 'E2E UI: e2e-7 ed e2e-8 identiche: risposta del richiamo non visibile'
+  exit 1
+fi
 TOKEN=$(curl -s -X POST http://127.0.0.1:8000/auth/login -H 'content-type: application/json' -d '{"email":"e2e@example.com","password":"password-locale-e2e"}' | python3 -c 'import sys,json; print(json.load(sys.stdin)["token"])')
 curl -s http://127.0.0.1:8000/me/export -H "Authorization: Bearer $TOKEN" | tee /tmp/e2e-export.json | grep -i briciola || { echo 'Briciola NON trovata in /me/export:'; cat /tmp/e2e-export.json; exit 1; }
 echo 'E2E UI: registrazione + salvataggio + riavvio + relogin UI + persistenza OK'

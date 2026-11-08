@@ -113,7 +113,7 @@ def test_round_trip(pg_source, sqlite_target):
     url, uid = pg_source
     payload = migrate.export_payload(url)
     with Session(sqlite_target) as s:
-        inserted = migrate.import_payload(s, payload)
+        inserted, _uids, _und = migrate.import_payload(s, payload)
         assert inserted["users"] == 1 and inserted["memories"] == 1
         u = s.query(User).one()
         assert u.id == uid and u.email == "migra@example.com"
@@ -132,10 +132,18 @@ def test_round_trip(pg_source, sqlite_target):
 
 
 def test_import_refuses_non_empty(pg_source, sqlite_target):
+    """Un target con contenuto proprio (non solo il profilo di bootstrap)
+    rifiuta l'import."""
     url, _uid = pg_source
     payload = migrate.export_payload(url)
     with Session(sqlite_target) as s:
-        s.add(User(email="esiste@example.com", password_hash="h"))
+        u = User(email="esiste@example.com", password_hash="h")
+        s.add(u)
+        s.flush()
+        sid = uuid.uuid4()
+        s.add(Source(id=sid, user_id=u.id, kind="chat", label="propria"))
+        s.add(Memory(user_id=u.id, source_id=sid, kind="fact",
+                     origin="stated", content="contenuto proprio", confidence=0.5))
         s.commit()
         with pytest.raises(ValueError, match="non vuoto"):
             migrate.import_payload(s, payload)
@@ -146,3 +154,83 @@ def test_payload_has_no_auth_state(pg_source):
     payload = migrate.export_payload(url)
     assert "used_attestations" not in payload["tables"]
     assert "signup_proofs" not in payload["tables"]
+
+
+def _hash_all(url):
+    """Istantanea ordinata di TUTTE le righe sorgente (prova che l'import
+    non modifica mai l'origine)."""
+    import hashlib
+    engine = create_engine(url)
+    dig = hashlib.sha256()
+    with Session(engine) as s:
+        for model in migrate.TABLES:
+            for row in s.query(model).all():
+                dig.update(repr(sorted(migrate._row_to_dict(row).items())).encode())
+    return dig.hexdigest()
+
+
+def test_import_replaces_bootstrap_profile(pg_source, sqlite_target):
+    """Destinazione con il solo profilo di bootstrap (1 utente, zero altro):
+    l'import lo sostituisce e restituisce gli utenti importati."""
+    url, uid = pg_source
+    payload = migrate.export_payload(url)
+    with Session(sqlite_target) as s:
+        s.add(User(email="bootstrap@example.com", password_hash=hash_password("tmp-1")))
+        s.commit()
+        inserted, imported_ids, _und = migrate.import_payload(s, payload)
+        assert inserted["users"] == 1
+        assert imported_ids == [uid]
+        emails = [u.email for u in s.query(User).all()]
+        assert emails == ["migra@example.com"]  # bootstrap sparito
+
+
+def test_import_refuses_bootstrap_with_data(pg_source, sqlite_target):
+    """Bootstrap con anche UNA memoria propria: rifiuto, niente fusione."""
+    url, _uid = pg_source
+    payload = migrate.export_payload(url)
+    with Session(sqlite_target) as s:
+        u = User(email="bootstrap@example.com", password_hash=hash_password("tmp-1"))
+        s.add(u)
+        s.flush()
+        src = Source(user_id=u.id, kind="chat", label="mio")
+        s.add(src)
+        s.flush()
+        s.add(Memory(user_id=u.id, source_id=src.id, content="mia memoria",
+                     kind="fact", origin="stated", confidence=1.0))
+        s.commit()
+        with pytest.raises(ValueError, match="non vuoto"):
+            migrate.import_payload(s, payload)
+
+
+def test_credentials_decrypt_after_import(pg_source, sqlite_target, monkeypatch):
+    """Credenziale BYOK cifrata con la vera chiave: dopo l'import si decifra
+    sulla destinazione (stessa ATLAS_CREDENTIALS_KEY), mai in chiaro."""
+    from cryptography.fernet import Fernet
+    key = Fernet.generate_key().decode()
+    monkeypatch.setenv("ATLAS_CREDENTIALS_KEY", key)
+    url, uid = pg_source
+    engine = create_engine(url)
+    from app.services.credentials import decrypt_secret, encrypt_secret
+    real_enc = encrypt_secret("sk-test-chiave-reale", key)
+    with Session(engine) as s:
+        st = s.query(UserModelSetting).filter(UserModelSetting.user_id == uid).one()
+        st.api_key_enc = real_enc
+        s.commit()
+    payload = migrate.export_payload(url)
+    assert "sk-test-chiave-reale" not in str(payload)  # mai in chiaro nell'export
+    with Session(sqlite_target) as s:
+        migrate.import_payload(s, payload)
+        st = s.query(UserModelSetting).one()
+        assert st.api_key_enc == real_enc
+        assert decrypt_secret(st.api_key_enc, key) == "sk-test-chiave-reale"
+
+
+def test_source_untouched_by_export_import(pg_source, sqlite_target):
+    """L'origine Postgres resta byte-identica (contenuto) dopo export+import."""
+    url, _uid = pg_source
+    before = _hash_all(url)
+    payload = migrate.export_payload(url)
+    with Session(sqlite_target) as s:
+        migrate.import_payload(s, payload)
+    after = _hash_all(url)
+    assert before == after

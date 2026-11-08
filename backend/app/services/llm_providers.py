@@ -201,6 +201,7 @@ def save_pref(db: Session, settings: Settings, user_id, provider: str, model: st
             pref.api_key_enc = ""
         else:
             pref.api_key_enc = encrypt_secret(api_key, settings.credentials_key)
+        pref.key_unusable = False  # chiave reinserita o rimossa esplicitamente
     # api_key == "" = rimozione esplicita: consentita (al prossimo /ask
     # arriva l'errore chiaro missing_api_key). Chiave omessa del tutto =
     # prima configurazione senza chiave: rifiutata subito.
@@ -230,6 +231,11 @@ def resolve_user_generator(db: Session, settings: Settings, user_id) -> UserGene
     meta = PROVIDERS.get(pref.provider)
     if meta is None:
         return None
+    if getattr(pref, "key_unusable", False):
+        raise AtlasError("key_unusable",
+                         "La chiave API migrata non e' decifrabile su questa installazione: "
+                         "reinseriscila dalle impostazioni modello (resta cifrata in locale).",
+                         status=400)
     api_key = decrypt_secret(pref.api_key_enc, settings.credentials_key) if pref.api_key_enc else ""
     if meta.needs_key and not api_key:
         raise AtlasError("missing_api_key",

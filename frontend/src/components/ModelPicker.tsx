@@ -105,6 +105,7 @@ export default function ModelPicker({ onClose, onSaved }: {
   const needsKey = meta?.needs_key ?? false;
   const needsBaseUrl = meta?.needs_base_url ?? false;
   const hasKey = loaded?.provider === backend && loaded.has_key;
+  const keyUnusable = loaded?.provider === backend && loaded.key_unusable;
 
   async function save() {
     if (!loaded || !meta) return;
@@ -184,6 +185,12 @@ export default function ModelPicker({ onClose, onSaved }: {
                    placeholder={hasKey ? "Chiave salvata - scrivi per sostituirla, svuota e salva per rimuoverla" : "La tua API key"}
                    spellCheck={false} autoComplete="off" />
             {hasKey && !keyTouched && <div className="mp-note">Chiave salvata (cifrata, mai mostrata).</div>}
+            {keyUnusable && !keyTouched && (
+              <div className="mp-note mp-warn" role="alert">
+                La chiave migrata non e&apos; decifrabile su questa installazione e non
+                viene usata: reinseriscila qui per riattivare il provider.
+              </div>
+            )}
           </>
         )}
 

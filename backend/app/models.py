@@ -49,6 +49,10 @@ class UserModelSetting(Base):
     base_url: Mapped[str] = mapped_column(Text, nullable=False, default="")
     api_key_enc: Mapped[str] = mapped_column(Text, nullable=False, default="")
     consent_cloud: Mapped[bool] = mapped_column(nullable=False, default=False)
+    # Chiave migrata non decifrabile con la chiave di questa installazione:
+    # ciphertext conservato ma MAI usato come configurazione funzionante
+    # finche' l'utente non reinserisce la chiave (che azzera il flag).
+    key_unusable: Mapped[bool] = mapped_column(nullable=False, default=False)
     updated_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
 
 

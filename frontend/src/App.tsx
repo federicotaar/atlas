@@ -43,7 +43,7 @@ export default function App() {
         </nav>
         <button className="ghost" onClick={logout}>Esci</button>
       </header>
-      <MigrationBanner />
+      <MigrationBanner onRelogin={logout} />
       <main className={view === "chat" ? "view view-chat" : "view"}>
         {view === "chat" ? <Chat /> : <Dashboard />}
       </main>

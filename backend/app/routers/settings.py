@@ -33,6 +33,7 @@ class ModelSettingsOut(BaseModel):
     consent_cloud: bool
     provider_kind: str
     needs_key: bool
+    key_unusable: bool
     providers: list[dict]
 
 
@@ -42,10 +43,11 @@ def _out(pref) -> ModelSettingsOut:
         provider=pref.provider,
         model=pref.model or "",
         base_url=pref.base_url or "",
-        has_key=bool(pref.api_key_enc),
+        has_key=bool(pref.api_key_enc) and not getattr(pref, "key_unusable", False),
         consent_cloud=bool(pref.consent_cloud),
         provider_kind=meta.kind,
         needs_key=meta.needs_key,
+        key_unusable=bool(getattr(pref, "key_unusable", False)),
         providers=[
             {"id": m.id, "label": m.label, "kind": m.kind, "needs_key": m.needs_key,
              "needs_base_url": m.needs_base_url, "default_model": m.default_model}
@@ -86,7 +88,7 @@ def list_provider_models(provider: str, db: Session = Depends(get_db),
     base_url = ""
     if pref is not None and pref.provider == provider:
         base_url = pref.base_url
-        if pref.api_key_enc:
+        if pref.api_key_enc and not getattr(pref, "key_unusable", False):
             from ..services.credentials import decrypt_secret
             api_key = decrypt_secret(pref.api_key_enc, settings.credentials_key)
     return ModelsOut(models=llm_providers.list_models(provider, base_url, api_key, settings))

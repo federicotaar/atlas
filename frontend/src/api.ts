@@ -123,6 +123,7 @@ export interface ModelSettings {
   consent_cloud: boolean;
   provider_kind: "local" | "cloud";
   needs_key: boolean;
+  key_unusable: boolean;
   providers: ProviderInfo[];
 }
 
@@ -138,6 +139,7 @@ export interface MigrationStatus {
   state: "not_configured" | "unreachable" | "empty" | "has_data" | "imported" | "dismissed";
   counts: Record<string, number>;
   error: string;
+  undecryptable_credentials?: number | null;
 }
 
 export const api = {

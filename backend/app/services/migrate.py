@@ -155,21 +155,91 @@ def _col_kind(column) -> str:
     return "plain"
 
 
-def import_payload(db: Session, payload: dict) -> dict[str, int]:
+def _user_owned_models() -> list:
+    """Tutti i modelli con FK verso users: la classificazione 'vuoto' deve
+    coprire OGNI tabella posseduta, non solo quelle migrate oggi, per non
+    cancellare mai un profilo perche' il conteggio ha saltato una tabella."""
+    from ..models import Base
+
+    owned = []
+    for mapper in Base.registry.mappers:
+        cls = mapper.class_
+        col = cls.__table__.c.get("user_id")
+        if col is None:
+            continue
+        if any(fk.column.table.name == "users" for fk in col.foreign_keys):
+            owned.append(cls)
+    return owned
+
+
+def import_payload(
+    db: Session, payload: dict, credentials_key: str | None = None
+) -> tuple[dict[str, int], list[uuid.UUID], int]:
     """Importa il payload nel DB corrente SOLO se genuinamente vuoto.
 
-    "Vuoto" = zero utenti E zero memorie: un profilo appena creato dall'app
-    desktop. Se c'e' qualunque dato, rifiuta (mai fondere o sovrascrivere
-    in silenzio)."""
+    "Vuoto" = zero righe in tutte le tabelle possedute, oppure il solo
+    profilo di bootstrap (esattamente 1 utente, zero contenuto proprio in
+    OGNI tabella posseduta; ammessi solo i suoi audit-log): in quel caso
+    l'utente di bootstrap viene SOSTITUITO dai dati importati e al rientro
+    si accede con le credenziali originali. Con qualunque altro dato
+    presente, rifiuta (mai fondere o sovrascrivere in silenzio).
+
+    Transazione unica: sostituzione bootstrap + righe + indici vec/fts +
+    audit migration.imported; qualsiasi errore (decifratura, indice,
+    vincolo) fa rollback di TUTTO, bootstrap compreso, e l'import si puo'
+    ritentare. Le credenziali restano cifrate; se credentials_key e'
+    fornita, ogni api_key_enc viene provata in pre-flight e il numero di
+    credenziali non decifrabili torna al chiamante (mai valori in chiaro,
+    mai import silenzioso di ciphertext inutilizzabile).
+
+    Ritorna (conteggi per tabella, id utenti importati, credenziali non
+    decifrabili)."""
     users = db.query(User).count()
-    memories = db.query(Memory).count()
-    if users > 0 or memories > 0:
+    bootstrap_ok = False
+    if users == 1:
+        bootstrap_ok = all(
+            db.query(model).count() == 0
+            for model in _user_owned_models()
+            if model is not ActionLog
+        )
+    if users > 0 and not bootstrap_ok:
+        memories = db.query(Memory).count()
         raise ValueError(
             f"database di destinazione non vuoto ({users} utenti, {memories} memorie): "
             "import rifiutato"
         )
 
     tables: dict[str, list[dict]] = payload.get("tables", {})
+
+    # Pre-flight: nessuna mutazione prima di questo punto oltre ai conteggi.
+    # Le credenziali non decifrabili restano in tabella (ciphertext conservato
+    # per un eventuale ripristino della chiave) ma marcate key_unusable: mai
+    # tentate come configurazione funzionante finche' non reinserite.
+    undecryptable = 0
+    bad_cred_users: set[str] = set()
+    if credentials_key:
+        from .credentials import decrypt_secret
+
+        for raw in tables.get("user_model_settings", []):
+            enc = raw.get("api_key_enc")
+            if enc:
+                try:
+                    decrypt_secret(enc, credentials_key)
+                except Exception:
+                    undecryptable += 1
+                    bad_cred_users.add(str(raw.get("user_id")))
+
+    if bootstrap_ok:
+        # sostituzione pulita: le uniche righe possibili sono gli audit-log
+        # del bootstrap (tutto il resto e' stato verificato vuoto), poi utente
+        bootstrap = db.query(User).one()
+        for model in _user_owned_models():
+            db.query(model).filter(
+                model.__table__.c.user_id == bootstrap.id
+            ).delete()
+        db.delete(bootstrap)
+        db.flush()
+
     inserted: dict[str, int] = {}
     is_sqlite = db.bind is not None and db.bind.dialect.name == "sqlite"
     embeddings: list[tuple[uuid.UUID, list[float], str]] = []
@@ -181,10 +251,13 @@ def import_payload(db: Session, payload: dict) -> dict[str, int]:
         for raw in rows:
             data = {}
             for col in model.__table__.columns:
-                val = raw.get(col.name)
                 if col.name == "embedding":
                     continue  # gestito sotto (vec0 su sqlite, colonna su PG)
-                data[col.name] = _parse(kinds[col.name], val)
+                if col.name not in raw:
+                    continue  # colonna nuova assente nella sorgente: default
+                data[col.name] = _parse(kinds[col.name], raw[col.name])
+            if model is UserModelSetting and str(raw.get("user_id")) in bad_cred_users:
+                data["key_unusable"] = True
             obj = model(**data)
             if hasattr(model, "embedding") and raw.get("embedding") is not None and not is_sqlite:
                 obj.embedding = raw["embedding"]
@@ -202,5 +275,12 @@ def import_payload(db: Session, payload: dict) -> dict[str, int]:
             sqlite_store.vec_insert(db, mid, emb)
         for raw in tables.get("memories", []):
             sqlite_store.fts_insert(db, uuid.UUID(raw["id"]), raw["content"])
+    imported_user_ids = [uuid.UUID(r["id"]) for r in tables.get("users", [])]
+    # Audit registrato sugli utenti IMPORTATI (il bootstrap non esiste piu'):
+    # al rientro con le credenziali originali lo stato risulta "imported".
+    # Stesso commit dell'import: una sola transazione, tutto o niente.
+    for uid in imported_user_ids:
+        db.add(ActionLog(user_id=uid, action="migration.imported",
+                         detail={"tables": inserted}))
     db.commit()
-    return inserted
+    return inserted, imported_user_ids, undecryptable

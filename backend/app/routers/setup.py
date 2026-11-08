@@ -22,6 +22,9 @@ class MigrationStatusOut(BaseModel):
     state: str  # not_configured | unreachable | empty | has_data | imported | dismissed
     counts: dict = {}
     error: str = ""
+    # Solo su import: quante credenziali BYOK migrate NON si decifrano con la
+    # chiave di questa installazione (da re-inserire nell'app; mai in chiaro).
+    undecryptable_credentials: int | None = None
 
 
 def _recorded_state(db: Session, user: User) -> str | None:
@@ -62,12 +65,15 @@ def migration_import(db: Session = Depends(get_db), user: User = Depends(get_cur
                          f"Dati esistenti non raggiungibili: {probe.error}", status=503)
     payload = migrate.export_payload(legacy)
     try:
-        inserted = migrate.import_payload(db, payload)
+        inserted, _uids, undecryptable = migrate.import_payload(
+            db, payload, get_settings().credentials_key)
     except ValueError as exc:
         raise AtlasError("target_not_empty", str(exc), status=409) from exc
-    log_action(db, user.id, "migration.imported", {"tables": inserted})
-    db.commit()
-    return MigrationStatusOut(state="imported", counts=inserted)
+    # Transazione unica in import_payload: sostituzione bootstrap + dati +
+    # indici + audit migration.imported (sugli utenti importati). Qualunque
+    # errore lascia bootstrap e origine intatti e l'import e' ritentabile.
+    return MigrationStatusOut(state="imported", counts=inserted,
+                              undecryptable_credentials=undecryptable)
 
 
 @router.post("/migration-dismiss", response_model=MigrationStatusOut)
