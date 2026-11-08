@@ -87,6 +87,10 @@ class WhatsAppOfficialChannel(Channel):
         if self._server is not None:
             self._server.stop()
 
+    def is_connected(self) -> bool:
+        thread = getattr(self._server, "_thread", None)
+        return bool(thread is not None and thread.is_alive())
+
     # --- webhook ------------------------------------------------------------
 
     def webhook_app(self):
