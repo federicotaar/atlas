@@ -392,12 +392,12 @@ def test_channel_token_never_from_redacted_dotenv(tmp_path, monkeypatch):
         "channels:\n  telegram:\n    enabled: true\n")
     monkeypatch.delenv("TELEGRAM_BOT_TOKEN", raising=False)
     out_lines = []
-    hub = cli._maybe_start_channels(
+    hub, channels = cli._maybe_start_channels(
         workspace=tmp_path, registry=None, get_active=lambda: "x",
         set_active=lambda n: None, ctx=None, store=None, log=None, seal=None,
         secrets=None, dotenv={"TELEGRAM_BOT_TOKEN": "(impostata)"},
         out=out_lines.append, max_steps=1, pairing=None)
-    assert hub is None
+    assert hub is None and channels == {}
     assert any("mancante" in line for line in out_lines)
 
 
