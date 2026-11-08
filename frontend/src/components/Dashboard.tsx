@@ -1,6 +1,6 @@
 /** Dashboard (fase 5, spec 5I): ogni elemento mostra da quali dati deriva. */
 import { useEffect, useState } from "react";
-import { api, type DashboardData } from "../api";
+import { api, apiBase, type DashboardData } from "../api";
 import TelegramCard from "./TelegramCard";
 import WhatsAppCard from "./WhatsAppCard";
 import MigrationCard from "./MigrationCard";
@@ -111,6 +111,17 @@ export default function Dashboard({ onRelogin }: { onRelogin: () => void }) {
           </div>
         ))}
         {p.agents.last_runs.length === 0 && <p className="muted">Nessuna esecuzione.</p>}
+      </Section>
+
+      <Section title="Agente ATLAS">
+        <div className="item">
+          Chat locale con l'agente (provider, memoria, strumenti e conferme):
+          stessa superficie della web UI, servita dal backend di questa
+          installazione.
+        </div>
+        <a className="ghost" href={`${apiBase()}/agent/`} target="_blank" rel="noreferrer">
+          Apri l'agente
+        </a>
       </Section>
 
       <TelegramCard />
