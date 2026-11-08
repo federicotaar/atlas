@@ -101,3 +101,49 @@ jobs:
 # nota fase 6 (trigger run)
 
 # trigger: desktop wrapper + CORS (2026-11-07)
+
+  desktop:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Dipendenze di sistema Tauri
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev patchelf xvfb libxdo-dev libayatana-appindicator3-dev
+      - name: Build frontend
+        run: |
+          npm ci --prefix frontend
+          npm run build --prefix frontend
+      - name: Build sidecar backend (PyInstaller onefile)
+        run: bash backend/scripts/build_sidecar.sh
+      - name: Build app desktop (Tauri)
+        working-directory: desktop
+        run: npx --yes @tauri-apps/cli@2 build --no-bundle
+      - name: Lancio reale dell'app e verifica backend sidecar
+        run: |
+          set -e
+          xvfb-run -a ./desktop/target/release/atlas-desktop > /tmp/atlas-desktop.log 2>&1 &
+          ok=0
+          for i in $(seq 1 90); do
+            sleep 1
+            BODY=$(curl -s http://127.0.0.1:8000/health || true)
+            if echo "$BODY" | grep -q '"app":"atlas"'; then
+              echo "backend sidecar attivo dall'app: $BODY"
+              ok=1
+              break
+            fi
+          done
+          if [ "$ok" != "1" ]; then
+            echo "backend non avviato dall'app desktop" >&2
+            tail -50 /tmp/atlas-desktop.log >&2 || true
+            exit 1
+          fi
