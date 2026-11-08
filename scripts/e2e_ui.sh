@@ -176,3 +176,28 @@ ocr_has /tmp/e2e-10-richiamo-relogin.png 'Briciola' || { echo 'E2E UI: risposta 
 TOKEN=$(curl -s -X POST http://127.0.0.1:8000/auth/login -H 'content-type: application/json' -d '{"email":"e2e@example.com","password":"password-locale-e2e"}' | python3 -c 'import sys,json; print(json.load(sys.stdin)["token"])')
 curl -s http://127.0.0.1:8000/me/export -H "Authorization: Bearer $TOKEN" | tee /tmp/e2e-export.json | grep -i briciola || { echo 'Briciola NON trovata in /me/export:'; cat /tmp/e2e-export.json; exit 1; }
 echo 'E2E UI: registrazione + salvataggio + riavvio + relogin UI + persistenza OK'
+
+# --- Click-through "Apri l'agente": dalla dashboard impacchettata alla
+# superficie /agent con roundtrip messaggio reale. L'asserzione e' su cio'
+# che si VEDE dopo il click (navigation/window reale), non sull'href
+# composto. Nessun windowactivate qui: se il link apre una nuova finestra o
+# il browser di sistema, la cattura deve vedere quello.
+click_word /tmp/e2e-10-richiamo-relogin.png 'Dashboard' || { echo 'E2E UI: voce Dashboard NON trovata via OCR'; exit 1; }
+sleep 3
+shot /tmp/e2e-11-dashboard.png
+click_word /tmp/e2e-11-dashboard.png 'Apri' || { echo 'E2E UI: link Apri agente NON trovato via OCR in dashboard'; exit 1; }
+sleep 6
+import -window root /tmp/e2e-12-agente.png
+ocr_has /tmp/e2e-12-agente.png 'invia' || ocr_has /tmp/e2e-12-agente.png 'Scrivi ad ATLAS' || { echo 'E2E UI: click su Apri agente NON ha aperto la superficie agente (composer assente nel frame)'; exit 1; }
+echo 'click-through dashboard -> agente OK'
+# Usabilita' della superficie: messaggio reale dal composer. Senza provider
+# configurati la risposta onesta e' l'avviso "nessun provider usabile".
+xdotool mousemove 500 767 click 1
+sleep 1
+xdotool type --delay 30 'ciao'
+xdotool key Return
+sleep 6
+import -window root /tmp/e2e-13-agente-roundtrip.png
+ocr_has /tmp/e2e-13-agente-roundtrip.png 'ciao' || { echo 'E2E UI: messaggio inviato NON visibile nella superficie agente'; exit 1; }
+ocr_has /tmp/e2e-13-agente-roundtrip.png 'provider' || { echo 'E2E UI: risposta agente (avviso provider) NON visibile dopo invio'; exit 1; }
+echo 'E2E UI: click-through Agente + roundtrip messaggio OK'
