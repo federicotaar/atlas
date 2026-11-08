@@ -21,6 +21,22 @@ UTENTE (CLI / chat React / API)
 Punteggio finale = `w_semantic*semantico + w_text*testuale + w_recency*recenza + w_confidence*confidenza`
 
 - **semantico**: `1 - cosine_distance` (pgvector `<=>`)
+
+### Backend SQLite (desktop standalone)
+
+In modalita' desktop (`ATLAS_DATABASE_URL=sqlite:///...`) lo stesso codice gira su
+SQLite con [sqlite-vec](https://alexgarcia.xyz/sqlite-vec/) e FTS5, senza Alembic e
+senza servizi esterni: lo schema viene creato all'avvio (`create_all` + tabella ombra
+vec0 `memory_vec` + FTS5 `memories_fts`). La ricerca ibrida usa la stessa combinazione
+di pesi; differenze rispetto a Postgres:
+
+- KNN su vec0 con la stessa soglia di pertinenza (distanza coseno < 0.9);
+- FTS5 `bm25()` al posto di `ts_rank`: punteggio normalizzato come
+  `min(1, -bm25/5)` (scelta euristica documentata, non calibrata su dati reali);
+- gli embedding restano nella colonna `memories.embedding` come JSON (fonte per
+  ricostruire gli indici); la ricerca legge solo vec0/FTS5;
+- UUID salvati come hex a 32 caratteri (le query raw in `sqlite_store.py` usano
+  `.hex`, fuori dal type layer di SQLAlchemy).
 - **testuale**: `ts_rank` di PostgreSQL (config `simple`), normalizzato con
   `min(1, rank*4)`: su frasi brevi il rank grezzo è piccolo (tipicamente
   < 0.25); il fattore 4 porta una corrispondenza piena vicino a 1. Costante

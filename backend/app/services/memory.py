@@ -63,26 +63,41 @@ def create_memory(
     db.add(memory)
     db.flush()  # assegna id prima del supersede
 
+    is_sqlite = db.bind is not None and db.bind.dialect.name == "sqlite"
+    if is_sqlite:
+        from . import sqlite_store
+
+        sqlite_store.fts_insert(db, memory.id, memory.content)
+        if embedding is not None:
+            sqlite_store.vec_insert(db, memory.id, embedding)
+
     if old is not None:
         old.superseded_by = memory.id
         db.add(old)
 
     duplicates: list[Memory] = []
     if embedding is not None:
-        vec = "[" + ",".join(f"{v:.6f}" for v in embedding) + "]"
-        rows = db.execute(
-            sql_text(
-                """
-                SELECT id FROM memories
-                WHERE user_id = :uid AND superseded_by IS NULL AND id != :mid
-                  AND embedding IS NOT NULL
-                  AND embedding <=> CAST(:vec AS vector) < :maxd
-                LIMIT 5
-                """
-            ),
-            {"uid": str(user_id), "mid": str(memory.id), "vec": vec, "maxd": settings.duplicate_max_distance},
-        ).all()
-        dup_ids = [r[0] for r in rows]
+        if is_sqlite:
+            from . import sqlite_store
+
+            dup_ids_str = sqlite_store.duplicates(
+                db, embedding, user_id, memory.id, settings.duplicate_max_distance)
+            dup_ids = [uuid.UUID(mid) for mid in dup_ids_str]
+        else:
+            vec = "[" + ",".join(f"{v:.6f}" for v in embedding) + "]"
+            rows = db.execute(
+                sql_text(
+                    """
+                    SELECT id FROM memories
+                    WHERE user_id = :uid AND superseded_by IS NULL AND id != :mid
+                      AND embedding IS NOT NULL
+                      AND embedding <=> CAST(:vec AS vector) < :maxd
+                    LIMIT 5
+                    """
+                ),
+                {"uid": str(user_id), "mid": str(memory.id), "vec": vec, "maxd": settings.duplicate_max_distance},
+            ).all()
+            dup_ids = [r[0] for r in rows]
         if dup_ids:
             duplicates = list(db.query(Memory).filter(Memory.id.in_(dup_ids)).all())
 

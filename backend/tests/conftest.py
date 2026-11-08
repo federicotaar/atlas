@@ -20,16 +20,33 @@ from app.main import app  # noqa: E402
 from app.models import Base  # noqa: E402
 
 
+def _test_engine():
+    # Stesso costruttore dell'app: gestisce anche SQLite (PRAGMA, sqlite-vec,
+    # schema completo) oltre a Postgres.
+    from app.db import get_engine
+
+    return get_engine()
+
+
 @pytest.fixture(scope="session")
 def _setup_db():
-    engine = create_engine(os.environ["ATLAS_DATABASE_URL"])
+    url = os.environ["ATLAS_DATABASE_URL"]
+    engine = _test_engine()
     try:
         with engine.connect() as probe:
             probe.execute(text("SELECT 1"))
     except Exception:
-        pytest.skip("database di test non raggiungibile (serve Postgres+pgvector)", allow_module_level=True)
+        pytest.skip("database di test non raggiungibile", allow_module_level=True)
     with engine.begin() as conn:
-        conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+        if not url.startswith("sqlite"):
+            conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+        else:
+            conn.execute(text("DROP TABLE IF EXISTS memory_vec"))
+            conn.execute(text("DROP TABLE IF EXISTS memories_fts"))
+            from app.db import FTS_DDL, VEC_DDL
+
+            conn.execute(text(VEC_DDL))
+            conn.execute(text(FTS_DDL))
     Base.metadata.drop_all(engine)
     Base.metadata.create_all(engine)
     yield
@@ -44,8 +61,7 @@ def client(_setup_db):
 @pytest.fixture()
 def db_session(_setup_db):
     from sqlalchemy.orm import Session
-    engine = create_engine(os.environ["ATLAS_DATABASE_URL"])
-    with Session(engine) as session:
+    with Session(_test_engine()) as session:
         yield session
 
 

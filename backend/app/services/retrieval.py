@@ -56,6 +56,8 @@ def combine_score(
 def search_memories(db: Session, settings: Settings, user_id: uuid.UUID, query: str, query_embedding: list[float] | None,
                     limit: int | None = None) -> list[MemoryHit]:
     limit = limit or settings.retrieval_top_k
+    if db.bind is not None and db.bind.dialect.name == "sqlite":
+        return _search_memories_sqlite(db, settings, user_id, query, query_embedding, limit)
     params: dict = {"uid": str(user_id), "q": query, "cand": settings.retrieval_candidates}
     sem_select = "0.0"
     sem_where = "FALSE"
@@ -94,6 +96,42 @@ def search_memories(db: Session, settings: Settings, user_id: uuid.UUID, query: 
             settings.w_semantic, settings.w_text, settings.w_recency, settings.w_confidence,
         )
         hits.append(MemoryHit(memory=mem, semantic=float(sem), text_score=text_score,
+                              recency=rec, relevance=relevance, score=score))
+
+    hits.sort(key=lambda h: h.score, reverse=True)
+    return hits[:limit]
+
+
+def _search_memories_sqlite(db: Session, settings: Settings, user_id: uuid.UUID, query: str,
+                            query_embedding: list[float] | None, limit: int) -> list[MemoryHit]:
+    """Variante SQLite (desktop): vec0 KNN + FTS5, stessa combinazione pesi."""
+    from . import sqlite_store
+
+    sem_map = sqlite_store.knn(db, query_embedding, user_id, settings.retrieval_candidates) \
+        if query_embedding is not None else {}
+    fts_map = sqlite_store.fts(db, query, user_id, settings.retrieval_candidates)
+
+    ids = set(sem_map) | set(fts_map)
+    if not ids:
+        return []
+    ordered = sorted(ids, key=lambda i: max(sem_map.get(i, 0.0), fts_map.get(i, 0.0)),
+                     reverse=True)[: settings.retrieval_candidates]
+    uids = [uuid.UUID(mid) for mid in ordered]
+    memories = {m.id: m for m in db.query(Memory).filter(Memory.id.in_(uids)).all()}
+
+    hits: list[MemoryHit] = []
+    for mid in ordered:
+        mem = memories.get(uuid.UUID(mid))
+        if mem is None:
+            continue
+        sem = sem_map.get(mid, 0.0)
+        text_score = fts_map.get(mid, 0.0)
+        rec = recency_score(mem.recorded_at, settings.recency_half_life_days)
+        relevance, score = combine_score(
+            sem, text_score, rec, mem.confidence,
+            settings.w_semantic, settings.w_text, settings.w_recency, settings.w_confidence,
+        )
+        hits.append(MemoryHit(memory=mem, semantic=sem, text_score=text_score,
                               recency=rec, relevance=relevance, score=score))
 
     hits.sort(key=lambda h: h.score, reverse=True)

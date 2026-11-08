@@ -2,10 +2,23 @@ import uuid
 from datetime import date, datetime
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import CheckConstraint, ForeignKey, Index, Text, func
-from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.dialects.postgresql import UUID as PGUUID
+from sqlalchemy import JSON, CheckConstraint, ForeignKey, Index, Text, Uuid, func
+from sqlalchemy.engine import Dialect
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy.types import TypeDecorator
+
+
+class EmbeddingVector(TypeDecorator):
+    """Vettore embedding portabile: pgvector su Postgres, lista JSON altrove
+    (su SQLite la ricerca KNN usa la tabella ombra vec0, non questa colonna)."""
+
+    impl = JSON
+    cache_ok = True
+
+    def load_dialect_impl(self, dialect: Dialect):
+        if dialect.name == "postgresql":
+            return dialect.type_descriptor(Vector(768))
+        return dialect.type_descriptor(JSON())
 
 
 class Base(DeclarativeBase):
@@ -15,7 +28,7 @@ class Base(DeclarativeBase):
 class User(Base):
     __tablename__ = "users"
 
-    id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     email: Mapped[str] = mapped_column(Text, unique=True, nullable=False)
     password_hash: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
@@ -30,7 +43,7 @@ class UserModelSetting(Base):
     __tablename__ = "user_model_settings"
 
     user_id: Mapped[uuid.UUID] = mapped_column(
-        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+        Uuid, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
     provider: Mapped[str] = mapped_column(Text, nullable=False)
     model: Mapped[str] = mapped_column(Text, nullable=False, default="")
     base_url: Mapped[str] = mapped_column(Text, nullable=False, default="")
@@ -66,8 +79,8 @@ class SignupProof(Base):
 class Source(Base):
     __tablename__ = "sources"
 
-    id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"), nullable=False)
     kind: Mapped[str] = mapped_column(Text, nullable=False)  # chat | file | connector | cli ...
     label: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
@@ -76,8 +89,8 @@ class Source(Base):
 class Project(Base):
     __tablename__ = "projects"
 
-    id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"), nullable=False)
     name: Mapped[str] = mapped_column(Text, nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False, default="")
     status: Mapped[str] = mapped_column(Text, nullable=False, default="active")
@@ -95,12 +108,12 @@ class Event(Base):
         Index("ix_events_user_project_event_at", "user_id", "project_id", "event_at"),
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
-    project_id: Mapped[uuid.UUID | None] = mapped_column(PGUUID(as_uuid=True), ForeignKey("projects.id"), nullable=True)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"), nullable=False)
+    project_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("projects.id"), nullable=True)
     type: Mapped[str] = mapped_column(Text, nullable=False)
-    payload: Mapped[dict] = mapped_column(JSONB, nullable=False)
-    source_id: Mapped[uuid.UUID | None] = mapped_column(PGUUID(as_uuid=True), ForeignKey("sources.id"), nullable=True)
+    payload: Mapped[dict] = mapped_column(JSON, nullable=False)
+    source_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("sources.id"), nullable=True)
     event_at: Mapped[datetime] = mapped_column(nullable=False)
     recorded_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
 
@@ -115,20 +128,20 @@ class Memory(Base):
         CheckConstraint("confidence BETWEEN 0 AND 1", name="memories_confidence_check"),
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
     kind: Mapped[str] = mapped_column(Text, nullable=False)
     origin: Mapped[str] = mapped_column(Text, nullable=False)
-    source_id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("sources.id"), nullable=False)
+    source_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("sources.id"), nullable=False)
     event_at: Mapped[datetime | None] = mapped_column(nullable=True)
     recorded_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
     confidence: Mapped[float] = mapped_column(nullable=False)
     superseded_by: Mapped[uuid.UUID | None] = mapped_column(
-        PGUUID(as_uuid=True), ForeignKey("memories.id"), nullable=True
+        Uuid, ForeignKey("memories.id"), nullable=True
     )
     visibility: Mapped[str] = mapped_column(Text, nullable=False, default="private")
-    embedding: Mapped[list[float] | None] = mapped_column(Vector(768), nullable=True)
+    embedding: Mapped[list[float] | None] = mapped_column(EmbeddingVector(), nullable=True)
 
     source: Mapped[Source] = relationship("Source", lazy="joined")
 
@@ -141,10 +154,10 @@ class ActionLog(Base):
         Index("ix_action_logs_user_created", "user_id", "created_at"),
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"), nullable=False)
     action: Mapped[str] = mapped_column(Text, nullable=False)
-    detail: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    detail: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
 
 
@@ -159,12 +172,12 @@ class Entity(Base):
         CheckConstraint("status IN ('pending','confirmed','rejected')", name="entities_status_check"),
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"), nullable=False)
     name: Mapped[str] = mapped_column(Text, nullable=False)
     kind: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(Text, nullable=False, default="pending")
-    memory_id: Mapped[uuid.UUID | None] = mapped_column(PGUUID(as_uuid=True), ForeignKey("memories.id"), nullable=True)
+    memory_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("memories.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
 
 
@@ -174,13 +187,13 @@ class Relationship(Base):
         CheckConstraint("status IN ('pending','confirmed','rejected')", name="relationships_status_check"),
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
-    from_entity_id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("entities.id"), nullable=False)
-    to_entity_id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("entities.id"), nullable=False)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"), nullable=False)
+    from_entity_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("entities.id"), nullable=False)
+    to_entity_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("entities.id"), nullable=False)
     relation: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(Text, nullable=False, default="pending")
-    source_id: Mapped[uuid.UUID | None] = mapped_column(PGUUID(as_uuid=True), ForeignKey("sources.id"), nullable=True)
+    source_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("sources.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
 
     from_entity: Mapped[Entity] = relationship("Entity", foreign_keys=[from_entity_id], lazy="joined")
@@ -192,8 +205,8 @@ class Conversation(Base):
 
     __tablename__ = "conversations"
 
-    id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"), nullable=False)
     title: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
 
@@ -204,8 +217,8 @@ class Message(Base):
         CheckConstraint("role IN ('user','assistant')", name="messages_role_check"),
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    conversation_id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("conversations.id"), nullable=False)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    conversation_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("conversations.id"), nullable=False)
     role: Mapped[str] = mapped_column(Text, nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
@@ -221,11 +234,11 @@ class AgentRun(Base):
         CheckConstraint("status IN ('ok','error','stopped')", name="agent_runs_status_check"),
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"), nullable=False)
     agent: Mapped[str] = mapped_column(Text, nullable=False)
-    input: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
-    output: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    input: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    output: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     steps: Mapped[int] = mapped_column(nullable=False, default=1)
     duration_ms: Mapped[int] = mapped_column(nullable=False, default=0)
     cost_eur: Mapped[float] = mapped_column(nullable=False, default=0.0)
@@ -248,15 +261,15 @@ class Prediction(Base):
                         name="predictions_probability_check"),
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"), nullable=False)
     question: Mapped[str] = mapped_column(Text, nullable=False)
     estimate_central: Mapped[float | None] = mapped_column(nullable=True)
     estimate_low: Mapped[float | None] = mapped_column(nullable=True)
     estimate_high: Mapped[float | None] = mapped_column(nullable=True)
     unit: Mapped[str] = mapped_column(Text, nullable=False, default="")
     probability: Mapped[float | None] = mapped_column(nullable=True)
-    data_used: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    data_used: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     assumptions: Mapped[str] = mapped_column(Text, nullable=False, default="")
     risk_factors: Mapped[str] = mapped_column(Text, nullable=False, default="")
     verify_at: Mapped[datetime] = mapped_column(nullable=False)
@@ -286,8 +299,8 @@ class Connector(Base):
         CheckConstraint("status IN ('pending','authorized','revoked')", name="connectors_status_check"),
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"), nullable=False)
     kind: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(Text, nullable=False, default="pending")
     authorized_at: Mapped[datetime | None] = mapped_column(nullable=True)
@@ -308,17 +321,17 @@ class EngineAction(Base):
             name="engine_actions_status_check"),
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
-    connector_id: Mapped[uuid.UUID | None] = mapped_column(PGUUID(as_uuid=True),
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"), nullable=False)
+    connector_id: Mapped[uuid.UUID | None] = mapped_column(Uuid,
                                                            ForeignKey("connectors.id"), nullable=True)
     level: Mapped[int] = mapped_column(nullable=False)
     kind: Mapped[str] = mapped_column(Text, nullable=False)
-    payload: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    payload: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     idempotency_key: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(Text, nullable=False, default="previewed")
-    preview: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
-    result: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    preview: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    result: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
     confirmed_at: Mapped[datetime | None] = mapped_column(nullable=True)
     executed_at: Mapped[datetime | None] = mapped_column(nullable=True)
@@ -332,14 +345,14 @@ class MockCalendarEvent(Base):
     __tablename__ = "mock_calendar_events"
     __table_args__ = (Index("ix_mock_calendar_user", "user_id"),)
 
-    id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"), nullable=False)
     title: Mapped[str] = mapped_column(Text, nullable=False)
     starts_at: Mapped[datetime] = mapped_column(nullable=False)
     ends_at: Mapped[datetime] = mapped_column(nullable=False)
     source: Mapped[str] = mapped_column(Text, nullable=False, default="fixture")  # fixture | created
     cancelled: Mapped[bool] = mapped_column(nullable=False, default=False)
-    created_action_id: Mapped[uuid.UUID | None] = mapped_column(PGUUID(as_uuid=True), nullable=True)
+    created_action_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
     created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
 
 
@@ -350,13 +363,13 @@ class MockEmailDraft(Base):
     __tablename__ = "mock_email_drafts"
     __table_args__ = (Index("ix_mock_email_user", "user_id"),)
 
-    id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"), nullable=False)
     to_addr: Mapped[str] = mapped_column(Text, nullable=False)
     subject: Mapped[str] = mapped_column(Text, nullable=False)
     body: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(Text, nullable=False, default="draft")  # draft | discarded
-    created_action_id: Mapped[uuid.UUID | None] = mapped_column(PGUUID(as_uuid=True), nullable=True)
+    created_action_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
     created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
 
 
@@ -366,9 +379,9 @@ class ConnectorCredential(Base):
 
     __tablename__ = "connector_credentials"
 
-    id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     connector_id: Mapped[uuid.UUID] = mapped_column(
-        PGUUID(as_uuid=True), ForeignKey("connectors.id"), nullable=False, unique=True)
+        Uuid, ForeignKey("connectors.id"), nullable=False, unique=True)
     access_token_enc: Mapped[str] = mapped_column(Text, nullable=False)
     refresh_token_enc: Mapped[str] = mapped_column(Text, nullable=False)
     expires_at: Mapped[datetime | None] = mapped_column(nullable=True)
