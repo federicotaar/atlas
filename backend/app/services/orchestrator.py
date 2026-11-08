@@ -15,8 +15,8 @@ from ..routers.sources import get_or_create_chat_source
 from ..schemas import AskOut, CitationOut, MemoryOut, SourceOut
 from ..services.classifier import classify, extract_statement
 from ..services.contradictions import find_contradictions_for
-from ..services.memory import create_memory, log_action
 from ..services.embeddings import ModelUnavailable
+from ..services.memory import create_memory, log_action
 from ..services.retrieval import MemoryHit, search_memories
 from ..services.router import ModelRouter
 
