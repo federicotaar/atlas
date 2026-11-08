@@ -206,3 +206,14 @@ import -window root /tmp/e2e-13-agente-roundtrip.png
 ocr_has /tmp/e2e-13-agente-roundtrip.png 'ciao' || { echo 'E2E UI: messaggio inviato NON visibile nella superficie agente'; exit 1; }
 ocr_has /tmp/e2e-13-agente-roundtrip.png 'provider' || { echo 'E2E UI: risposta agente (avviso provider) NON visibile dopo invio'; exit 1; }
 echo 'E2E UI: click-through Agente + roundtrip messaggio OK'
+
+# Ritorno alla dashboard: "indietro" (history.back) chiude il ciclo di
+# navigazione nella stessa finestra.
+click_word /tmp/e2e-13-agente-roundtrip.png 'indietro' || { echo 'E2E UI: pulsante indietro NON trovato nella superficie agente'; exit 1; }
+sleep 5
+xdotool mousemove 640 400
+for i in $(seq 1 12); do xdotool click 5; sleep 0.2; done
+sleep 1
+shot /tmp/e2e-14-ritorno.png
+ocr_has /tmp/e2e-14-ritorno.png 'Apri' || { echo 'E2E UI: ritorno alla dashboard NON riuscito (link Apri agente non visibile)'; exit 1; }
+echo 'E2E UI: ciclo completo dashboard -> agente -> dashboard OK'
