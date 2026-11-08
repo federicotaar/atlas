@@ -15,6 +15,7 @@ logica del canale e' coperta senza rete.
 from __future__ import annotations
 
 import threading
+import time
 from typing import Callable
 
 from .base import Channel, ChannelMessage
@@ -52,6 +53,14 @@ class TelegramChannel(Channel):
             raise RuntimeError("canale non avviato")
         self._client.send_message(to, text)
 
+    def is_connected(self) -> bool:
+        return bool(self._client is not None and
+                    getattr(self._client, "is_connected", lambda: True)())
+
+    def set_on_failure(self, fn) -> None:
+        if self._client is not None and hasattr(self._client, "set_on_failure"):
+            self._client.set_on_failure(fn)
+
     def _on_update(self, chat_id: str, text: str, display: str = "",
                    attachments: tuple[Attachment, ...] = ()) -> None:
         if self._handler is not None:
@@ -80,10 +89,18 @@ class _PTBClient:
         self._app = ApplicationBuilder().token(token).build()
         self._drop_pending = drop_pending_updates
         self._loop = None
+        self._alive = False
+        self._on_failure: Callable[[str, Exception], None] | None = None
         self._allow_check: Callable[[str], bool] | None = None
 
     def set_allow_check(self, fn: Callable[[str], bool]) -> None:
         self._allow_check = fn
+
+    def set_on_failure(self, fn) -> None:
+        self._on_failure = fn
+
+    def is_connected(self) -> bool:
+        return self._alive
 
     def start_polling(self, on_update: Callable[..., None]) -> None:
         import asyncio
@@ -131,10 +148,34 @@ class _PTBClient:
         # stop_signals=None: run_polling gira in un thread NON principale
         # (la CLI resta interattiva); asyncio vieta i signal handler fuori
         # dal main thread. Lo stop resta del processo/REPL.
-        threading.Thread(target=self._app.run_polling,
-                         kwargs={"drop_pending_updates": self._drop_pending,
-                                 "stop_signals": None},
-                         daemon=True).start()
+        # Watchdog (stage 12): se run_polling muore, il thread lo riesuma
+        # con backoff esponenziale; a tentativi esauriti avvisa (on_failure)
+        # invece di morire in silenzio.
+        from ..agent.supervisor import RestartPolicy
+
+        policy = RestartPolicy(max_restarts=5, window_seconds=600)
+
+        def poll_forever() -> None:
+            self._alive = True
+            try:
+                while True:
+                    try:
+                        self._app.run_polling(
+                            drop_pending_updates=self._drop_pending,
+                            stop_signals=None)
+                        return  # uscita pulita
+                    except Exception as exc:
+                        delay = policy.next_delay()
+                        if delay is None:
+                            if self._on_failure is not None:
+                                self._on_failure("telegram", exc)
+                            return
+                        time.sleep(delay)
+            finally:
+                self._alive = False
+
+        self._alive = True
+        threading.Thread(target=poll_forever, daemon=True).start()
 
     async def _download(self, msg) -> list[Attachment] | None:
         """Scarica l'allegato del messaggio. None = troppo grande (il
