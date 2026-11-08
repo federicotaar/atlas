@@ -90,3 +90,13 @@ describe("probeTauriBase", () => {
     expect(await probeTauriBase(f, candidates, "2.1.1")).toBeNull();
   });
 });
+
+// Il link "Agente ATLAS" della dashboard deve puntare alla pagina servita
+// dal backend locale sotto /agent, sia in Tauri (origine tauri.localhost,
+// base assoluta) sia in dev (proxy /api relativo).
+describe("desktop agent entry", () => {
+  it("compone l'URL della pagina agente dalla base risolta", () => {
+    expect(`${resolveBase(undefined, true)}/agent/`).toBe("http://127.0.0.1:8000/agent/");
+    expect(`${resolveBase("http://127.0.0.1:8103", true)}/agent/`).toBe("http://127.0.0.1:8103/agent/");
+  });
+});
