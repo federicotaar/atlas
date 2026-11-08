@@ -173,7 +173,7 @@ def test_forge_records_isolation_level(tmp_path):
     forge = ToolForge(tmp_path)
     result = forge.propose("echo_upper", GOOD_TOOL, GOOD_TESTS, now=T0)
     assert result["tests_ok"] is True
-    assert result["isolation"] in ("bwrap", "reduced")
+    assert result["isolation"] in ("bwrap", "unavailable")
 
 
 def test_bwrap_blocks_network_and_writes(tmp_path):
@@ -199,3 +199,45 @@ def test_bwrap_blocks_network_and_writes(tmp_path):
                   "pathlib.Path('/usr/x').write_text('1')"],
                   capture_output=True, text=True, timeout=60)
     assert run2.returncode != 0
+
+
+def test_fail_closed_without_bwrap(tmp_path, monkeypatch):
+    """Senza bwrap NON si esegue nulla: proposta registrata ma ineseguita,
+    attivazione rifiutata, nessuna modalita' ridotta."""
+    import shutil
+    monkeypatch.setattr(shutil, "which", lambda _name: None)
+    forge = ToolForge(tmp_path)
+    result = forge.propose("echo_upper", GOOD_TOOL, GOOD_TESTS, now=T0)
+    assert result["tests_ok"] is False
+    assert result["isolation"] == "unavailable"
+    approved = forge.approve("echo_upper")
+    assert approved["ok"] is False
+    assert "esecuzione disabilitata" in approved["error"]
+
+
+def test_approved_tool_runs_only_in_bwrap(tmp_path, monkeypatch):
+    """A runtime il tool approvato e' un processo isolato: niente env dei
+    segreti dell'agente, output via JSON."""
+    import shutil
+    if shutil.which("bwrap") is None:
+        pytest.skip("bwrap non disponibile su questo host")
+    monkeypatch.setenv("ATLAS_SUPER_SECRET", "non-deve-vedersi")
+    env_tool = GOOD_TOOL.replace(
+        'return args["text"].upper()',
+        'import os\n'
+        '    leaked = os.environ.get("ATLAS_SUPER_SECRET")\n'
+        '    return args["text"].upper() + str(leaked)')
+    env_tests = ("import echo_upper\n"
+                 "def test_env():\n"
+                 "    assert echo_upper.run({\"text\": \"a\"}, None)"
+                 " == \"ANone\"\n")
+    forge = ToolForge(tmp_path)
+    forge.propose("echo_upper", env_tool, env_tests, now=T0)
+    approved = forge.approve("echo_upper")
+    assert approved["ok"] is True, approved
+    loaded = forge.load_approved()
+    out = loaded["echo_upper"]["run"]({"text": "a"}, None)
+    assert out == "ANone"  # env scrubbed: il segreto non esiste dentro
+    # l'interfaccia registrata all'approvazione non richiede exec in-process
+    meta = {i["name"]: i for i in forge.list()}
+    assert meta["echo_upper"]["interface"]["name"] == "echo_upper"
