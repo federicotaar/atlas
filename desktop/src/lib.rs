@@ -162,9 +162,10 @@ pub fn run() {
             if let tauri::WindowEvent::CloseRequested { .. } = event {
                 // Solo il processo avviato da noi; un'istanza riusata resta viva.
                 let state = window.state::<Sidecar>();
-                let child = state.0.lock().unwrap().take();
+                let child = state.0.lock().ok().and_then(|mut g| g.take());
                 if let Some(child) = child {
                     let pid = child.pid();
+                    eprintln!("[atlas] chiusura finestra: SIGTERM al bootloader pid {pid}");
                     // Prima SIGTERM: il bootloader PyInstaller lo inoltra al
                     // server Python figlio (SIGKILL non e' inoltrabile). Solo
                     // sul processo avviato da noi; un'istanza riusata non e'
@@ -182,7 +183,10 @@ pub fn run() {
                             .status();
                         std::thread::sleep(std::time::Duration::from_millis(800));
                     }
-                    let _ = child.kill();
+                    let r = child.kill();
+                    eprintln!("[atlas] chiusura finestra: kill bootloader -> {r:?}");
+                } else {
+                    eprintln!("[atlas] chiusura finestra: nessun sidecar avviato da noi");
                 }
             }
         })

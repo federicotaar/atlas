@@ -143,7 +143,16 @@ echo "$PROBE" | grep -qi 'atlas:atlas@' && {
 # maschererebbe un eventuale bug di lifecycle, e un pkill per nome rischierebbe
 # di colpire processi non nostri. Teardown della fixture: solo PID noti.
 WID=$(DISPLAY=:98 xdotool search --name '^ATLAS$' | head -1)
-DISPLAY=:98 xdotool windowclose "$WID"
+echo "lifecycle: WID='$WID'"
+DISPLAY=:98 wmctrl -l || true
+if [ -z "$WID" ]; then
+  echo 'E2E riserva: FINESTRA ATLAS non trovata - titolo diverso da ATLAS?' >&2
+  exit 1
+fi
+DISPLAY=:98 xdotool windowclose "$WID" || echo 'lifecycle: windowclose errore' >&2
+sleep 3
+echo "lifecycle: finestra dopo close: '$(DISPLAY=:98 xdotool search --name '^ATLAS$' | head -1)'"
+pgrep -af atlas-desktop || echo 'lifecycle: atlas-desktop non in esecuzione dopo close'
 normal_close_ok=0
 for i in $(seq 1 20); do
   sleep 1
@@ -152,6 +161,9 @@ done
 if [ "$normal_close_ok" != 1 ]; then
   echo 'E2E riserva: ANOMALIA lifecycle - la chiusura normale NON ha liberato 8100 (sidecar orfano?)' >&2
   ps aux | grep -i 'atlas-backend' | grep -v grep >&2 || true
+  pgrep -af atlas-desktop >&2 || echo 'atlas-desktop non in esecuzione' >&2
+  echo '--- log app (ultime 60 righe) ---' >&2
+  tail -60 /tmp/atlas-reserve.log >&2 || true
   # teardown forzato ma mirato: solo il PID del sidecar superstite
   SPID=$(pgrep -f 'atlas-backend' | head -1)
   [ -n "$SPID" ] && kill -9 "$SPID" || true
