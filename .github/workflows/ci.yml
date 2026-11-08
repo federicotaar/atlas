@@ -71,7 +71,15 @@ jobs:
           # install.sh di ollama.com punta a un asset .tgz non piu' pubblicato
           # (404) e i browser_download_url dei Releases riescono 504:
           # scarichiamo l'asset via endpoint API di GitHub (verificato attivo).
-          ASSET_URL=$(curl -fsSL https://api.github.com/repos/ollama/ollama/releases/latest             | python3 -c "import sys,json; d=json.load(sys.stdin); print(next(a['url'] for a in d['assets'] if a['name']=='ollama-linux-amd64.tar.zst'))")
+          # Anche la risoluzione dell'asset va ripetuta: api.github.com puo'
+          # rispondere 503 transitorio (visto nel run 42473097331).
+          ASSET_URL=""
+          for i in 1 2 3 4; do
+            ASSET_URL=$(curl -fsSL https://api.github.com/repos/ollama/ollama/releases/latest | python3 -c "import sys,json; d=json.load(sys.stdin); print(next(a['url'] for a in d['assets'] if a['name']=='ollama-linux-amd64.tar.zst'))") && [ -n "$ASSET_URL" ] && break
+            echo "risoluzione release ollama fallita (tentativo $i), riprovo..."
+            sleep 15
+          done
+          [ -n "$ASSET_URL" ]
           ok=0
           for i in 1 2 3; do
             if curl -fsSL --retry 3 -H 'Accept: application/octet-stream' "$ASSET_URL" -o /tmp/ollama.tar.zst; then
