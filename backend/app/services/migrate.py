@@ -72,6 +72,46 @@ TABLES = [
 ]
 
 
+# Rilevamento automatico dell'upgrade da 2.0.x: SOLO i default documentati
+# del nostro docker-compose.yml distribuito (nessuna scansione di file,
+# nessuna credenziale indovinata). Un setup personalizzato si dichiara con
+# ATLAS_LEGACY_DATABASE_URL, che ha sempre la precedenza sul rilevamento.
+LEGACY_AUTODETECT_CANDIDATES = (
+    "postgresql+psycopg://atlas:atlas@localhost:5432/atlas",
+)
+
+# Chiavi Fernet legacy NOTE perche' pubbliche: il default di sviluppo
+# distribuito nel docker-compose.yml 2.0.x. Usate SOLO per decifrare le
+# credenziali migrate e ri-cifrarle con la chiave locale corrente: mai
+# salvate, mai adottate come chiave dell'installazione.
+LEGACY_KNOWN_CREDENTIALS_KEYS = (
+    "dFlmLYWhooNIxCgkSH_aPNs5xJEhnX8kIJCQyUjePtk=",
+)
+
+# Campi cifrati migrati: (tabella, colonna). I token dei connettori non hanno
+# un flag key_unusable: per loro vale il conteggio complessivo.
+ENCRYPTED_FIELDS = (
+    ("user_model_settings", "api_key_enc"),
+    ("connector_credentials", "access_token_enc"),
+    ("connector_credentials", "refresh_token_enc"),
+)
+
+
+def autodetect_legacy_url() -> str | None:
+    """Rileva un Postgres 2.0.x raggiungibile E CON DATI tra i candidati
+    documentati. Ritorna l'URL, altrimenti None: vuoto o irraggiungibile
+    contano come assente, cosi' un'installazione nuova resta semplice e non
+    vede mai un banner."""
+    for url in LEGACY_AUTODETECT_CANDIDATES:
+        try:
+            result = probe(url)
+        except Exception:
+            continue
+        if result.state == "has_data":
+            return url
+    return None
+
+
 @dataclass
 class ProbeResult:
     """Esito del controllo del database di origine."""
@@ -173,7 +213,8 @@ def _user_owned_models() -> list:
 
 
 def import_payload(
-    db: Session, payload: dict, credentials_key: str | None = None
+    db: Session, payload: dict, credentials_key: str | None = None,
+    legacy_keys: tuple[str, ...] | list[str] | None = None,
 ) -> tuple[dict[str, int], list[uuid.UUID], int]:
     """Importa il payload nel DB corrente SOLO se genuinamente vuoto.
 
@@ -218,16 +259,35 @@ def import_payload(
     undecryptable = 0
     bad_cred_users: set[str] = set()
     if credentials_key:
-        from .credentials import decrypt_secret
+        from .credentials import decrypt_secret, encrypt_secret
 
-        for raw in tables.get("user_model_settings", []):
-            enc = raw.get("api_key_enc")
-            if enc:
+        for table, column in ENCRYPTED_FIELDS:
+            for raw in tables.get(table, []):
+                enc = raw.get(column)
+                if not enc:
+                    continue
                 try:
                     decrypt_secret(enc, credentials_key)
+                    continue
                 except Exception:
+                    pass
+                # Chiave locale diversa: riprova con le chiavi legacy NOTE
+                # (default pubblici del compose 2.0.x). Se una decifra, il
+                # segreto viene SUBITO ri-cifrato con la chiave locale: la
+                # chiave vecchia non viene mai salvata ne' adottata.
+                reencrypted = False
+                for legacy_key in legacy_keys or ():
+                    try:
+                        plain = decrypt_secret(enc, legacy_key)
+                    except Exception:
+                        continue
+                    raw[column] = encrypt_secret(plain, credentials_key)
+                    reencrypted = True
+                    break
+                if not reencrypted:
                     undecryptable += 1
-                    bad_cred_users.add(str(raw.get("user_id")))
+                    if table == "user_model_settings" and column == "api_key_enc":
+                        bad_cred_users.add(str(raw.get("user_id")))
 
     if bootstrap_ok:
         # sostituzione pulita: le uniche righe possibili sono gli audit-log

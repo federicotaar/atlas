@@ -25,14 +25,19 @@ manuale.
 
 ## Dati esistenti (migrazione da Postgres)
 
-Se prima usavi ATLAS con Docker/Postgres, imposta
-`ATLAS_LEGACY_DATABASE_URL` sull'URL del vecchio database prima del primo
-avvio. Al login l'app mostra un banner:
+Se prima usavi ATLAS 2.0.x con il docker-compose distribuito (i default
+documentati, Postgres `atlas` su localhost:5432), l'app lo rileva da sola al
+primo avvio e mostra direttamente il banner: niente da configurare. Con un
+setup personalizzato imposta invece `ATLAS_LEGACY_DATABASE_URL` sull'URL del
+vecchio database prima del primo avvio (ha sempre la precedenza). Al login
+l'app mostra un banner:
 
 - **origine raggiungibile con dati** → puoi importare tutto (memorie,
-  fonti, eventi, impostazioni e credenziali BYOK **cifrate**: serve la
-  stessa `ATLAS_CREDENTIALS_KEY` sulla destinazione) oppure continuare
-  senza importare;
+  fonti, eventi, impostazioni e credenziali **cifrate**) oppure continuare
+  senza importare. Le credenziali cifrate con il default pubblico del
+  compose 2.0.x vengono decifrate e ri-cifrate al volo con la chiave locale
+  nuova (che non viene mai sostituita); quelle cifrate con una tua chiave
+  personalizzata vanno re-inserite dopo l'accesso (vengono segnalate);
 - **origine irraggiungibile** → l'app lo dice esplicitamente e NON parte
   come profilo nuovo in silenzio: riprova o continua senza importare
   (scelta registrata);

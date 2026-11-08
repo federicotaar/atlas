@@ -3,6 +3,8 @@
 Regole (proprietario): mai partire in silenzio come profilo nuovo quando una
 origine configurata e' irraggiungibile; mai importare sopra dati esistenti;
 scelta esplicita dell'utente per importare O continuare senza migrare."""
+import os
+
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -27,6 +29,23 @@ class MigrationStatusOut(BaseModel):
     undecryptable_credentials: int | None = None
 
 
+def _legacy_source() -> str:
+    """Fonte legacy: configurata (env, priorita' assoluta) oppure rilevata.
+
+    Il rilevamento gira SOLO in modalita' desktop e prova esclusivamente i
+    default documentati del docker-compose 2.0.x distribuito
+    (migrate.LEGACY_AUTODETECT_CANDIDATES): niente scansione di file, niente
+    credenziali indovinate. Una fonte rilevata conta solo se raggiungibile e
+    con dati: un'installazione nuova non vede mai il banner e un Postgres
+    spento non genera falsi allarmi."""
+    configured = get_settings().legacy_database_url
+    if configured:
+        return configured
+    if os.environ.get("ATLAS_DESKTOP") == "1":
+        return migrate.autodetect_legacy_url() or ""
+    return ""
+
+
 def _recorded_state(db: Session, user: User) -> str | None:
     from ..models import ActionLog
 
@@ -45,7 +64,7 @@ def migration_status(db: Session = Depends(get_db), user: User = Depends(get_cur
     recorded = _recorded_state(db, user)
     if recorded:
         return MigrationStatusOut(state=recorded)
-    legacy = get_settings().legacy_database_url
+    legacy = _legacy_source()
     if not legacy:
         return MigrationStatusOut(state="not_configured")
     probe = migrate.probe(legacy)
@@ -56,7 +75,7 @@ def migration_status(db: Session = Depends(get_db), user: User = Depends(get_cur
 def migration_import(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     """Importa dal Postgres legacy SOLO se il profilo corrente e' vuoto
     (l'utente corrente e' l'unico e non ha memorie) e l'origine e' raggiungibile."""
-    legacy = get_settings().legacy_database_url
+    legacy = _legacy_source()
     if not legacy:
         raise AtlasError("not_configured", "Nessuna origine configurata.", status=400)
     probe = migrate.probe(legacy)
@@ -66,7 +85,8 @@ def migration_import(db: Session = Depends(get_db), user: User = Depends(get_cur
     payload = migrate.export_payload(legacy)
     try:
         inserted, _uids, undecryptable = migrate.import_payload(
-            db, payload, get_settings().credentials_key)
+            db, payload, get_settings().credentials_key,
+            legacy_keys=migrate.LEGACY_KNOWN_CREDENTIALS_KEYS)
     except ValueError as exc:
         raise AtlasError("target_not_empty", str(exc), status=409) from exc
     # Transazione unica in import_payload: sostituzione bootstrap + dati +
