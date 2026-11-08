@@ -34,3 +34,13 @@ def test_actual_request_from_tauri_origin_allowed(client):
     r = client.get("/health", headers={"Origin": "tauri://localhost"})
     assert r.status_code == 200
     assert r.headers.get("access-control-allow-origin") == "tauri://localhost"
+
+
+def test_health_identifica_istanza_atlas(client):
+    """Il desktop distingue un'istanza ATLAS compatibile da un servizio
+    qualunque sulla porta 8000: app + api devono essere presenti."""
+    r = client.get("/health")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["app"] == "atlas"
+    assert body["api"] == "v1"

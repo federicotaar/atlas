@@ -64,4 +64,7 @@ def health() -> dict:
             conn.execute(sql_text("SELECT 1"))
     except Exception:
         db_status = "down"
-    return {"status": "ok", "db": db_status}
+    # app/identita': il desktop distingue un'istanza ATLAS compatibile da un
+    # servizio qualunque che occupi la porta 8000 (non si uccide mai un server
+    # altrui; si riusa solo un'istanza ATLAS con stessa app e API).
+    return {"status": "ok", "db": db_status, "app": "atlas", "api": "v1"}
