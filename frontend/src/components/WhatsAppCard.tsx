@@ -14,7 +14,7 @@ export default function WhatsAppCard() {
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const refresh = () => {
-    api.getWhatsAppStatus().then(setSt).catch(() => setError("Stato WhatsApp non raggiungibile."));
+    api.getWhatsAppStatus().then((s) => { setSt(s); setError(null); }).catch(() => setError("Stato WhatsApp non raggiungibile."));
   };
 
   useEffect(() => {
@@ -64,7 +64,26 @@ export default function WhatsAppCard() {
       .catch(() => setQr(null));
   }, [st?.qr, st?.qr_state]);
 
-  if (!st) return null;
+  // Mai sparire in silenzio: se lo stato non arriva, la card resta visibile
+  // con l'errore e un modo per riprovare (una card che svanisce si legge
+  // come "il setup non esiste").
+  if (!st) {
+    return (
+      <section className="panel">
+        <h3>WhatsApp</h3>
+        {error ? (
+          <>
+            <div className="err">{error}</div>
+            <div className="row">
+              <button className="ghost" onClick={refresh}>Ricontrolla</button>
+            </div>
+          </>
+        ) : (
+          <p className="muted">Caricamento…</p>
+        )}
+      </section>
+    );
+  }
 
   return (
     <section className="panel">
