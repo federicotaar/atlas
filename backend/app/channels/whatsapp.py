@@ -107,6 +107,8 @@ class _BridgeClient:
         self._post = post or self._http_post
         self._sleep = sleep or _time.sleep
         self._stop = threading.Event()
+        self._poll_alive = False
+        self._on_failure = None
 
     # --- HTTP reale ---------------------------------------------------------
 
@@ -152,17 +154,32 @@ class _BridgeClient:
     def stop(self) -> None:
         self._stop.set()
 
+    def is_connected(self) -> bool:
+        return self._poll_alive and not self._stop.is_set()
+
+    def set_on_failure(self, fn) -> None:
+        self._on_failure = fn
+
     # --- loop ----------------------------------------------------------------
 
     def _poll_loop(self, on_update: Callable[[str, str], None]) -> None:
         after = 0
         boot = None
+        self._poll_alive = True
+        from ..agent.supervisor import RestartPolicy
+        policy = RestartPolicy(max_restarts=5, window_seconds=600)
         while not self._stop.is_set():
             try:
                 data = self._get(f"/events?after={after}")
-            except Exception:
-                # Sidecar giu' o non ancora pronto: riprova al prossimo giro.
-                self._sleep(self._interval)
+            except Exception as exc:
+                # Sidecar giu' o non ancora pronto: backoff con freno
+                # anti crash-loop (stage 12); esaurito, avvisa e rinuncia.
+                delay = policy.next_delay()
+                if delay is None:
+                    if self._on_failure is not None:
+                        self._on_failure("whatsapp", exc)
+                    return
+                self._sleep(max(self._interval, delay))
                 continue
             if data.get("boot") != boot:
                 boot = data.get("boot")
