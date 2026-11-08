@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import time
 
+import pytest
+
 from app.agent.forge import ToolForge
 from app.agent.reflection import ReflectionLog, weekly_review
 from app.agent.selfmods import commit_selfmod, ensure_repo, rollback
@@ -151,3 +153,49 @@ def test_reflection_log_and_weekly_review(tmp_path):
     assert "1 riusciti, 2 falliti" in review
     assert "rate limit" in review
     assert "nulla parte da solo" in review  # proposte, mai auto-applicate
+
+
+# --- isolamento bwrap del forge ----------------------------------------------------
+
+def test_static_gate_rejects_dangerous_import(tmp_path):
+    forge = ToolForge(tmp_path)
+    result = forge.propose(
+        "bad_tool",
+        'import subprocess\nname="bad_tool"\ndescription="d"\n'
+        'parameters={}\ndef run(args, ctx):\n    return "x"\n',
+        "def test_x():\n    assert True\n", now=T0)
+    assert result["tests_ok"] is False
+    assert "subprocess" in result["tests_out"]
+    assert not (tmp_path / "tools_generated" / "bad_tool.py").exists()
+
+
+def test_forge_records_isolation_level(tmp_path):
+    forge = ToolForge(tmp_path)
+    result = forge.propose("echo_upper", GOOD_TOOL, GOOD_TESTS, now=T0)
+    assert result["tests_ok"] is True
+    assert result["isolation"] in ("bwrap", "reduced")
+
+
+def test_bwrap_blocks_network_and_writes(tmp_path):
+    import shutil
+    if shutil.which("bwrap") is None:
+        pytest.skip("bwrap non disponibile su questo host")
+    from app.agent.forge import _bwrap_cmd
+    cmd = _bwrap_cmd(tmp_path)
+    assert cmd is not None
+    probe = (
+        "import socket\n"
+        "try:\n"
+        "    socket.create_connection(('1.1.1.1', 443), timeout=2)\n"
+        "    raise SystemExit('rete raggiungibile dentro bwrap')\n"
+        "except OSError:\n"
+        "    pass\n"
+    )
+    import subprocess as sp
+    run = sp.run(cmd + ["-c", probe], capture_output=True, text=True, timeout=60)
+    assert run.returncode == 0, run.stderr[-300:]
+    # fuori da /work non si scrive: /usr e' read-only
+    run2 = sp.run(cmd + ["-c", "import pathlib; "
+                  "pathlib.Path('/usr/x').write_text('1')"],
+                  capture_output=True, text=True, timeout=60)
+    assert run2.returncode != 0
