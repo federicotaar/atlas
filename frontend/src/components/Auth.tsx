@@ -165,7 +165,7 @@ export default function Auth({ onLogin }: { onLogin: () => void }) {
         {mode === "register" && local && (
           <form className="auth" onSubmit={submit}>
             <p className="auth-ask">Crea il tuo profilo locale</p>
-            <input type="email" placeholder="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+            <input type="email" placeholder="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoFocus />
             <input type="password" placeholder="scegli una password (min 8 caratteri)" value={password}
                    onChange={(e) => setPassword(e.target.value)} required minLength={8} />
             {error && <div className="err">{error}</div>}

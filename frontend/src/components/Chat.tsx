@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, type AskResponse, type ModelSettings } from "../api";
 import { formatCitation } from "../lib";
 import ModelPicker from "./ModelPicker";
@@ -16,6 +16,7 @@ export default function Chat() {
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [modelSettings, setModelSettings] = useState<ModelSettings | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     api.getModelSettings().then(setModelSettings).catch(() => setModelSettings(null));
@@ -40,6 +41,7 @@ export default function Chat() {
       setError(err instanceof Error ? err.message : "Errore");
     } finally {
       setBusy(false);
+      inputRef.current?.focus();
     }
   }
 
@@ -90,7 +92,7 @@ export default function Chat() {
       )}
       {error && <div className="err">{error}</div>}
       <form className="composer" onSubmit={send}>
-        <input value={input} onChange={(e) => setInput(e.target.value)}
+        <input ref={inputRef} value={input} onChange={(e) => setInput(e.target.value)} autoFocus
                placeholder='Chiedi qualcosa, oppure "ricorda che ..."' />
         <button className="primary" disabled={busy}>{busy ? "..." : "Invia"}</button>
       </form>
