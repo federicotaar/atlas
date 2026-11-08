@@ -9,7 +9,8 @@
 use std::process::Child;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
-use tauri::Manager;
+use tauri::{Emitter, Manager};
+use tauri_plugin_shell::ShellExt;
 
 const HEALTH_URL: &str = "http://127.0.0.1:8000/health";
 
@@ -66,7 +67,7 @@ pub fn run() {
                 }
                 Probe::Foreign => {
                     // Mai uccidere un server che non e' nostro.
-                    app.handle().emit_all(
+                    app.handle().emit(
                         "backend-port-busy",
                         "127.0.0.1:8000 e' occupata da un servizio che non e' ATLAS",
                     )?;
@@ -94,7 +95,7 @@ pub fn run() {
             std::thread::spawn(move || {
                 if !wait_health() {
                     eprintln!("ATLAS backend non risponde su 127.0.0.1:8000 entro 30s");
-                    let _ = handle.emit_all("backend-failed", ());
+                    let _ = handle.emit("backend-failed", ());
                 }
             });
             Ok(())
