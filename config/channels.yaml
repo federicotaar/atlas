@@ -6,5 +6,16 @@ channels:
     enabled: false
   whatsapp_unofficial:
     enabled: false
+    # Sidecar Go wa-bridge (whatsmeow), SOLO loopback + token condiviso.
+    bridge_addr: "127.0.0.1:18741"
+    # Se valorizzato, la CLI avvia lei il sidecar (token effimero generato a
+    # ogni avvio); altrimenti si attacca a un bridge gia' avviato e serve
+    # WA_BRIDGE_TOKEN in .env. Percorso relativo al root del repo.
+    bridge_bin: "wa-bridge/wa-bridge"
+    # true: il bridge consegna anche i DM 1:1 oltre alla self-chat;
+    # l'allowlist (ALLOWED_WHATSAPP_NUMBERS + /pairing approve) resta
+    # CENTRALE nel backend, mai nel bridge.
+    allow_dms: true
+    poll_interval: 2
   whatsapp_official:
     enabled: false
