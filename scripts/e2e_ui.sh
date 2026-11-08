@@ -9,6 +9,22 @@ if ss -ltn | grep ':8000' | grep -qE '(0\.0\.0\.0|\*|\[::\]):8000'; then echo 'b
 echo 'bind solo loopback OK'
 curl -sf http://127.0.0.1:8000/auth/modes | tee /tmp/modes.json
 grep -q 'local_password' /tmp/modes.json || { echo 'modes NON locali: il sidecar non e in modalita desktop' >&2; exit 1; }
+# Click al centro della prima parola trovata via OCR (coordinate TSV).
+click_word() {
+  local png="$1" word="$2"
+  convert "$png" -negate /tmp/ocr-click.png
+  local geo
+  geo=$(tesseract /tmp/ocr-click.png stdout tsv 2>/dev/null | \
+    awk -F'\t' -v w="$word" 'NR>1 && tolower($12) ~ tolower(w) {print $7" "$8" "$9" "$10; exit}')
+  [ -n "$geo" ] || { echo "E2E UI: parola '$word' NON trovata via OCR" >&2; return 1; }
+  set -- $geo
+  xdotool mousemove $(( $1 + $3 / 2 )) $(( $2 + $4 / 2 )) click 1
+}
+# OCR onesto (tesseract): la prova e' quel che si VEDE nel frame.
+ocr_has() {
+  convert "$1" -negate /tmp/ocr-work.png
+  tesseract /tmp/ocr-work.png stdout 2>/dev/null | grep -qi "$2"
+}
 echo 'modes desktop OK'
 xdotool search --name 'ATLAS' | head -1 | xargs -r xdotool windowactivate --sync || true
 sleep 2
@@ -22,14 +38,29 @@ import -window root /tmp/e2e-2-registrazione.png
 xdotool key Tab Return
 sleep 4
 import -window root /tmp/e2e-3-chat.png
+# La destinazione post-registrazione non e' garantita (vista Chat oppure
+# Dashboard): navigare ESPLICITAMENTE alla Chat col click OCR sulla voce di
+# navigazione. Digitare a occhio chiuso qui finiva nel campo token Telegram
+# della Dashboard (run 42470527636: la frase "ricorda che..." e' stata
+# inviata come token e il salvataggio non e' mai avvenuto).
+click_word /tmp/e2e-3-chat.png 'Chat' || { echo 'E2E UI: voce Chat NON trovata via OCR'; exit 1; }
+sleep 3
+# Click mirato sul composer (stesso punto usato dopo il riavvio): il focus
+# non arriva da solo nel campo di input.
+xdotool mousemove 640 737 click 1
+sleep 1
 xdotool type --delay 20 'ricorda che il gatto si chiama Briciola'
 xdotool key Tab Return
-sleep 5
+sleep 6
 import -window root /tmp/e2e-4-salvato.png
+ocr_has /tmp/e2e-4-salvato.png 'Briciola' || { echo 'E2E UI: salvataggio memoria NON visibile in chat'; exit 1; }
+echo 'memoria salvata via chat OK'
 xdotool type --delay 20 'come si chiama il mio gatto?'
 xdotool key Tab Return
-sleep 5
+sleep 6
 import -window root /tmp/e2e-5-richiamo.png
+ocr_has /tmp/e2e-5-richiamo.png 'Briciola' || { echo 'E2E UI: richiamo Briciola NON visibile prima del riavvio'; exit 1; }
+echo 'richiamo pre-riavvio OK'
 pkill -f 'target/release/atlas-desktop' || true
 # Anche i processi figli WebKit: se sopravvivono tengono il lock del profilo
 # e la finestra del secondo avvio non viene mai disegnata (screenshot nero).
@@ -39,11 +70,22 @@ for i in $(seq 1 15); do
   sleep 1
   pgrep -f 'target/release/atlas-desktop|WebKitWebProcess' >/dev/null 2>&1 || break
 done
+# Attendere anche il sidecar: il watchdog (o il close handler) lo termina
+# entro pochi secondi dalla morte dell'app. Se 8000 resta occupata, il nuovo
+# avvio finirebbe sulla porta di riserva e i check seguenti su 8000 sarebbero
+# una corsa contro il sidecar morente. Porta non libera = lifecycle rotto.
+for i in $(seq 1 30); do
+  sleep 1
+  ss -ltn | grep -q ':8000' || break
+done
+ss -ltn | grep -q ':8000' && { echo 'E2E UI: sidecar ancora in ascolto dopo la chiusura dell app (lifecycle/watchdog fallito)' >&2; exit 1; }
 DISPLAY=:99 ./desktop/target/release/atlas-desktop >> /tmp/atlas-desktop.log 2>&1 &
+ok=0
 for i in $(seq 1 60); do
   sleep 1
-  curl -s http://127.0.0.1:8000/health | grep -q '"app":"atlas"' && break
+  curl -s http://127.0.0.1:8000/health | grep -q '"app":"atlas"' && { ok=1; break; }
 done
+[ "$ok" = 1 ] || { echo 'E2E UI: backend NON risalito su 8000 dopo il riavvio' >&2; exit 1; }
 for i in $(seq 1 30); do
   sleep 1
   xdotool search --name 'ATLAS' >/dev/null 2>&1 && break
@@ -68,12 +110,6 @@ shot() {
   exit 1
 }
 shot /tmp/e2e-6-riavvio.png
-# OCR onesto (tesseract): la prova e' quel che si VEDE nel frame, non solo
-# che il PNG non e' nero o diverso dal precedente.
-ocr_has() {
-  convert "$1" -negate /tmp/ocr-work.png
-  tesseract /tmp/ocr-work.png stdout 2>/dev/null | grep -qi "$2"
-}
 # La sessione sopravvive al riavvio: stato loggato visibile (Esci).
 ocr_has /tmp/e2e-6-riavvio.png 'Esci' || { echo 'E2E UI: post-riavvio NON loggato (Esci non visibile)'; exit 1; }
 # Richiamo via UI dopo il riavvio: click MIRATO sul composer (a 1280x800 il
