@@ -16,11 +16,14 @@ else
     *) echo "rustc assente e piattaforma non mappata: installa Rust" >&2; exit 1;;
   esac
 fi
+# --add-data porta config/providers.yaml nel bundle: l'agente desktop
+# (montato a /agent) lo cerca in _MEIPASS/config al primo avvio.
 pyinstaller --onefile --name "atlas-backend-${TARGET}" \
   --paths . \
   --hidden-import sqlite_vec \
   --collect-all sqlite_vec \
   --collect-submodules app \
+  --add-data "../config/providers.yaml:config" \
   desktop_main.py
 mkdir -p ../desktop/bin
 mv "dist/atlas-backend-${TARGET}"* ../desktop/bin/
