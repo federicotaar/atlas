@@ -23,6 +23,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
+from urllib.parse import urlsplit
+
 from sqlalchemy import create_engine
 from sqlalchemy import text as sql_text
 from sqlalchemy.orm import Session
@@ -108,7 +110,7 @@ def detect_legacy() -> tuple[str | None, "ProbeResult | None"]:
         try:
             result = probe(url)
         except Exception as exc:
-            result = ProbeResult(state="unreachable", error=f"{type(exc).__name__}: {exc}")
+            result = ProbeResult(state="unreachable", error=_safe_error(exc, url))
         if result.state == "has_data":
             return url, result
         if result.state == "unreachable" and first_unreachable is None:
@@ -127,6 +129,17 @@ def autodetect_legacy_url() -> str | None:
     if url is not None and result is not None and result.state == "has_data":
         return url
     return None
+
+
+def _safe_error(exc: Exception, pg_url: str) -> str:
+    """Errore mostrabile in UI/log: MAI la connection string con le
+    credenziali dentro, qualunque cosa il driver includa nel messaggio."""
+    msg = f"{type(exc).__name__}: {exc}"
+    parts = urlsplit(pg_url)
+    if parts.password:
+        msg = msg.replace(f"{parts.username}:{parts.password}@", "***@")
+        msg = msg.replace(parts.password, "***")
+    return msg
 
 
 @dataclass
@@ -149,7 +162,7 @@ def probe(pg_url: str) -> ProbeResult:
         with engine.connect() as conn:
             conn.execute(sql_text("SELECT 1"))
     except Exception as exc:  # rete giu', credenziali, DNS, TLS...
-        return ProbeResult(state="unreachable", error=f"{type(exc).__name__}: {exc}")
+        return ProbeResult(state="unreachable", error=_safe_error(exc, pg_url))
 
     counts: dict[str, int] = {}
     try:
@@ -159,7 +172,7 @@ def probe(pg_url: str) -> ProbeResult:
                     sql_text(f"SELECT count(*) FROM {model.__tablename__}")).scalar_one()
                 counts[model.__tablename__] = int(n)
     except Exception as exc:
-        return ProbeResult(state="unreachable", error=f"{type(exc).__name__}: {exc}")
+        return ProbeResult(state="unreachable", error=_safe_error(exc, pg_url))
     state = "has_data" if counts.get("users", 0) > 0 else "empty"
     return ProbeResult(state=state, counts=counts)
 

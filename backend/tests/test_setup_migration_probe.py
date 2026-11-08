@@ -153,3 +153,33 @@ def test_detect_legacy_ordina_i_risultati(monkeypatch):
     monkeypatch.setattr(migrate, "probe", boom)
     url, result = migrate.detect_legacy()
     assert result.state == "unreachable" and "OSError" in result.error
+
+
+def test_safe_error_mai_credenziali():
+    """Il messaggio di errore mostrato in UI/log non contiene MAI la password
+    del vecchio DB, anche se il driver la includesse nel testo."""
+    url = "postgresql+psycopg://bob:s3cr3t-tkn@db.internal:5432/app"
+    exc = RuntimeError(
+        "could not connect to postgresql+psycopg://bob:s3cr3t-tkn@db.internal:5432/app; "
+        "password s3cr3t-tkn refused")
+    out = migrate._safe_error(exc, url)
+    assert "s3cr3t-tkn" not in out
+    assert "bob:***@" not in out
+    assert "db.internal" in out  # host/porta restano utili alla diagnosi
+
+
+def test_probe_endpoint_mai_credenziali(client, monkeypatch):
+    """End-to-end onesto: probe REALE su porta chiusa con password nell'URL;
+    la risposta API non la contiene."""
+    secret = "pw-molto-segreta-123"
+    url = f"postgresql+psycopg://atlas:{secret}@localhost:59997/atlas"
+    monkeypatch.setenv("ATLAS_LEGACY_DATABASE_URL", url)
+    get_settings.cache_clear()
+    u = make_user(client, "probe_leak")
+    r = client.post("/setup/migration-probe", headers=u["headers"])
+    assert r.status_code == 200
+    body = r.json()
+    assert body["source"] == "configured"
+    assert body["state"] == "unreachable"
+    assert secret not in body["error"]
+    assert f"atlas:{secret}@" not in r.text
