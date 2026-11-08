@@ -148,8 +148,11 @@ def test_shell_tool(ctx):
     assert "exit 0" in out and "ciao" in out
     out = TOOLS_BY_NAME["shell"].run({"command": "rm -rf /"}, ctx)
     assert out.startswith("BLOCCATO")
+    out = TOOLS_BY_NAME["shell"].run({"command": "false"}, ctx)
+    assert "exit 1" in out
+    # fuori superficie ristretta: esito esplicito, niente esecuzione
     out = TOOLS_BY_NAME["shell"].run({"command": "exit 3"}, ctx)
-    assert "exit 3" in out
+    assert "NON DISPONIBILE" in out
 
 
 # --- log azioni ---------------------------------------------------------------
@@ -325,9 +328,10 @@ def test_yolo_shell_outside_workspace_asks(tmp_path):
     # dentro il workspace o URL: nessuna conferma in yolo
     decision, _ = decide(Mode.YOLO, "shell", {"command": "cat app/main.py"}, tmp_path)
     assert decision is Decision.RUN
-    decision, _ = decide(Mode.YOLO, "shell",
-                         {"command": "curl https://example.com -o page.html"}, tmp_path)
-    assert decision is Decision.RUN
+    # fuori allowlist: non disponibile, non indebolimento silenzioso
+    decision, reason = decide(Mode.YOLO, "shell",
+                              {"command": "curl https://example.com -o page.html"}, tmp_path)
+    assert decision is Decision.DENY and "non disponibile" in reason
 
 
 # --- streaming nel loop -------------------------------------------------------
@@ -391,9 +395,9 @@ def test_seal_restores_modified_and_deleted(tmp_path):
     assert seal.verify_and_restore() == []  # integro: nessun incidente
 
 
-def test_seal_via_loop_shell_bypass_attempt(ctx, log, tmp_path):
-    """Un comando shell che aggira i filtri lessicali (variabile) e modifica un
-    file sigillato: il sigillo ripristina e logga l'incidente."""
+def test_bypass_attempt_prevented_via_loop(ctx, log, tmp_path):
+    """Il bypass lessicale (variabile + redirect) NON PARTE nella superficie
+    ristretta: il loop lo nega a monte, il file resta intatto."""
     from app.agent.seal import SealGuard
     target = tmp_path / "backend" / "app" / "agent" / "safety.py"
     target.parent.mkdir(parents=True)
@@ -406,9 +410,10 @@ def test_seal_via_loop_shell_bypass_attempt(ctx, log, tmp_path):
     notes_result = run_agent_loop(registry, "fake", [], ctx, Mode.YOLO, log,
                                   ask_fn=lambda q: True, seal=seal)
     assert target.read_bytes() == b"sigillato"
-    assert any("sigillo" in n for n in notes_result.notes)
+    assert any("negato" in n for n in notes_result.notes)
     entries = (tmp_path / "logs" / "actions.log").read_text()
-    assert '"tool": "_seal"' in entries
+    assert '"decision": "denied"' in entries
+
 
 
 def test_shell_env_has_no_secrets(ctx, monkeypatch):
