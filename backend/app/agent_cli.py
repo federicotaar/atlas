@@ -22,15 +22,17 @@ import os
 import queue
 import sys
 import threading
+import time
 from pathlib import Path
 from typing import Callable
 
 from .agent.actionlog import ActionLog
-from .agent.commands import parse_model_target
+from .agent.commands import CommandContext, handle_command, parse_model_target
 from .agent.loop import run_agent_loop
 from .agent.memory import MemoryStore, memories_context
 from .agent.permissions import Mode, parse_mode
 from .agent.safety import SecretFilter
+from .agent.scheduler import JobStore, Scheduler
 from .agent.seal import SealGuard
 from .agent.tools import ToolContext
 from .channels.base import ChannelHub, ChannelLog
@@ -158,7 +160,9 @@ def _spawn_bridge(bridge_bin: str, addr: str, token: str, workspace: Path,
 def _maybe_start_channels(*, workspace: Path, registry: ProviderRegistry,
                           get_active, set_active, ctx, store, log, seal,
                           secrets, dotenv: dict, out, max_steps: int,
-                          pairing: PairingStore):
+                          pairing: PairingStore,
+                          scheduler=None, proactive=None,
+                          rollback_fn=None, post_approve_fn=None):
     """Avvia i canali abilitati in config/channels.yaml.
     Ritorna (hub, channels): hub None se nessun canale e' partito."""
     config = load_channels_config(workspace)
@@ -254,7 +258,9 @@ def _maybe_start_channels(*, workspace: Path, registry: ProviderRegistry,
         describe_registry=_describe_registry,
         ctx=ctx, store=store, log=log, seal=seal, secrets=secrets,
         channels_log=ChannelLog(workspace / "logs" / "channels.log", secrets),
-        allowed=allowed, pairing=pairing, media=media, max_steps=max_steps)
+        allowed=allowed, pairing=pairing, media=media, scheduler=scheduler,
+        proactive=proactive, rollback_fn=rollback_fn,
+        post_approve_fn=post_approve_fn, max_steps=max_steps)
     channels: dict[str, object] = {}
     if tg_on:
         tg_cfg = config.get("channels", {}).get("telegram", {})
@@ -422,6 +428,7 @@ def run_cli(registry: ProviderRegistry, *, active: str | None = None,
             max_steps: int = 10,
             secrets: SecretFilter | None = None,
             dotenv: dict | None = None,
+            headless: bool = False,
             input_fn: Callable[[str], str] = input,
             out: Callable[[str], None] = print,
             write: Callable[[str], None] | None = None) -> int:
@@ -442,6 +449,17 @@ def run_cli(registry: ProviderRegistry, *, active: str | None = None,
     seal = SealGuard(workspace, on_incident=lambda msg: out(f"[sigillo: {msg}]"))
     state = {"mode": mode}
 
+    # Self-healing (spec sez. 8, stage 12): registro incidenti unico;
+    # all'avvio un database corrotto si ripristina dall'ultimo backup integro.
+    from .agent.backup import BackupManager
+    from .agent.health import HealthChecker, IncidentLog
+    incidents = IncidentLog(workspace / "logs" / "errors.log")
+    backups = BackupManager(workspace)
+    for recovery in backups.verify_and_restore(incidents):
+        out(f"[self-healing] {recovery}")
+    health = HealthChecker(workspace, incidents)
+    checkpoints = None
+
     def on_fallback(failed: str, to: str, err: str) -> None:
         out(f"[{failed} non disponibile ({err}); passo a {to}]")
 
@@ -450,9 +468,155 @@ def run_cli(registry: ProviderRegistry, *, active: str | None = None,
     store = MemoryStore(workspace / "memory.db")
     history: list[dict] = store.history("locale", "cli")
 
+    # Checkpoint dei task lunghi (stage 12): una conversazione interrotta
+    # da un crash si riprende da dov'era invece di ricominciare.
+    from .agent.checkpoint import CheckpointStore
+    checkpoints = CheckpointStore(workspace / "data" / "checkpoint.json")
+    pending_checkpoint = checkpoints.load()
+
     def set_active(name: str) -> None:
         nonlocal active
         active = name
+
+    # Scheduler jobs (spec sez. 8, stage 10): persistito in SQLite; il tick
+    # e' anche il battito (heartbeat). Un job che scatta non ha nessuno a cui
+    # chiedere conferma: le azioni che la richiedono vengono rifiutate.
+    job_store = JobStore(workspace / "data" / "jobs.db")
+    dispatchers: dict[str, Callable[[str, str], None]] = {}
+
+    def raw_deliver(channel: str, sender: str, text: str) -> None:
+        safe = secrets.redact(text)
+        deliver = dispatchers.get(channel) or dispatchers.get("cli")
+        if deliver is not None:
+            deliver(sender, safe)
+
+    # Messaggi proattivi con guardrail (spec sez. 8, stage 11): ore
+    # silenziose, tetto ai messaggi non richiesti, digest per la bassa
+    # priorita', importanza per categoria che si adatta al feedback.
+    from .agent.proactive import HIGH, LOW, ProactiveConfig, ProactiveGate, ProactiveStore
+    pcfg = ProactiveConfig.load(workspace)
+    gate = ProactiveGate(pcfg, ProactiveStore(workspace / "data" / "proactive.db"),
+                         deliver_fn=raw_deliver)
+    ctx.proactive = gate
+
+    # Abitudini (spec sez. 8, stage 13): apprendimento locale, mai temi
+    # sensibili; il contesto resta su Ollama se habits_local_only e' attivo.
+    from .agent.habits import HabitStore, habits_allowed_for_provider, habits_context
+    habits = HabitStore(workspace / "data" / "habits.db")
+    ctx.habits = habits
+
+    # Skill / tool auto-generati / riflessione (spec sez. 8, stage 14):
+    # proposte mai attive senza il si' di Fred; ogni auto-modifica e' un
+    # commit git confinato a skills/ e tools_generated/.
+    from .agent.forge import ToolForge
+    from .agent.reflection import ReflectionLog, weekly_review
+    from .agent.selfmods import commit_selfmod, rollback
+    from .agent.skills import SkillStore, skills_context
+    from .agent.tools import register_generated_tools
+    skills_lib = SkillStore(workspace)
+    forge = ToolForge(workspace)
+    reflections = ReflectionLog(workspace / "data" / "reflections.jsonl")
+    ctx.skills = skills_lib
+    ctx.forge = forge
+    register_generated_tools(forge.load_approved())
+
+    def selfmod_hook(message: str) -> None:
+        sha = commit_selfmod(workspace, message)
+        note = f"Ho preparato una modifica da approvare: {message}."
+        if sha:
+            note += f" (commit {sha[:8]}; /rollback la annulla)"
+        gate.deliver("cli", "locale", note, category="heads-up",
+                     priority=LOW)
+
+    ctx.selfmod_hook = selfmod_hook
+
+    def post_approve(name: str) -> None:
+        register_generated_tools(forge.load_approved())
+        commit_selfmod(workspace, f"tool approvato: {name}")
+        report = health.self_test(registry=registry, active=active,
+                                  channels=channels_for_health)
+        if not report["ok"]:
+            ok, message = rollback(workspace)
+            out(f"[self-healing] self-test fallito dopo l'attivazione di "
+                f"'{name}': {message}")
+            gate.deliver("cli", "locale",
+                         f"Il tool '{name}' e' stato attivato ma il "
+                         f"self-test e' fallito ({'; '.join(report['failures'])}). "
+                         f"Ho annullato l'ultima modifica: {message}.",
+                         category="heads-up", priority=HIGH)
+
+    def dispatch_job(job, text: str) -> None:
+        gate.deliver(job.channel, job.sender, text,
+                     category="reminder" if job.kind == "once" else "job",
+                     solicited=job.source == "user")
+
+    def run_job_task(job) -> str:
+        notes_block = memories_context(store.relevant(job.task))
+        messages = ([{"role": "system", "content": notes_block}]
+                    if notes_block else [])
+        messages.append({"role": "user",
+                         "content": f"[job schedulato #{job.id}] {job.task}"})
+        result = run_agent_loop(
+            registry, active, messages, ctx, state["mode"], log,
+            ask_fn=lambda question: False,  # nessuno puo' confermare: rifiuta
+            max_steps=max_steps, seal=seal)
+        return result.notes[-1] if result.stopped_by_limit else result.text
+
+    heartbeat_ticks = max(1, int(pcfg.heartbeat_minutes * 60 / 60))
+    channels_for_health: dict = {}
+
+    def on_tick(tick: int) -> None:
+        if tick % heartbeat_ticks == 0:
+            gate.heartbeat()
+        if tick % 60 == 0:  # ogni ora: self-test (log + incidenti)
+            try:
+                health.self_test(registry=registry, active=active,
+                                 channels=channels_for_health)
+            except Exception:
+                pass
+        if tick % (24 * 60) == 0:  # una volta al giorno: backup
+            try:
+                backups.backup()
+            except Exception:
+                pass
+        # revisione settimanale (lunedi' notte): proposte come messaggio,
+        # mai applicazioni automatiche
+        now_lt = time.localtime()
+        if now_lt.tm_wday == 0 and now_lt.tm_hour == 3 and \
+                state.get("review_week") != now_lt.tm_yday // 7:
+            try:
+                review = weekly_review(reflections)
+                state["review_week"] = now_lt.tm_yday // 7
+                if review:
+                    (workspace / "reviews").mkdir(exist_ok=True)
+                    (workspace / "reviews" /
+                     f"weekly-{time.strftime('%Y-%m-%d', now_lt)}.md"
+                     ).write_text(review)
+                    gate.deliver("cli", "locale", review,
+                                 category="digest", priority=LOW)
+            except Exception:
+                pass
+        # riepilogo notturno delle abitudini in habits.md (una volta al giorno)
+        if now_lt.tm_hour == 3 and state.get("habits_md_day") != now_lt.tm_mday:
+            try:
+                items = habits.write_habits_md(workspace / "habits.md")
+                state["habits_md_day"] = now_lt.tm_mday
+                routines = [i for i in items if i["key"].startswith("routine:")]
+                for routine in routines[:1]:  # una proposta alla volta, mai invadente
+                    gate.deliver(
+                        "cli", "locale",
+                        f"Ho notato un'abitudine: {routine['text']}. "
+                        "Vuoi che la scheduli? (/schedule ...) o ignorami.",
+                        category="heads-up", priority=LOW)
+            except Exception:
+                pass
+
+    scheduler = Scheduler(job_store, run_job_task, dispatch_job,
+                          tick_seconds=60, on_tick=on_tick)
+    ctx.scheduler = scheduler
+    scheduler.start()
+    dispatchers["cli"] = lambda sender, text: out(f"\n[job] {text}")
+    backups.backup()  # backup d'avvio: l'ultimo integro esiste sempre
 
     # Canali chat (spec sez. 6): partono solo se abilitati in
     # config/channels.yaml; token e allowlist arrivano da .env, mai da config.
@@ -466,8 +630,45 @@ def run_cli(registry: ProviderRegistry, *, active: str | None = None,
             workspace=workspace, registry=registry,
             get_active=lambda: active, set_active=set_active,
             ctx=ctx, store=store, log=log, seal=seal, secrets=secrets,
-            dotenv=dotenv, out=out, max_steps=max_steps, pairing=pairing)
+            dotenv=dotenv, out=out, max_steps=max_steps, pairing=pairing,
+            scheduler=scheduler, proactive=gate,
+            rollback_fn=lambda: rollback(workspace),
+            post_approve_fn=post_approve)
         wa_channel = channels.get("whatsapp")
+        channels_for_health.update(channels)
+
+        def channel_failed(name: str, exc: Exception) -> None:
+            incidents.record("canale", f"{name}: {exc}")
+            others = [c for c in dispatchers if c != name]
+            note = (f"Il canale {name} e' caduto e non sono riuscito a "
+                    f"riavviarlo ({exc}). "
+                    + ("Se e' whatsapp, probabilmente devi riscansionare "
+                       "il QR: riavvia ATLAS e usa /whatsapp qr."
+                       if name == "whatsapp" else "Riavvia ATLAS."))
+            for other in others:
+                try:
+                    sender = next(iter(hub._allowed.get(other, {""})))
+                    if sender:
+                        dispatchers[other](sender, note)
+                except Exception:
+                    pass
+
+        for cname, ch in channels.items():
+            dispatchers[cname] = (lambda c: (lambda sender, text:
+                                             c.send(sender, text)))(ch)
+            if hasattr(ch, "set_on_failure"):
+                ch.set_on_failure(channel_failed)
+
+    if headless:
+        # Modalita' servizio (stage 10): canali + scheduler senza REPL; e'
+        # il modo con cui il servizio on-boot tiene vivo l'agente.
+        out("modalita' servizio (headless): scheduler e canali attivi, "
+            "nessun REPL. Ctrl-C per fermare.")
+        try:
+            threading.Event().wait()
+        except KeyboardInterrupt:
+            pass
+        return 0
 
     # Conferme di permesso: il task gira in un thread, ma solo il REPL legge
     # stdin. Quando il worker chiede, la prossima riga non-comando dell'utente
@@ -506,6 +707,11 @@ def run_cli(registry: ProviderRegistry, *, active: str | None = None,
         # Note pertinenti iniettate come contesto di sistema SOLO per questa
         # chiamata: la storia persistente resta utente/assistente.
         notes_block = memories_context(store.relevant(text))
+        if habits_allowed_for_provider(active, pcfg.habits_local_only):
+            habits_block = habits_context(habits.summarize())
+            notes_block = "\n".join(b for b in (notes_block, habits_block) if b)
+        skills_block = skills_context(skills_lib, text)
+        notes_block = "\n".join(b for b in (notes_block, skills_block) if b)
         call_messages = ([{"role": "system", "content": notes_block}]
                          if notes_block else []) + history
         write("atlas> ")
@@ -535,7 +741,20 @@ def run_cli(registry: ProviderRegistry, *, active: str | None = None,
         history.append({"role": "assistant", "content": result.text})
         store.add_message("locale", "cli", "user", text)
         store.add_message("locale", "cli", "assistant", result.text)
+        checkpoints.save(history, note=text[:80])
+        reflections.record(text, ok=True,
+                           steps=len(getattr(result, "notes", []) or []),
+                           channel="cli")
         return True
+
+    # Ripresa dopo un crash: il checkpoint e' piu' recente della cronologia
+    # persistita solo se qualcosa non era ancora stato salvato.
+    if (pending_checkpoint is not None
+            and len(pending_checkpoint.get("history", [])) > len(history)):
+        history = pending_checkpoint["history"]
+        out("[self-healing] riprendo la conversazione interrotta "
+            "da dov'era (checkpoint).")
+        checkpoints.clear()
 
     if once is not None:
         return 0 if answer(once, threading.Event()) else 2
@@ -581,6 +800,9 @@ def run_cli(registry: ProviderRegistry, *, active: str | None = None,
     while True:
         try:
             line = input_fn("tu> ").strip()
+            if line:
+                gate.user_message_seen()
+                habits.observe_message(line)
         except EOFError:
             out("")
             stop_task(wait=True)
@@ -613,6 +835,17 @@ def run_cli(registry: ProviderRegistry, *, active: str | None = None,
             # Solo CLI locale: il collegamento dell'account WhatsApp (QR o
             # codice) e' un'operazione del proprietario, mai dalla chat.
             _handle_whatsapp(line, wa_channel, out)
+            continue
+        if line.startswith("/schedule") or line.startswith("/jobs"):
+            handle_command(line, CommandContext(
+                registry=registry, state=state, store=store, out=out,
+                get_active=lambda: active, set_active=set_active,
+                describe_registry=_describe_registry,
+                scheduler=scheduler, habits=habits,
+                skills=skills_lib, forge=forge,
+                rollback_fn=lambda: rollback(workspace),
+                post_approve_fn=post_approve,
+                channel="cli", sender="locale"))
             continue
         if line == "/help":
             out(HELP_TEXT)
@@ -712,6 +945,12 @@ def main(argv: list[str] | None = None) -> None:
                         help="modo permessi iniziale (default: ask)")
     parser.add_argument("--max-steps", type=int, default=10,
                         help="passi massimi del loop strumenti per richiesta (default: 10)")
+    parser.add_argument("--web", action="store_true",
+                        help="avvia la web UI locale (stage 9) invece del REPL")
+    parser.add_argument("--headless", action="store_true",
+                        help="modalita' servizio (stage 10): canali e scheduler, nessun REPL")
+    parser.add_argument("--web-port", type=int, default=8321,
+                        help="porta della web UI locale (default 8321, solo localhost)")
     args = parser.parse_args(argv)
 
     dotenv = load_dotenv(Path(".env"))  # chiavi provider: solo da qui/ambiente
@@ -733,10 +972,21 @@ def main(argv: list[str] | None = None) -> None:
         v for k, v in os.environ.items()
         if any(mark in k.upper() for mark in ("API_KEY", "TOKEN", "SECRET"))]
     secrets = SecretFilter(secret_values)
+    if args.web:
+        from .webui import run_webui
+        try:
+            web_active = args.provider or _first_usable(registry)
+        except ConfigError as exc:
+            print(f"Errore di configurazione: {exc}", file=sys.stderr)
+            raise SystemExit(2) from exc
+        code = run_webui(registry, active=web_active, workspace=workspace,
+                         mode=parse_mode(args.mode), max_steps=args.max_steps,
+                         secrets=secrets, port=args.web_port)
+        raise SystemExit(code)
     code = run_cli(registry, active=args.provider, once=args.once,
                    stream=not args.no_stream, workspace=workspace,
                    mode=parse_mode(args.mode), max_steps=args.max_steps,
-                   secrets=secrets, dotenv=dotenv)
+                   secrets=secrets, dotenv=dotenv, headless=args.headless)
     raise SystemExit(code)
 
 
