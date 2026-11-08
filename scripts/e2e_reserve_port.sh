@@ -116,6 +116,12 @@ echo 'registrazione via UI OK: frontend connesso al backend di riserva'
 # --- Dashboard: voce import sempre disponibile ------------------------------
 click_word /tmp/reserve-2-login.png 'Dashboard'
 sleep 4
+# La sezione "Agente ATLAS" sopra MigrationCard spinge la voce import sotto
+# la piega a 1280x800: scrollare in fondo PRIMA dello screenshot (rotella
+# sul centro pagina, non End a occhio chiuso che dipende dal focus).
+xdotool mousemove 640 400
+for i in $(seq 1 12); do xdotool click 5; sleep 0.2; done
+sleep 1
 shot /tmp/reserve-3-dashboard.png
 ocr_has /tmp/reserve-3-dashboard.png 'Importa' || {
   echo 'E2E riserva: voce "Importa dati da una versione precedente" NON visibile in Dashboard' >&2
