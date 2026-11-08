@@ -80,6 +80,12 @@ let discoveryFailed = false;
 
 /** true se la scoperta del backend e' fallita oltre il limite (errore
  * terminale: mostrare un messaggio, non riprovare in silenzio). */
+/** Base URL corrente del backend (dopo discovery in Tauri): usata per
+ * link fuori dall'app, es. la pagina dell'agente montata a /agent. */
+export function apiBase(): string {
+  return BASE;
+}
+
 export function apiDiscoveryFailed(): boolean {
   return discoveryFailed;
 }
