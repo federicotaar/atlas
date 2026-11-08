@@ -104,6 +104,8 @@ jobs:
 
   desktop:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -187,3 +189,15 @@ jobs:
           name: atlas-screenshot
           path: /tmp/atlas-screenshot.png
           if-no-files-found: warn
+      - name: Pubblica screenshot su branch ci-artifacts
+        if: always()
+        run: |
+          if [ ! -f /tmp/atlas-screenshot.png ]; then echo 'nessuno screenshot da pubblicare'; exit 0; fi
+          git config user.email "ci@atlas.local"
+          git config user.name "atlas-ci"
+          git checkout --orphan ci-artifacts-local
+          git rm -rf . >/dev/null 2>&1 || true
+          cp /tmp/atlas-screenshot.png atlas-screenshot.png
+          git add atlas-screenshot.png
+          git commit -q -m "ci: screenshot app desktop (run $GITHUB_RUN_ID) [skip ci]"
+          git push -f origin HEAD:refs/heads/ci-artifacts
