@@ -296,3 +296,24 @@ def test_same_inbound_id_across_restart_no_second_reply(client, db_session, fake
     wa._poll_link(db_session, gs(), link)
     assert seen == ["ricorda questo", "domanda nuova"]
     assert len(fake_wa["sent"]) == 2  # una risposta sola per msg-1, mai due
+
+
+def test_status_bridge_available(tmp_path, monkeypatch, client):
+    """La disponibilita' del binario bridge risolto e' osservabile via API:
+    False con path mancante, True con eseguibile presente. Solo filesystem."""
+    from app.config import get_settings
+
+    monkeypatch.setenv("ATLAS_WA_BRIDGE_BIN", str(tmp_path / "non-esiste"))
+    get_settings.cache_clear()
+    u = make_user(client, "wa-bin")
+    r = client.get("/connectors/whatsapp/status", headers=u["headers"])
+    assert r.status_code == 200 and r.json()["bridge_available"] is False
+
+    exe = tmp_path / "wa-bridge-x86_64-unknown-linux-gnu"
+    exe.write_text("#!/bin/sh\n")
+    exe.chmod(0o755)
+    monkeypatch.setenv("ATLAS_WA_BRIDGE_BIN", str(exe))
+    get_settings.cache_clear()
+    r = client.get("/connectors/whatsapp/status", headers=u["headers"])
+    assert r.json()["bridge_available"] is True
+    get_settings.cache_clear()

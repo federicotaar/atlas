@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # E2E UI reale: registrazione, memoria, riavvio. Chiamato da ci.yml.
 set -e
-sudo apt-get install -y xdotool >/dev/null
+sudo apt-get install -y xdotool tesseract-ocr >/dev/null
 export DISPLAY=:99
 ss -ltn | grep ':8000' || { echo 'nessun listener su 8000' >&2; exit 1; }
 ss -ltn | grep ':8000' | grep -q '127.0.0.1:8000' || { echo 'backend NON in ascolto su 127.0.0.1' >&2; exit 1; }
@@ -68,29 +68,46 @@ shot() {
   exit 1
 }
 shot /tmp/e2e-6-riavvio.png
-# Reopen via UI: login del profilo esistente (form login locale: email ->
-# password -> Entra). Tab 1 porta il focus sul campo email (nessun autoFocus
-# nel form di login), poi i campi in ordine.
-xdotool key Tab
+# OCR onesto (tesseract): la prova e' quel che si VEDE nel frame, non solo
+# che il PNG non e' nero o diverso dal precedente.
+ocr_has() {
+  convert "$1" -negate /tmp/ocr-work.png
+  tesseract /tmp/ocr-work.png stdout 2>/dev/null | grep -qi "$2"
+}
+# La sessione sopravvive al riavvio: stato loggato visibile (Esci).
+ocr_has /tmp/e2e-6-riavvio.png 'Esci' || { echo 'E2E UI: post-riavvio NON loggato (Esci non visibile)'; exit 1; }
+# Richiamo via UI dopo il riavvio: click MIRATO sul composer (a 1280x800 il
+# campo e' in basso al centro; il focus non e' nella app, i Tab a occhio
+# chiuso finiscono sui pulsanti di navigazione), domanda, risposta visibile.
+xdotool mousemove 640 737 click 1
 sleep 1
+xdotool type --delay 20 'come si chiama il mio gatto?'
+xdotool key Tab Return
+sleep 8
+shot /tmp/e2e-7-richiamo-riavvio.png
+ocr_has /tmp/e2e-7-richiamo-riavvio.png 'Briciola' || { echo 'E2E UI: risposta Briciola NON visibile dopo riavvio'; exit 1; }
+# Relogin esplicito: Esci -> form login -> click mirato sul campo email,
+# password, Entra. Coordinate dal layout noto del form (card centrata).
+xdotool mousemove 1145 55 click 1
+sleep 3
+shot /tmp/e2e-8-logout.png
+ocr_has /tmp/e2e-8-logout.png 'Entra' || { echo 'E2E UI: form login NON visibile dopo Esci'; exit 1; }
+xdotool mousemove 640 410 click 1
 xdotool type --delay 30 'e2e@example.com'
 xdotool key Tab
 xdotool type --delay 30 'password-locale-e2e'
 xdotool key Tab Return
-sleep 5
-shot /tmp/e2e-7-relogin.png
-# Dopo il login il composer ha il focus (come nel primo avvio): richiamo
-# della memoria salvata prima del riavvio, questa volta via UI riaperta.
+sleep 6
+shot /tmp/e2e-9-relogin.png
+ocr_has /tmp/e2e-9-relogin.png 'Esci' || { echo 'E2E UI: relogin NON riuscito (stato loggato non visibile)'; exit 1; }
+# Richiamo via UI dopo il relogin: la memoria sopravvive a riavvio + relogin.
+xdotool mousemove 640 737 click 1
+sleep 1
 xdotool type --delay 20 'come si chiama il mio gatto?'
 xdotool key Tab Return
-sleep 5
-shot /tmp/e2e-8-richiamo-relogin.png
-# La schermata dopo il richiamo deve differire da quella post-login (risposta
-# renderizzata): due catture identiche = UI non verificata, fallire.
-if cmp -s /tmp/e2e-7-relogin.png /tmp/e2e-8-richiamo-relogin.png; then
-  echo 'E2E UI: e2e-7 ed e2e-8 identiche: risposta del richiamo non visibile'
-  exit 1
-fi
+sleep 8
+shot /tmp/e2e-10-richiamo-relogin.png
+ocr_has /tmp/e2e-10-richiamo-relogin.png 'Briciola' || { echo 'E2E UI: risposta Briciola NON visibile dopo relogin'; exit 1; }
 TOKEN=$(curl -s -X POST http://127.0.0.1:8000/auth/login -H 'content-type: application/json' -d '{"email":"e2e@example.com","password":"password-locale-e2e"}' | python3 -c 'import sys,json; print(json.load(sys.stdin)["token"])')
 curl -s http://127.0.0.1:8000/me/export -H "Authorization: Bearer $TOKEN" | tee /tmp/e2e-export.json | grep -i briciola || { echo 'Briciola NON trovata in /me/export:'; cat /tmp/e2e-export.json; exit 1; }
 echo 'E2E UI: registrazione + salvataggio + riavvio + relogin UI + persistenza OK'

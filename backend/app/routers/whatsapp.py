@@ -24,13 +24,15 @@ class WhatsAppStatusOut(BaseModel):
     qr_state: str = "idle"  # idle | qr | paired | expired
     qr: str | None = None
     last_event_at: datetime | None = None
+    bridge_available: bool = False
 
 
 def _status(db: Session, user: User) -> WhatsAppStatusOut:
     settings = get_settings()
     link = wa.status(db, settings, user)
     if link is None:
-        return WhatsAppStatusOut(connected=False)
+        return WhatsAppStatusOut(connected=False,
+                                 bridge_available=wa.bridge_available(settings))
     qr = wa.qr_state(db, settings, user)
     return WhatsAppStatusOut(
         connected=True,
@@ -40,6 +42,7 @@ def _status(db: Session, user: User) -> WhatsAppStatusOut:
         qr_state=qr.get("state", "idle"),
         qr=qr.get("qr"),
         last_event_at=link.last_event_at,
+        bridge_available=wa.bridge_available(settings),
     )
 
 

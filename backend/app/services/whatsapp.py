@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import secrets
 import subprocess
 import threading
@@ -90,6 +91,15 @@ def ensure_bridge() -> None:
             time.sleep(0.1)
         raise AtlasError("wa_bridge_start", "Il bridge WhatsApp non si e' avviato.",
                          status=503)
+
+
+def bridge_available(settings: Settings) -> bool:
+    """True se il binario bridge risolto esiste ed e' eseguibile. Nel bundle
+    desktop il path assoluto lo imposta desktop_main (accanto al backend);
+    in sviluppo resta False finche' non si configura ATLAS_WA_BRIDGE_BIN.
+    Solo osservazione del filesystem: nessun processo, nessuna rete."""
+    p = settings.wa_bridge_bin or ""
+    return os.path.isfile(p) and os.access(p, os.X_OK)
 
 
 def get_link(db: Session, user: User) -> WhatsAppLink | None:
