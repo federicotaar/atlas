@@ -19,3 +19,9 @@ channels:
     poll_interval: 2
   whatsapp_official:
     enabled: false
+    # Webhook Cloud API in ascolto su loopback; il tunnel verso Meta
+    # (cloudflared/ngrok) lo avvia il proprietario al momento del
+    # collegamento. Id e segreti SOLO in .env: WHATSAPP_PHONE_NUMBER_ID,
+    # WHATSAPP_ACCESS_TOKEN, WHATSAPP_APP_SECRET, WHATSAPP_VERIFY_TOKEN.
+    # Mai attivo insieme a whatsapp_unofficial.
+    listen: "127.0.0.1:8765"
