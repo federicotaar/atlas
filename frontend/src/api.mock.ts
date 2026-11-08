@@ -136,6 +136,26 @@ export const api = {
     bot_username: "fixture_bot", paired: false,
     deep_link: "https://t.me/fixture_bot?start=00000000", pairing_expired: false }),
   disconnectTelegram: () => Promise.resolve(),
+  getWhatsAppStatus: () => {
+    if (hash === "whatsapp-linked")
+      return Promise.resolve({ connected: true, linked: true,
+        jid: "393340000000@s.whatsapp.net", pushname: "Fixture",
+        qr_state: "paired", qr: null });
+    if (hash === "whatsapp-expired")
+      return Promise.resolve({ connected: true, linked: false, jid: null,
+        pushname: null, qr_state: "expired", qr: null });
+    if (hash === "whatsapp-off")
+      return Promise.resolve({ connected: false, linked: false, jid: null,
+        pushname: null, qr_state: "idle", qr: null });
+    // whatsapp-unpaired: QR sintetico inesistente, mai un segreto reale
+    return Promise.resolve({ connected: true, linked: false, jid: null,
+      pushname: null, qr_state: "qr",
+      qr: "2@fixture-qr-sintetico-00000000000000000000000000000000" });
+  },
+  connectWhatsApp: () => Promise.resolve({ connected: true, linked: false,
+    jid: null, pushname: null, qr_state: "qr",
+    qr: "2@fixture-qr-sintetico-00000000000000000000000000000000" }),
+  disconnectWhatsApp: () => Promise.resolve(),
   rotateTelegramCode: () => Promise.resolve({ connected: true,
     bot_username: "fixture_bot", paired: false,
     deep_link: "https://t.me/fixture_bot?start=00000000", pairing_expired: false }),

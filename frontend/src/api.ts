@@ -135,6 +135,15 @@ export interface TelegramStatus {
   pairing_expired: boolean;
 }
 
+export interface WhatsAppStatus {
+  connected: boolean;
+  linked: boolean;
+  jid: string | null;
+  pushname: string | null;
+  qr_state: "idle" | "qr" | "paired" | "expired";
+  qr: string | null;
+}
+
 export interface MigrationStatus {
   state: "not_configured" | "unreachable" | "empty" | "has_data" | "imported" | "dismissed";
   counts: Record<string, number>;
@@ -188,4 +197,9 @@ export const api = {
     req<void>("/connectors/telegram/disconnect", { method: "POST" }),
   rotateTelegramCode: () =>
     req<TelegramStatus>("/connectors/telegram/pairing-code", { method: "POST" }),
+  getWhatsAppStatus: () => req<WhatsAppStatus>("/connectors/whatsapp/status"),
+  connectWhatsApp: () =>
+    req<WhatsAppStatus>("/connectors/whatsapp/connect", { method: "POST" }),
+  disconnectWhatsApp: () =>
+    req<void>("/connectors/whatsapp/disconnect", { method: "POST" }),
 };

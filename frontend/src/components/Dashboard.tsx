@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { api, type DashboardData } from "../api";
 import TelegramCard from "./TelegramCard";
+import WhatsAppCard from "./WhatsAppCard";
 
 function Provenance({ data }: { data: Record<string, unknown> }) {
   return (
@@ -112,6 +113,7 @@ export default function Dashboard() {
       </Section>
 
       <TelegramCard />
+      <WhatsAppCard />
 
       <Section title="Automazioni">
         {p.automations.connectors.map((c) => (

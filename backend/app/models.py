@@ -415,3 +415,33 @@ class TelegramLink(Base):
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
     last_update_at: Mapped[datetime | None] = mapped_column(nullable=True)
+
+
+class WhatsAppLink(Base):
+    """Collegamento WhatsApp linked-device (rotta non ufficiale, rischio
+    restrizioni/ban avvisato e accettato dal proprietario). La sessione
+    vive nel SQLite del bridge locale; qui solo stato non segreto e offset
+    eventi. Un solo collegamento per utente; solo self-chat lato bridge."""
+
+    __tablename__ = "whatsapp_links"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("users.id"), nullable=False, unique=True)
+    jid: Mapped[str | None] = mapped_column(Text, nullable=True)
+    pushname: Mapped[str | None] = mapped_column(Text, nullable=True)
+    last_seq: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    # Boot del bridge che ha emesso last_seq: i seq ripartono da 1 a ogni
+    # riavvio del bridge, quindi un boot diverso azzera l'offset.
+    boot_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # ID degli ultimi messaggi inviati da ATLAS via bridge (JSON list, max
+    # 100): anti-eco mirato. I messaggi del proprietario dal telefono hanno
+    # from_me=true ma ID diverso e vanno elaborati: sono l'input del canale.
+    replied_ids: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    # ID degli ultimi messaggi inbound gia' elaborati (JSON list, max 200):
+    # dedup cross-restart per proprietario — un replay dopo riavvio del
+    # bridge non produce mai una seconda risposta.
+    processed_ids: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
+    last_event_at: Mapped[datetime | None] = mapped_column(nullable=True)

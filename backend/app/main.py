@@ -23,6 +23,7 @@ from .routers import (
     sources,
     telegram,
     timemachine,
+    whatsapp,
 )
 
 app = FastAPI(title="ATLAS", version="0.1.0", docs_url="/docs")
@@ -58,6 +59,7 @@ app.include_router(dashboard.router)
 app.include_router(settings.router)
 app.include_router(setup.router)
 app.include_router(telegram.router)
+app.include_router(whatsapp.router)
 
 
 @app.get("/health")
@@ -81,8 +83,22 @@ def _start_telegram_poller() -> None:
     ensure_poller()
 
 
+@app.on_event("startup")
+def _start_whatsapp_poller() -> None:
+    from .services.whatsapp import ensure_poller
+
+    ensure_poller()
+
+
 @app.on_event("shutdown")
 def _stop_telegram_poller() -> None:
-    from .services.telegram import stop_poller
+    from .services.telegram import stop_poller as stop_telegram
+
+    stop_telegram()
+
+
+@app.on_event("shutdown")
+def _stop_whatsapp_poller() -> None:
+    from .services.whatsapp import stop_poller
 
     stop_poller()

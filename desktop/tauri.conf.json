@@ -32,7 +32,8 @@
       "icons/icon.ico"
     ],
     "externalBin": [
-      "bin/atlas-backend"
+      "bin/atlas-backend",
+      "bin/wa-bridge"
     ]
   }
 }

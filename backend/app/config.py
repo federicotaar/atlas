@@ -61,6 +61,14 @@ class Settings(BaseSettings):
     # Senza chiave le credenziali NON vengono salvate (fail-closed).
     credentials_key: str = ""
     telegram_polling_enabled: bool = True
+    # Bridge WhatsApp (binario Go whatsmeow, solo loopback). Token vuoto =
+    # effimero generato a ogni avvio del processo, mai su disco.
+    wa_bridge_enabled: bool = True
+    wa_bridge_bin: str = "wa-bridge"
+    wa_bridge_port: int = 8791
+    wa_bridge_token: str = ""
+    wa_bridge_db: str = ""
+    wa_polling_enabled: bool = True
 
 
 @lru_cache

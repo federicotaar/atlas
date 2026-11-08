@@ -40,6 +40,16 @@ def main() -> None:
                 secret_path.chmod(0o600)
             os.environ[var] = value
 
+    # Bridge WhatsApp: binario accanto al backend nel bundle Tauri
+    # (wa-bridge-<triple>), sessione e dedup nella data dir (segreti locali).
+    if not os.environ.get("ATLAS_WA_BRIDGE_BIN"):
+        exe_dir = Path(sys.executable).resolve().parent
+        for cand in sorted(exe_dir.glob("wa-bridge*")):
+            if cand.is_file() and os.access(cand, os.X_OK):
+                os.environ["ATLAS_WA_BRIDGE_BIN"] = str(cand)
+                break
+    os.environ.setdefault("ATLAS_WA_BRIDGE_DB", str(data_dir / "wa-session.db"))
+
     import uvicorn
 
     # Import statico: PyInstaller non vede import per stringa ("app.main:app").
