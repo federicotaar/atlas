@@ -33,6 +33,7 @@ from ..agent.seal import SealGuard
 from ..agent.tools import ToolContext
 from ..providers.base import AllProvidersFailed, ProviderError
 from ..providers.registry import ProviderRegistry
+from .media import Attachment, MediaProcessor
 from .pairing import PairingStore
 
 
@@ -42,6 +43,7 @@ class ChannelMessage:
     channel: str
     text: str
     display: str = ""  # nome/username mostrato nel pairing locale
+    attachments: tuple[Attachment, ...] = ()  # stage 6: vocali, foto, file
 
 
 class Channel(ABC):
@@ -116,6 +118,7 @@ class ChannelHub:
                  allowed: dict[str, set[str]],
                  set_active=None, describe_registry=None,
                  pairing: PairingStore | None = None,
+                 media: MediaProcessor | None = None,
                  max_steps: int = 10,
                  rate_per_minute: int = 20,
                  confirm_timeout: float = 120.0):
@@ -133,6 +136,7 @@ class ChannelHub:
         self._channels_log = channels_log
         self._allowed = allowed
         self._pairing = pairing
+        self._media = media
         self._max_steps = max_steps
         self._rate = RateLimiter(rate_per_minute)
         self._confirm_timeout = confirm_timeout
@@ -194,7 +198,12 @@ class ChannelHub:
         if not self._rate.allow(msg.sender):
             return  # oltre il rate limit: ignora in silenzio
 
-        self._channels_log.record("in", msg.channel, msg.sender, msg.text)
+        # Il log vede solo tipo e nome degli allegati, mai il contenuto.
+        log_text = msg.text
+        if msg.attachments:
+            marks = " ".join(f"[{a.kind}: {a.name}]" for a in msg.attachments)
+            log_text = f"{msg.text} {marks}".strip()
+        self._channels_log.record("in", msg.channel, msg.sender, log_text)
         convo = self._convo(msg.sender, msg.channel)
 
         def send_reply(text: str) -> None:
@@ -209,8 +218,10 @@ class ChannelHub:
             convo.pending_question.clear()
             return
 
+        # I comandi restano messaggi di solo testo: una didascalia che
+        # inizia per "/" su un allegato NON e' un comando.
         text = msg.text.strip()
-        if text.startswith("/") and text != "/stop":
+        if not msg.attachments and text.startswith("/") and text != "/stop":
             handled = handle_command(text, CommandContext(
                 registry=self._registry, state=self._state, store=self._store,
                 out=send_reply, get_active=self._active_getter,
@@ -240,14 +251,32 @@ class ChannelHub:
     def _run_task(self, convo: _Conversation, msg: ChannelMessage,
                   text: str, send_reply: Callable[[str], None]) -> None:
         try:
-            send_reply(self._answer(convo, msg, text, send_reply))
+            send_reply(self._answer(convo, msg, send_reply))
         finally:
             with convo.lock:
                 convo.task_running = False
                 convo.cancel = None
 
+    def _compose(self, msg: ChannelMessage) -> str:
+        """Testo per l'agente: testo/didascalia + note degli allegati.
+        Le lavorazioni (trascrizione, descrizione) girano qui, nel thread
+        del task: mai nel thread di polling del canale."""
+        parts = [msg.text.strip()] if msg.text.strip() else []
+        for att in msg.attachments:
+            if self._media is None:
+                parts.append(f"[{att.kind} {att.name} non processabile: "
+                             "gestione media non configurata]")
+                continue
+            try:
+                parts.append(self._media.process(att, msg.channel,
+                                                 msg.sender).note)
+            except Exception:
+                parts.append(f"[{att.kind} {att.name} non processabile]")
+        return "\n".join(parts) or "(allegato senza testo)"
+
     def _answer(self, convo: _Conversation, msg: ChannelMessage,
-                text: str, send_reply: Callable[[str], None]) -> str:
+                send_reply: Callable[[str], None]) -> str:
+        text = self._compose(msg)
         sender, channel = msg.sender, msg.channel
         history = self._store.history(sender, channel)
         history.append({"role": "user", "content": text})
