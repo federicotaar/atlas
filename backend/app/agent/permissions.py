@@ -20,7 +20,7 @@ from .tools import TOOLS_BY_NAME, _is_protected_path
 # Strato di sicurezza: TUTTO app/agent/ + agent_cli.py read-only per gli
 # strumenti dell'agente (spec sez. 8, hard limit): safety, permissions,
 # execsafe, seal, loop, tools - chi applica il confine non puo' riscriverlo.
-PROTECTED_PARTS = ("app/agent/", "app/agent_cli.py")
+PROTECTED_PARTS = ("app/agent/", "app/agent_cli.py", "/.git/")
 
 # .env mai in pasto ai tool (spec sez. 6: mai eco di chiavi o .env). Il token
 # deve essere esattamente ".env": .env.example resta leggibile.
