@@ -8,15 +8,39 @@ interface Turn {
   response: AskResponse;
 }
 
+// Bozza del composer tenuta in sessionStorage: se la sessione cade (401 ->
+// logout) mentre l'utente sta scrivendo, il testo non va perso.
+const DRAFT_KEY = "atlas_chat_draft";
+
+function readDraft(): string {
+  try {
+    return sessionStorage.getItem(DRAFT_KEY) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function writeDraft(v: string) {
+  try {
+    if (v) sessionStorage.setItem(DRAFT_KEY, v);
+    else sessionStorage.removeItem(DRAFT_KEY);
+  } catch { /* storage non disponibile: la bozza resta solo in memoria */ }
+}
+
 export default function Chat() {
   const [turns, setTurns] = useState<Turn[]>([]);
-  const [input, setInput] = useState("");
+  const [input, setInputState] = useState<string>(readDraft);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [modelSettings, setModelSettings] = useState<ModelSettings | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  function setInput(v: string) {
+    setInputState(v);
+    writeDraft(v);
+  }
 
   useEffect(() => {
     api.getModelSettings().then(setModelSettings).catch(() => setModelSettings(null));
@@ -37,6 +61,7 @@ export default function Chat() {
       if (response.conversation_id) setConversationId(response.conversation_id);
       setTurns((t) => [...t, { question: text, response }]);
       setInput("");
+      writeDraft("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Errore");
     } finally {
