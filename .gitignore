@@ -9,3 +9,6 @@ dist/
 *.egg-info/
 .DS_Store
 logs/
+
+# binario compilato del sidecar whatsapp
+wa-bridge/wa-bridge
