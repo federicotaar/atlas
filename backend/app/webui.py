@@ -85,7 +85,10 @@ ATLAS <span id="st">pronto</span>
 <script>
 /* Ritorno alla dashboard quando la pagina e' aperta da un'altra schermata
    (app desktop: il link "Apri l'agente" naviga la stessa finestra). */
-if (document.referrer) {
+/* history.length > 1: il webview Tauri non manda il referrer nella
+   navigazione same-window (provato dal click-through E2E in CI), ma la
+   history contiene la dashboard. In un tab browser nuovo length==1. */
+if (document.referrer || history.length > 1) {
   const b = document.getElementById('back');
   b.style.display = 'inline-block';
   b.onclick = () => history.back();
