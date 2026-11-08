@@ -136,28 +136,41 @@ echo "$PROBE" | grep -q '"state":"unreachable"' || {
 echo "$PROBE" | grep -qi 'atlas:atlas@' && {
   echo 'E2E riserva: credenziali nel messaggio di errore!' >&2; exit 1; }
 
-# --- pulizia: 8000 deve tornare libera per il lancio "normale" --------------
-pkill -f 'target/release/atlas-desktop' || true
-pkill -f 'WebKitWebProcess' || true
-pkill -f 'WebKitNetworkProcess' || true
-# Anche il sidecar: altrimenti resta orfano con la porta di riserva occupata.
-pkill -f 'atlas-backend' || true
+# --- lifecycle: chiusura NORMALE della finestra -----------------------------
+# Asserzione reale: chiudere la finestra (messaggio WM, come fa l'utente) deve
+# far scattare CloseRequested -> l'app uccide SOLO il sidecar che ha avviato
+# e libera la porta scelta. Niente pkill sul nome del processo: un kill forzato
+# maschererebbe un eventuale bug di lifecycle, e un pkill per nome rischierebbe
+# di colpire processi non nostri. Teardown della fixture: solo PID noti.
+WID=$(DISPLAY=:98 xdotool search --name '^ATLAS$' | head -1)
+DISPLAY=:98 xdotool windowclose "$WID"
+normal_close_ok=0
+for i in $(seq 1 20); do
+  sleep 1
+  ss -ltn | grep -q ':8100' || { normal_close_ok=1; break; }
+done
+if [ "$normal_close_ok" != 1 ]; then
+  echo 'E2E riserva: ANOMALIA lifecycle - la chiusura normale NON ha liberato 8100 (sidecar orfano?)' >&2
+  ps aux | grep -i 'atlas-backend' | grep -v grep >&2 || true
+  # teardown forzato ma mirato: solo il PID del sidecar superstite
+  SPID=$(pgrep -f 'atlas-backend' | head -1)
+  [ -n "$SPID" ] && kill -9 "$SPID" || true
+  kill $MPID 2>/dev/null || true
+  exit 1
+fi
+echo "chiusura normale: sidecar terminato dall'app, porta 8100 liberata"
+# La vecchia API non deve MAI essere toccata, nemmeno dal percorso di chiusura.
+kill -0 $MPID 2>/dev/null || { echo "FALLITO: la chiusura dell'app ha terminato la vecchia API" >&2; exit 1; }
+curl -s http://127.0.0.1:8000/health | grep -q '"app":"atlas"' || { echo 'FALLITO: 8000 non risponde piu come la vecchia API' >&2; exit 1; }
+echo 'vecchia API ancora viva dopo la chiusura: mai toccata'
+# Teardown fixture: solo il PID del mock.
 kill $MPID 2>/dev/null || true
-for i in $(seq 1 30); do
+for i in $(seq 1 15); do
   sleep 1
   curl -s http://127.0.0.1:8000/health >/dev/null 2>&1 || break
 done
-for i in $(seq 1 30); do
-  sleep 1
-  ss -ltn | grep -q ':8100' || break
-done
 if ss -ltn | grep -q ':8000'; then
   echo 'porta 8000 ancora occupata dopo pulizia' >&2
-  exit 1
-fi
-if ss -ltn | grep -q ':8100'; then
-  echo 'porta 8100 ancora occupata dopo pulizia' >&2
-  ps aux | grep -i 'atlas-backend' | grep -v grep >&2 || true
   exit 1
 fi
 echo 'E2E porta di riserva: OK (8100 usata, vecchia API intoccata, UI connessa, import visibile, probe onesto)'
