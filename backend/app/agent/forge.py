@@ -1,12 +1,24 @@
 """Tool auto-generati (spec sez. 8, build order 14).
 
 L'agente puo' PROPORRE nuovi tool in tools_generated/: scrive codice e
-test, li esegue in una sotto-directory isolata con ambiente scrubbato dai
-segreti, e manda il diff a Fred. Il tool resta INATTIVO finche' Fred non
-lo approva esplicitamente (/tools approve <nome>): nessuna attivazione
-automatica, mai. Le proposte possono toccare SOLO tools_generated/ -
-mai app/, la sicurezza, .env o i log (perimetro protetto, spec sez. 8
-hard limits).
+test, li esegue in isolamento, e manda il diff a Fred. Il tool resta
+INATTIVO finche' Fred non lo approva esplicitamente (/tools approve
+<nome>): nessuna attivazione automatica, mai. Le proposte possono toccare
+SOLO tools_generated/ - mai app/, la sicurezza, .env o i log (perimetro
+protetto, spec sez. 8 hard limits).
+
+Isolamento REALE, a due livelli:
+1. static gate (sempre): il codice che importa subprocess/socket/ctypes/
+   multiprocessing/signal o usa __import__/eval/exec/compile non arriva
+   nemmeno ai test;
+2. esecuzione dei test: con bubblewrap (bwrap) i test girano in un
+   namespace senza rete, filesystem di sistema in sola lettura, scrittura
+   possibile solo nella dir della proposta, ambiente pulito dai segreti;
+   senza bwrap si ripiega su rlimit + env scrubbed e la proposta resta
+   marcata isolation="reduced" (MAI spacciata per sandbox completa).
+
+Il codice NON approvato non viene mai eseguito con accesso a token, al
+workspace reale o ai file dell'utente: i test vedono solo tools_generated.
 """
 from __future__ import annotations
 
@@ -20,6 +32,70 @@ from pathlib import Path
 
 NAME_RE = re.compile(r"^[a-z][a-z0-9_]{1,40}$")
 REQUIRED_INTERFACE = ("name", "description", "parameters", "run")
+
+# Static gate: moduli e primitive incompatibili con codice generato non
+# verificato. Non e' una sandbox: e' il primo filtro, l'esecuzione isolata
+# e' il secondo.
+BLOCKED_IMPORTS = {"subprocess", "socket", "ctypes", "multiprocessing",
+                   "signal", "pty", "shutil"}
+BLOCKED_CALLS = {"__import__", "eval", "exec", "compile", "breakpoint"}
+
+
+def static_gate(code: str) -> str | None:
+    """None se il codice passa, altrimenti il motivo del rifiuto."""
+    import ast
+    try:
+        tree = ast.parse(code)
+    except SyntaxError as exc:
+        return f"sintassi non valida: {exc}"
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            names = ([a.name.split(".")[0] for a in node.names]
+                     if isinstance(node, ast.Import)
+                     else [(node.module or "").split(".")[0]])
+            for name in names:
+                if name in BLOCKED_IMPORTS:
+                    return f"import vietato nel codice generato: {name}"
+        elif isinstance(node, ast.Call):
+            func = node.func
+            if isinstance(func, ast.Name) and func.id in BLOCKED_CALLS:
+                return f"chiamata vietata nel codice generato: {func.id}"
+    return None
+
+
+def _bwrap_cmd(workdir: Path) -> list[str] | None:
+    """Comando bubblewrap per l'isolamento vero, o None se bwrap manca."""
+    import shutil as _sh
+    bwrap = _sh.which("bwrap")
+    if bwrap is None:
+        return None
+    # Eseguiamo il binario reale (symlink risolti): nel namespace vuoto di
+    # bwrap la catena di symlink del venv non esisterebbe. Il venv fornisce
+    # solo le site-packages via PYTHONPATH. Layout POSIX del venv richiesto,
+    # altrimenti si ricade sull'isolamento ridotto.
+    venv_root = Path(sys.executable).parent.parent
+    real = Path(sys.executable).resolve()
+    ver = f"python{sys.version_info.major}.{sys.version_info.minor}"
+    if not (venv_root / "lib" / ver / "site-packages").is_dir():
+        return None
+    binds = []
+    for path in ("/usr", "/lib", "/lib64", "/bin"):
+        if Path(path).exists():
+            binds += ["--ro-bind", path, path]
+    # L'interprete e il venv (anche sotto /tmp) vanno su percorsi propri:
+    # la tmpfs /tmp qui sotto coprirebbe un bind dentro /tmp.
+    binds += ["--ro-bind", str(venv_root), "/pyenv"]
+    binds += ["--ro-bind", str(real.parent.parent), "/pyreal"]
+    return [bwrap, "--unshare-all", "--die-with-parent", "--clearenv",
+            "--setenv", "PATH", "/usr/bin:/bin",
+            "--setenv", "HOME", "/work",
+            "--setenv", "PYTHONPATH", f"/work:/pyenv/lib/{ver}/site-packages",
+            *binds,
+            "--bind", str(workdir), "/work",
+            "--tmpfs", "/tmp",
+            "--dev", "/dev",
+            "--chdir", "/work",
+            "--", f"/pyreal/bin/{real.name}"]
 
 
 class ToolForge:
@@ -52,32 +128,64 @@ class ToolForge:
         if tool_path.exists() and self._load_meta().get(name, {}).get(
                 "status") == "approved":
             raise ValueError(f"tool {name} gia' approvato: non sovrascrivo")
+        gate_error = static_gate(code)
+        if gate_error is not None:
+            # codice respinto: non lasciamo file eseguibili in giro
+            meta = self._load_meta()
+            meta[name] = {"status": "rejected", "ts": now,
+                          "tests_ok": False, "tests_out": gate_error,
+                          "isolation": "static-gate"}
+            self._save_meta(meta)
+            return {"name": name, "tests_ok": False, "tests_out": gate_error,
+                    "tool_path": None, "test_path": None}
         tool_path.write_text(code)
         test_path.write_text(tests)
         result = self.run_tests(name)
         meta = self._load_meta()
         meta[name] = {"status": "pending", "ts": now,
-                      "tests_ok": result["ok"], "tests_out": result["out"][-800:]}
+                      "tests_ok": result["ok"], "tests_out": result["out"][-800:],
+                      "isolation": result["isolation"]}
         self._save_meta(meta)
         return {"name": name, "tests_ok": result["ok"],
                 "tests_out": result["out"], "tool_path": str(tool_path),
-                "test_path": str(test_path)}
+                "test_path": str(test_path),
+                "isolation": result["isolation"]}
 
     def run_tests(self, name: str, timeout: int = 60) -> dict:
-        """Test in sandbox: processo separato, cwd dentro tools_generated,
-        ambiente senza segreti, timeout duro."""
-        env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"),
-               "PYTHONPATH": str(self._dir), "HOME": str(self._dir)}
+        """Test in isolamento: bwrap (senza rete, FS di sistema read-only,
+        scrivibile solo la dir della proposta, env pulito) se disponibile;
+        altrimenti rlimit + env scrubbed marcato isolation="reduced"."""
+        cmd_prefix = _bwrap_cmd(self._dir)
+        if cmd_prefix is not None:
+            cmd = cmd_prefix + ["-m", "pytest", f"/work/test_{name}.py",
+                                "-q", "--no-header", "-p", "no:cacheprovider"]
+            env, cwd, preexec = None, None, None
+            isolation = "bwrap"
+        else:
+            import resource
+
+            def limits() -> None:
+                resource.setrlimit(resource.RLIMIT_CPU, (30, 30))
+                resource.setrlimit(resource.RLIMIT_AS,
+                                   (512 * 1024 * 1024,) * 2)
+                resource.setrlimit(resource.RLIMIT_FSIZE,
+                                   (10 * 1024 * 1024,) * 2)
+                resource.setrlimit(resource.RLIMIT_NOFILE, (64, 64))
+
+            cmd = [sys.executable, "-m", "pytest", f"test_{name}.py", "-q",
+                   "--no-header", "-p", "no:cacheprovider"]
+            env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"),
+                   "PYTHONPATH": str(self._dir), "HOME": str(self._dir)}
+            cwd, preexec, isolation = self._dir, limits, "reduced"
         try:
             proc = subprocess.run(
-                [sys.executable, "-m", "pytest", f"test_{name}.py", "-q",
-                 "--no-header", "-p", "no:cacheprovider"],
-                cwd=self._dir, env=env, timeout=timeout,
-                capture_output=True, text=True)
+                cmd, cwd=cwd, env=env, timeout=timeout,
+                preexec_fn=preexec, capture_output=True, text=True)
             out = (proc.stdout + proc.stderr).strip()
-            return {"ok": proc.returncode == 0, "out": out}
+            return {"ok": proc.returncode == 0, "out": out,
+                    "isolation": isolation}
         except (subprocess.TimeoutExpired, FileNotFoundError) as exc:
-            return {"ok": False, "out": str(exc)}
+            return {"ok": False, "out": str(exc), "isolation": isolation}
 
     def list(self) -> list[dict]:
         return [{"name": name, **info}
@@ -97,6 +205,12 @@ class ToolForge:
         info = meta.get(name)
         if info is None:
             return {"ok": False, "error": f"nessuna proposta '{name}'"}
+        if info.get("status") == "rejected":
+            return {"ok": False,
+                    "error": "proposta gia' scartata dallo static gate"}
+        gate_error = static_gate((self._dir / f"{name}.py").read_text())
+        if gate_error is not None:
+            return {"ok": False, "error": gate_error}
         result = self.run_tests(name)
         if not result["ok"]:
             info["tests_ok"] = False
