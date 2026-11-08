@@ -14,7 +14,7 @@ os.environ.setdefault("ATLAS_JWT_SECRET", "test-secret-not-for-production")
 
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
-from sqlalchemy import create_engine, text  # noqa: E402
+from sqlalchemy import text  # noqa: E402
 
 from app.main import app  # noqa: E402
 from app.models import Base  # noqa: E402

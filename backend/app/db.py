@@ -4,7 +4,8 @@ schema completo (create_all + tabelle vettoriali/FTS) alla prima connessione,
 senza Alembic."""
 from functools import lru_cache
 
-from sqlalchemy import create_engine, event, text as sql_text
+from sqlalchemy import create_engine, event
+from sqlalchemy import text as sql_text
 from sqlalchemy.orm import Session, sessionmaker
 
 from .config import get_settings
