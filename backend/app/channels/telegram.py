@@ -16,11 +16,13 @@ from .base import Channel, ChannelMessage
 class TelegramChannel(Channel):
     name = "telegram"
 
-    def __init__(self, token: str, client_factory: Callable | None = None):
+    def __init__(self, token: str, client_factory: Callable | None = None,
+                 drop_pending_updates: bool = True):
         if not token:
             raise ValueError("TELEGRAM_BOT_TOKEN mancante")
         self._token = token
         self._client_factory = client_factory or _PTBClient
+        self._drop_pending = drop_pending_updates
         self._client = None
         self._handler: Callable[[ChannelMessage], None] | None = None
 
@@ -28,7 +30,7 @@ class TelegramChannel(Channel):
         self._handler = handler
 
     def start(self) -> None:
-        self._client = self._client_factory(self._token)
+        self._client = self._client_factory(self._token, self._drop_pending)
         self._client.start_polling(self._on_update)
 
     def send(self, to: str, text: str) -> None:
@@ -47,9 +49,10 @@ class _PTBClient:
     """Adattatore python-telegram-bot: polling in thread daemon, invio via
     event loop dell'app. Import pigro: i test non richiedono la libreria."""
 
-    def __init__(self, token: str):
+    def __init__(self, token: str, drop_pending_updates: bool = True):
         from telegram.ext import ApplicationBuilder  # import pigro
         self._app = ApplicationBuilder().token(token).build()
+        self._drop_pending = drop_pending_updates
         self._loop = None
 
     def start_polling(self, on_update: Callable[..., None]) -> None:
@@ -74,8 +77,12 @@ class _PTBClient:
 
         self._app.add_handler(MessageHandler(filters.TEXT, _recv))
         self._app.post_init = _post_init
+        # stop_signals=None: run_polling gira in un thread NON principale
+        # (la CLI resta interattiva); asyncio vieta i signal handler fuori
+        # dal main thread. Lo stop resta del processo/REPL.
         threading.Thread(target=self._app.run_polling,
-                         kwargs={"drop_pending_updates": True},
+                         kwargs={"drop_pending_updates": self._drop_pending,
+                                 "stop_signals": None},
                          daemon=True).start()
 
     def send_message(self, chat_id: str, text: str) -> None:
