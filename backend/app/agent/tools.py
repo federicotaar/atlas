@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
+from .execsafe import validate as validate_command
 from .safety import SecretFilter, is_blocked, resolve_in_workspace
 
 SHELL_TIMEOUT = 60  # secondi fissi: un comando appeso non blocca l'agente
@@ -97,23 +98,38 @@ def _scrubbed_env() -> dict[str, str]:
                 mark in k.upper() for mark in ("API_KEY", "TOKEN", "SECRET", "PASSWORD"))}
 
 
+def _is_protected_path(target: Path) -> bool:
+    norm = str(target).replace("\\", "/")
+    if any(part in norm for part in ("app/agent/", "app/agent_cli.py")):
+        return True
+    return target.name == ".env"
+
+
 def _shell(args: dict[str, Any], ctx: ToolContext) -> str:
     command = str(args.get("command", "")).strip()
     if not command:
         return "errore: comando vuoto"
-    # La blocklist e' gia' controllata dal loop prima dei permessi; qui resta
-    # come ultima rete: uno strumento non deve poterla saltare mai.
+    # Blocklist: gia' controllata dal loop, resta come ultima rete.
     reason = is_blocked(command)
     if reason:
         return f"BLOCCATO: {reason}"
+    # NESSUNA shell. argv diretto, allowlist, path
+    # risolti (symlink compresi) prima dell'esecuzione: la prevenzione e'
+    # strutturale, non un filtro sul testo del comando.
+    check = validate_command(command, ctx.workspace,
+                             resolve_in_workspace, _is_protected_path)
+    if not check.ok:
+        return f"NON DISPONIBILE: {check.reason}"
     try:
         proc = subprocess.run(
-            command, shell=True, cwd=str(ctx.workspace),
+            check.argv, shell=False, cwd=str(ctx.workspace),
             capture_output=True, text=True, timeout=SHELL_TIMEOUT,
-            errors="replace", env=_scrubbed_env(),
+            errors="replace", env=_scrubbed_env(), stdin=subprocess.DEVNULL,
         )
     except subprocess.TimeoutExpired:
         return f"errore: comando oltre il timeout di {SHELL_TIMEOUT}s, terminato"
+    except FileNotFoundError:
+        return f"errore: {check.argv[0]} non trovato su questo sistema"
     out = (proc.stdout or "") + (proc.stderr or "")
     return _clip(f"exit {proc.returncode}\n{out}" if out else f"exit {proc.returncode}")
 
@@ -152,7 +168,11 @@ LIST_DIR = Tool(
 
 SHELL = Tool(
     name="shell",
-    description="Esegue un comando shell nel workspace dell'agente. Soggetto a permessi e blocklist.",
+    description=("Esegue un comando dalla superficie ristretta nel workspace: solo "
+                 "comandi di lettura/ispezione allowlistati (ls, cat, grep su file "
+                 "espliciti, git status/log...), senza pipe, redirect o variabili - "
+                 "non esiste una shell. Le scritture passano da write_file. Comandi "
+                 "fuori superficie: non disponibili. Soggetto a permessi e blocklist."),
     parameters={"type": "object",
                 "properties": {"command": {"type": "string", "description": "comando da eseguire"}},
                 "required": ["command"]},
