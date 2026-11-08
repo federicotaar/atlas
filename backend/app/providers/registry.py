@@ -87,6 +87,9 @@ class ProviderRegistry:
         self._order = [s.name for s in specs]
         self._instances: dict[str, LLMProvider] = {}
         self._model_overrides: dict[str, str] = {}
+        # Override runtime di "enabled" (es. attivazione dalla web UI dopo
+        # aver salvato la chiave): non riscrive il YAML del repo.
+        self._enabled_overrides: dict[str, bool] = {}
 
     @classmethod
     def from_file(cls, path: str | Path, env: dict[str, str] | None = None) -> "ProviderRegistry":
@@ -136,7 +139,7 @@ class ProviderRegistry:
         """(usabile, motivo_se_no): un provider che richiede una chiave senza
         averla in .env viene saltato dalla catena, con il motivo dichiarato."""
         spec = self.spec(name)
-        if not spec.enabled:
+        if not (self._enabled_overrides.get(name, spec.enabled)):
             return False, "disabilitato in config"
         if spec.type not in PROVIDER_TYPES:
             return False, f"tipo '{spec.type}' non implementato"
@@ -157,6 +160,12 @@ class ProviderRegistry:
                        max_tokens=spec.max_tokens)
             self._instances[name] = inst
         return inst
+
+    def set_enabled(self, name: str, enabled: bool = True) -> None:
+        """Abilita un provider a runtime (la scelta si persiste via .env,
+        non modificando config/providers.yaml)."""
+        self.spec(name)  # valida che esista
+        self._enabled_overrides[name] = enabled
 
     def set_model(self, name: str, model: str) -> None:
         self.spec(name)  # valida che esista
