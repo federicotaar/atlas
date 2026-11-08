@@ -399,3 +399,188 @@ def test_channel_token_never_from_redacted_dotenv(tmp_path, monkeypatch):
         out=out_lines.append, max_steps=1, pairing=None)
     assert hub is None
     assert any("mancante" in line for line in out_lines)
+
+
+# --- stage 6: media (vocali, foto, file) ------------------------------------
+
+from app.channels.media import GEMINI_DESCRIBE_URL, GROQ_TRANSCRIBE_URL, Attachment, MediaProcessor  # noqa: E402
+
+
+def fake_post(responses):
+    """post iniettabile: mappa url -> (status, json); registra le chiamate."""
+    calls = []
+
+    def post(url, *, headers=None, files=None, data=None, json=None,
+             timeout=60.0):
+        calls.append({"url": url, "headers": headers or {}})
+        status, body = responses[url]
+        return status, body
+
+    return post, calls
+
+
+def make_hub_media(tmp_path, responses, media):
+    store = MemoryStore(tmp_path / "memory.db")
+    secrets = SecretFilter(["sk-test-1234567890"])
+    hub = ChannelHub(
+        registry=FakeRegistry(responses), active_getter=lambda: "fake",
+        ctx=ToolContext(workspace=tmp_path, secrets=secrets),
+        store=store, log=ActionLog(tmp_path / "logs" / "actions.log", secrets),
+        seal=None, secrets=secrets,
+        channels_log=ChannelLog(tmp_path / "logs" / "channels.log", secrets),
+        allowed={"telegram": {"111"}}, media=media,
+        max_steps=5, confirm_timeout=5.0)
+    return hub, store
+
+
+def wait_replies(replies, n, timeout=5.0):
+    deadline = time.time() + timeout
+    while len(replies) < n and time.time() < deadline:
+        time.sleep(0.02)
+
+
+def test_voice_transcribed_reaches_agent(tmp_path):
+    post, calls = fake_post({GROQ_TRANSCRIBE_URL: (200, {"text": "ciao dal vocale"})})
+    media = MediaProcessor(tmp_path, groq_key="groq-finto", post=post)
+    hub, store = make_hub_media(tmp_path, [text_response("ho capito")], media)
+    replies, reply = collect()
+    att = Attachment("voice", "nota vocale.ogg", "audio/ogg", b"audio-finto")
+    hub.handle(ChannelMessage("111", "telegram", "", attachments=(att,)), reply)
+    wait_replies(replies, 1)
+    assert replies == ["ho capito"]
+    composed = hub._registry.calls[0]["messages"][-1]["content"]
+    assert 'nota vocale trascritta: "ciao dal vocale"' in composed
+    saved = list((tmp_path / "data" / "inbound" / "telegram" / "111").glob("*"))
+    assert len(saved) == 1 and saved[0].read_bytes() == b"audio-finto"
+    assert saved[0].name.endswith("-nota_vocale.ogg")  # nome ripulito
+    # la cronologia conserva la trascrizione, il log solo tipo e nome
+    assert 'nota vocale trascritta: "ciao dal vocale"' in \
+        store.history("111", "telegram")[0]["content"]
+    log = (tmp_path / "logs" / "channels.log").read_text()
+    assert "[voice: nota vocale.ogg]" in log and "audio-finto" not in log
+    assert "groq-finto" not in log  # la chiave non esce mai
+
+
+def test_voice_without_key_notes_fallback(tmp_path):
+    media = MediaProcessor(tmp_path)  # nessuna chiave: niente rete
+    hub, _ = make_hub_media(tmp_path, [text_response("ok")], media)
+    replies, reply = collect()
+    att = Attachment("voice", "n.ogg", "audio/ogg", b"d")
+    hub.handle(ChannelMessage("111", "telegram", "", attachments=(att,)), reply)
+    wait_replies(replies, 1)
+    composed = hub._registry.calls[0]["messages"][-1]["content"]
+    assert "trascrizione non disponibile" in composed
+    assert len(list((tmp_path / "data" / "inbound" / "telegram" / "111").glob("*"))) == 1
+
+
+def test_photo_described_reaches_agent(tmp_path):
+    gemini = {"candidates": [{"content": {"parts": [{"text": "un gatto sul divano"}]}}]}
+    post, _ = fake_post({GEMINI_DESCRIBE_URL: (200, gemini)})
+    media = MediaProcessor(tmp_path, gemini_key="gemini-finto", post=post)
+    hub, _ = make_hub_media(tmp_path, [text_response("bella foto")], media)
+    replies, reply = collect()
+    att = Attachment("photo", "foto.jpg", "image/jpeg", b"jpeg-finto")
+    hub.handle(ChannelMessage("111", "telegram", "guarda", attachments=(att,)), reply)
+    wait_replies(replies, 1)
+    composed = hub._registry.calls[0]["messages"][-1]["content"]
+    assert "guarda" in composed and "un gatto sul divano" in composed
+
+
+def test_text_file_inlined_binary_only_path(tmp_path):
+    media = MediaProcessor(tmp_path)
+    hub, _ = make_hub_media(tmp_path, [text_response("a"), text_response("b")], media)
+    replies, reply = collect()
+    hub.handle(ChannelMessage("111", "telegram", "",
+                              attachments=(Attachment("file", "nota.txt", "text/plain",
+                                                      b"contenuto del file"),)), reply)
+    wait_replies(replies, 1)
+    composed = hub._registry.calls[0]["messages"][-1]["content"]
+    assert "contenuto del file" in composed
+    hub.handle(ChannelMessage("111", "telegram", "",
+                              attachments=(Attachment("file", "x.bin",
+                                                      "application/octet-stream",
+                                                      b"\x00\x01"),)), reply)
+    wait_replies(replies, 2)
+    composed2 = hub._registry.calls[1]["messages"][-1]["content"]
+    assert "salvato in" in composed2 and "\x00" not in composed2
+
+
+def test_media_from_unknown_sender_never_processed(tmp_path):
+    def boom(url, **kw):
+        raise AssertionError("mai rete o salvataggio per sconosciuti")
+
+    media = MediaProcessor(tmp_path, groq_key="k", post=boom)
+    hub, _ = make_hub_media(tmp_path, [text_response("x")], media)
+    replies, reply = collect()
+    att = Attachment("voice", "n.ogg", "audio/ogg", b"d")
+    hub.handle(ChannelMessage("999", "telegram", "", attachments=(att,)), reply)
+    time.sleep(0.2)
+    assert replies == [] and hub._registry.calls == []
+    assert not (tmp_path / "data" / "inbound").exists()
+    log = (tmp_path / "logs" / "channels.log").read_text()
+    assert "non autorizzato" in log
+
+
+def test_caption_slash_is_not_a_command(tmp_path):
+    media = MediaProcessor(tmp_path)
+    hub, store = make_hub_media(tmp_path, [text_response("ok")], media)
+    replies, reply = collect()
+    att = Attachment("file", "n.txt", "text/plain", b"t")
+    hub.handle(ChannelMessage("111", "telegram", "/remember segreto",
+                              attachments=(att,)), reply)
+    wait_replies(replies, 1)
+    assert replies == ["ok"]  # risposta del modello, non "Ricordato"
+    assert store.all_memories() == []
+
+
+def test_attachment_without_processor_noted(tmp_path):
+    hub, _ = make_hub(tmp_path, [text_response("ok")])  # media=None
+    replies, reply = collect()
+    att = Attachment("photo", "f.jpg", "image/jpeg", b"d")
+    hub.handle(ChannelMessage("111", "telegram", "", attachments=(att,)), reply)
+    wait_replies(replies, 1)
+    composed = hub._registry.calls[0]["messages"][-1]["content"]
+    assert "gestione media non configurata" in composed
+
+
+def test_telegram_channel_passes_attachments(tmp_path):
+    made = []
+
+    def factory(token, drop_pending_updates=True):
+        client = FakeTGClient(token)
+        made.append(client)
+        return client
+
+    chan = TelegramChannel("token-finto", client_factory=factory,
+                           allow_check=lambda s: s == "42")
+    received = []
+    chan.on_message(received.append)
+    chan.start()
+    att = Attachment("photo", "f.jpg", "image/jpeg", b"d")
+    made[0]._cb("42", "didascalia", "", (att,))
+    assert received[0].text == "didascalia"
+    assert received[0].attachments == (att,)
+
+
+def test_telegram_channel_wires_allow_check_when_supported(tmp_path):
+    class GatedClient(FakeTGClient):
+        def __init__(self, token, drop_pending_updates=True):
+            super().__init__(token)
+            self.gate = None
+
+        def set_allow_check(self, fn):
+            self.gate = fn
+
+    made = []
+
+    def factory(token, drop_pending_updates=True):
+        client = GatedClient(token)
+        made.append(client)
+        return client
+
+    chan = TelegramChannel("token-finto", client_factory=factory,
+                           allow_check=lambda s: s == "42")
+    chan.on_message(lambda m: None)
+    chan.start()
+    assert made[0].gate is not None
+    assert made[0].gate("42") is True and made[0].gate("43") is False
