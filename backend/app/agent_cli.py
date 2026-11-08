@@ -35,6 +35,7 @@ from .agent.seal import SealGuard
 from .agent.tools import ToolContext
 from .channels.base import ChannelHub, ChannelLog
 from .channels.config import channel_enabled, load_channels_config
+from .channels.pairing import PairingStore
 from .channels.telegram import TelegramChannel
 from .providers.base import AllProvidersFailed, ProviderError
 from .providers.registry import ConfigError, ProviderRegistry, load_dotenv
@@ -48,6 +49,9 @@ HELP_TEXT = """Comandi:
   /mode                        modo permessi attivo
   /mode <ask|auto-safe|yolo>   cambia modo permessi (spec sez. 4)
   /stop                        annulla il task in corso (spec sez. 2)
+  /pairing                     elenca le richieste di pairing in sospeso
+  /pairing approve <n>         autorizza il mittente n (allowlist canali)
+  /pairing reject <n>          scarta la richiesta n
   /remember <testo>            salva una nota persistente (spec sez. 5)
   /forget <testo>              rimuove le note che contengono il testo
   /memories                    elenca le note salvate
@@ -99,7 +103,8 @@ def _describe_registry(registry: ProviderRegistry, active: str,
 
 def _maybe_start_channels(*, workspace: Path, registry: ProviderRegistry,
                           get_active, set_active, ctx, store, log, seal,
-                          secrets, dotenv: dict, out, max_steps: int):
+                          secrets, dotenv: dict, out, max_steps: int,
+                          pairing: PairingStore):
     """Avvia i canali abilitati in config/channels.yaml. Ritorna l'hub o None."""
     config = load_channels_config(workspace)
     if not channel_enabled(config, "telegram"):
@@ -110,21 +115,64 @@ def _maybe_start_channels(*, workspace: Path, registry: ProviderRegistry,
         return None
     raw_ids = (dotenv.get("ALLOWED_TELEGRAM_IDS")
                or os.environ.get("ALLOWED_TELEGRAM_IDS", ""))
-    allowed = {"telegram": {s.strip() for s in raw_ids.split(",") if s.strip()}}
+    # Allowlist = .env + pairing approvati in locale con /pairing approve.
+    allowed = {"telegram": ({s.strip() for s in raw_ids.split(",") if s.strip()}
+                            | pairing.paired_ids("telegram"))}
     if not allowed["telegram"]:
-        out("ALLOWED_TELEGRAM_IDS vuoto: il canale ignorera' TUTTI i mittenti")
+        out("ALLOWED_TELEGRAM_IDS vuoto: il canale ignorera' TUTTI i mittenti "
+            "(richieste registrate in locale; approva con /pairing approve)")
     hub = ChannelHub(
         registry=registry, active_getter=get_active, set_active=set_active,
         describe_registry=_describe_registry,
         ctx=ctx, store=store, log=log, seal=seal, secrets=secrets,
         channels_log=ChannelLog(workspace / "logs" / "channels.log", secrets),
-        allowed=allowed, max_steps=max_steps)
+        allowed=allowed, pairing=pairing, max_steps=max_steps)
     channel = TelegramChannel(token)
     channel.on_message(
         lambda m: hub.handle(m, lambda text: channel.send(m.sender, text)))
     channel.start()
     out("canale telegram avviato (long polling)")
     return hub
+
+
+def _handle_pairing(line: str, pairing: PairingStore, hub, out) -> None:
+    """/pairing [list] | approve <n> | reject <n> - gestione locale delle
+    richieste di pairing dei canali (vedi app/channels/pairing.py)."""
+    import time as _time
+
+    parts = line.split()
+    sub = parts[1] if len(parts) > 1 else "list"
+    pending = pairing.pending()
+    if sub in ("list", "ls"):
+        if not pending:
+            out("Nessuna richiesta di pairing in sospeso.")
+        for i, p in enumerate(pending, 1):
+            age = int((_time.time() - p.get("ts", 0)) // 60)
+            display = f" ({p['display']})" if p.get("display") else ""
+            out(f"{i}. {p['channel']} id={p['sender']}{display} - {age} min fa")
+        return
+    if sub in ("approve", "reject") and len(parts) > 2:
+        try:
+            idx = int(parts[2]) - 1
+            entry = pending[idx]
+        except (ValueError, IndexError):
+            out(f"Numero non valido: /pairing per l'elenco (1-{len(pending)}).")
+            return
+        if sub == "reject":
+            pairing.reject(entry["channel"], entry["sender"])
+            out(f"Richiesta scartata: {entry['channel']} id={entry['sender']}.")
+            return
+        if hub is not None:
+            # L'hub aggiorna anche l'allowlist live; senza hub vale dal
+            # prossimo avvio del canale (lettura da disco).
+            hub.approve_pairing(entry["channel"], entry["sender"])
+        else:
+            pairing.approve(entry["channel"], entry["sender"])
+        out(f"Autorizzato {entry['channel']} id={entry['sender']}: "
+            "aggiunto all'allowlist" + (" (attivo subito)." if hub is not None
+                                        else " (attivo dal prossimo avvio del canale)."))
+        return
+    out("Uso: /pairing [list] | /pairing approve <n> | /pairing reject <n>")
 
 
 def run_cli(registry: ProviderRegistry, *, active: str | None = None,
@@ -168,12 +216,16 @@ def run_cli(registry: ProviderRegistry, *, active: str | None = None,
 
     # Canali chat (spec sez. 6): partono solo se abilitati in
     # config/channels.yaml; token e allowlist arrivano da .env, mai da config.
+    # Il pairing (/pairing) esiste anche a canali spenti: un'approvazione
+    # senza hub attivo vale dal prossimo avvio del canale.
+    pairing = PairingStore(workspace / "data" / "pairing.json")
+    hub = None
     if dotenv is not None:
-        _maybe_start_channels(
+        hub = _maybe_start_channels(
             workspace=workspace, registry=registry,
             get_active=lambda: active, set_active=set_active,
             ctx=ctx, store=store, log=log, seal=seal, secrets=secrets,
-            dotenv=dotenv, out=out, max_steps=max_steps)
+            dotenv=dotenv, out=out, max_steps=max_steps, pairing=pairing)
 
     # Conferme di permesso: il task gira in un thread, ma solo il REPL legge
     # stdin. Quando il worker chiede, la prossima riga non-comando dell'utente
@@ -309,6 +361,11 @@ def run_cli(registry: ProviderRegistry, *, active: str | None = None,
                 out("(annullamento richiesto: il task si ferma al prossimo delta)")
             else:
                 out("Nessun task in corso.")
+            continue
+        if line.startswith("/pairing"):
+            # Solo CLI locale: la chat non puo' approvare pairing (altrimenti
+            # uno sconosciuto potrebbe autorizzarsi da solo).
+            _handle_pairing(line, pairing, hub, out)
             continue
         if line == "/help":
             out(HELP_TEXT)
