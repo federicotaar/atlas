@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { hasToken, setToken } from "./api";
+import { useEffect, useState } from "react";
+import { hasToken, setOnUnauthorized, setToken } from "./api";
 import Auth from "./components/Auth";
 import Chat from "./components/Chat";
 import Dashboard from "./components/Dashboard";
@@ -8,6 +8,20 @@ import MigrationBanner from "./components/MigrationBanner";
 export default function App() {
   const [logged, setLogged] = useState(hasToken());
   const [view, setView] = useState<"chat" | "dashboard">("chat");
+  const [sessionNotice, setSessionNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Il backend ha rifiutato il token (401 su una richiesta autenticata):
+    // si torna ad Auth con una spiegazione invece di lasciare l'app aperta
+    // con ogni funzione rotta (sessione zombie).
+    setOnUnauthorized(() => {
+      setLogged(false);
+      setSessionNotice(
+        "La sessione non e' piu' valida (puo' succedere dopo un aggiornamento): accedi di nuovo. Nessun dato e' stato toccato.",
+      );
+    });
+    return () => setOnUnauthorized(null);
+  }, []);
 
   function logout() {
     setToken(null);
@@ -15,7 +29,15 @@ export default function App() {
   }
 
   if (!logged) {
-    return <Auth onLogin={() => setLogged(true)} />;
+    return (
+      <Auth
+        onLogin={() => {
+          setSessionNotice(null);
+          setLogged(true);
+        }}
+        sessionNotice={sessionNotice}
+      />
+    );
   }
 
   return (
