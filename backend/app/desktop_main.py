@@ -41,7 +41,10 @@ def main() -> None:
 
     import uvicorn
 
-    uvicorn.run("app.main:app", host="127.0.0.1", port=8000, log_level="warning")
+    # Import statico: PyInstaller non vede import per stringa ("app.main:app").
+    from app.main import app as asgi_app
+
+    uvicorn.run(asgi_app, host="127.0.0.1", port=8000, log_level="warning")
 
 
 if __name__ == "__main__":
