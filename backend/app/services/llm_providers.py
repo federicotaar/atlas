@@ -45,9 +45,9 @@ class ProviderMeta:
 PROVIDERS: dict[str, ProviderMeta] = {
     "extractive": ProviderMeta("extractive", "Estrattivo (offline)", "local", False, ""),
     "ollama_local": ProviderMeta("ollama_local", "Ollama (locale)", "local", False, ""),
-    "ollama_cloud": ProviderMeta("ollama_cloud", "Ollama (cloud)", "cloud", True, "gemma4:31b"),
-    "groq": ProviderMeta("groq", "Groq", "cloud", True, "llama-3.3-70b-versatile"),
-    "gemini": ProviderMeta("gemini", "Gemini", "cloud", True, "gemini-3.8-flash"),
+    "ollama_cloud": ProviderMeta("ollama_cloud", "Ollama (cloud)", "cloud", True, "gemma4:31b-cloud"),
+    "groq": ProviderMeta("groq", "Groq", "cloud", True, "openai/gpt-oss-120b"),
+    "gemini": ProviderMeta("gemini", "Gemini", "cloud", True, "gemini-3.5-flash"),
     "custom": ProviderMeta("custom", "Personalizzato (OpenAI-compatibile)", "cloud", False, "", True),
 }
 

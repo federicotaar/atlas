@@ -52,17 +52,20 @@ export default function ModelPicker({ onClose, onSaved }: {
       setModel(s.model);
       setBaseUrl(s.base_url);
       setConsent(s.consent_cloud);
-      setConsentFor(s.consent_cloud ? s.provider : null);
+      setConsentFor(s.consent_cloud ? (s.provider === "custom" ? `custom:${s.base_url}` : s.provider) : null);
     }).catch((e) => setError(e instanceof Error ? e.message : "Errore"));
   }, []);
 
   const backend = uiToBackend(ui, ollamaMode);
+  // Destinazione effettiva dei dati: per gli endpoint personalizzati e' la
+  // base URL scritta dall'utente, non la sola categoria "custom".
+  const dest = backend === "custom" ? `custom:${baseUrl.trim()}` : backend;
 
   // Il consenso vale solo per il provider per cui e' stato dato: selezionando
   // un provider cloud diverso la spunta si azzera e Salva resta disabilitato.
   useEffect(() => {
-    setConsent(consentFor === backend);
-  }, [backend, consentFor]);
+    setConsent(consentFor === dest);
+  }, [dest, consentFor]);
 
   // Stato specifico del provider: cambiando provider il modello, la base URL e
   // la chiave inserita NON si trascinano sul provider nuovo (si salverebbe un
@@ -186,7 +189,7 @@ export default function ModelPicker({ onClose, onSaved }: {
 
         {isCloud && (
           <label className="mp-consent">
-            <input type="checkbox" checked={consent} onChange={(e) => { const v = e.target.checked; setConsent(v); setConsentFor(v ? backend : null); }} />
+            <input type="checkbox" checked={consent} onChange={(e) => { const v = e.target.checked; setConsent(v); setConsentFor(v ? dest : null); }} />
             <span>Ho capito che le mie domande e le memorie usate per rispondere saranno
               inviate a {meta?.label} e che l'uso viene addebitato sul MIO account {meta?.label},
               secondo i suoi prezzi.</span>
