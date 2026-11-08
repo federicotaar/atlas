@@ -29,6 +29,18 @@ class MigrationStatusOut(BaseModel):
     undecryptable_credentials: int | None = None
 
 
+class MigrationProbeOut(BaseModel):
+    """Esito del rilevamento SU RICHIESTA (voce in-app): ignora lo stato
+    registrato e riprova la fonte. 'none' = nessuna fonte nota trovata;
+    'unreachable' = fonte nota ma non raggiungibile (mai spacciato per
+    'nessun dato')."""
+    source: str  # configured | detected | none
+    state: str   # has_data | empty | unreachable | none
+    counts: dict = {}
+    error: str = ""
+    recorded: str | None = None  # imported | dismissed | None
+
+
 def _legacy_source() -> str:
     """Fonte legacy: configurata (env, priorita' assoluta) oppure rilevata.
 
@@ -69,6 +81,27 @@ def migration_status(db: Session = Depends(get_db), user: User = Depends(get_cur
         return MigrationStatusOut(state="not_configured")
     probe = migrate.probe(legacy)
     return MigrationStatusOut(state=probe.state, counts=probe.counts, error=probe.error)
+
+
+@router.post("/migration-probe", response_model=MigrationProbeOut)
+def migration_probe(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """Rilevamento on-demand dalla voce "Importa dati da una versione
+    precedente": riprova la fonte anche dopo un dismiss, senza scrivere
+    nulla. Distingue sempre 'nessuna fonte nota' da 'trovata ma spenta'."""
+    recorded = _recorded_state(db, user)
+    configured = get_settings().legacy_database_url
+    if configured:
+        result = migrate.probe(configured)
+        return MigrationProbeOut(source="configured", state=result.state,
+                                 counts=result.counts, error=result.error,
+                                 recorded=recorded)
+    if os.environ.get("ATLAS_DESKTOP") == "1":
+        url, result = migrate.detect_legacy()
+        if url is not None and result is not None:
+            return MigrationProbeOut(source="detected", state=result.state,
+                                     counts=result.counts, error=result.error,
+                                     recorded=recorded)
+    return MigrationProbeOut(source="none", state="none", recorded=recorded)
 
 
 @router.post("/migration-import", response_model=MigrationStatusOut)

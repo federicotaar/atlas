@@ -45,7 +45,7 @@ export default function App() {
       </header>
       <MigrationBanner onRelogin={logout} />
       <main className={view === "chat" ? "view view-chat" : "view"}>
-        {view === "chat" ? <Chat /> : <Dashboard />}
+        {view === "chat" ? <Chat /> : <Dashboard onRelogin={logout} />}
       </main>
     </>
   );

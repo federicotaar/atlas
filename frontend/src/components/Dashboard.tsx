@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { api, type DashboardData } from "../api";
 import TelegramCard from "./TelegramCard";
 import WhatsAppCard from "./WhatsAppCard";
+import MigrationCard from "./MigrationCard";
 
 function Provenance({ data }: { data: Record<string, unknown> }) {
   return (
@@ -28,7 +29,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-export default function Dashboard() {
+export default function Dashboard({ onRelogin }: { onRelogin: () => void }) {
   const [data, setData] = useState<DashboardData | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -114,6 +115,7 @@ export default function Dashboard() {
 
       <TelegramCard />
       <WhatsAppCard />
+      <MigrationCard onRelogin={onRelogin} />
 
       <Section title="Automazioni">
         {p.automations.connectors.map((c) => (

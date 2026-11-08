@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text as sql_text
 
+from . import __version__
 from .config import get_settings
 from .db import get_engine
 from .errors import register_error_handlers
@@ -26,7 +27,7 @@ from .routers import (
     whatsapp,
 )
 
-app = FastAPI(title="ATLAS", version="0.1.0", docs_url="/docs")
+app = FastAPI(title="ATLAS", version=__version__, docs_url="/docs")
 register_error_handlers(app)
 
 # CORS solo per le origini configurate (default: involucro desktop Tauri).
@@ -73,7 +74,11 @@ def health() -> dict:
     # app/identita': il desktop distingue un'istanza ATLAS compatibile da un
     # servizio qualunque che occupi la porta 8000 (non si uccide mai un server
     # altrui; si riusa solo un'istanza ATLAS con stessa app e API).
-    return {"status": "ok", "db": db_status, "app": "atlas", "api": "v1"}
+    # version: il desktop riusa un'istanza esistente SOLO se dichiara una
+    # versione compatibile (un vecchio backend 2.0.x su :8000 non la espone e
+    # non va riusato: mancherebbero auth locale, migrazione e connettori).
+    return {"status": "ok", "db": db_status, "app": "atlas", "api": "v1",
+            "version": __version__}
 
 
 @app.on_event("startup")

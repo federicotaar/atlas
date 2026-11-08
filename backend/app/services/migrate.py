@@ -97,18 +97,35 @@ ENCRYPTED_FIELDS = (
 )
 
 
+def detect_legacy() -> tuple[str | None, "ProbeResult | None"]:
+    """Prova i candidati documentati e ritorna (url, esito) del primo con
+    dati; altrimenti (url, esito) del primo irraggiungibile; altrimenti
+    (None, None). Serve al rilevamento su richiesta: chi preme "riprova" deve
+    vedere la differenza tra "nessun dato noto" e "trovato ma non
+    raggiungibile" - mai un 'niente da importare' quando il DB e' spento."""
+    first_unreachable: tuple[str, "ProbeResult"] | None = None
+    for url in LEGACY_AUTODETECT_CANDIDATES:
+        try:
+            result = probe(url)
+        except Exception as exc:
+            result = ProbeResult(state="unreachable", error=f"{type(exc).__name__}: {exc}")
+        if result.state == "has_data":
+            return url, result
+        if result.state == "unreachable" and first_unreachable is None:
+            first_unreachable = (url, result)
+    if first_unreachable is not None:
+        return first_unreachable
+    return None, None
+
+
 def autodetect_legacy_url() -> str | None:
     """Rileva un Postgres 2.0.x raggiungibile E CON DATI tra i candidati
     documentati. Ritorna l'URL, altrimenti None: vuoto o irraggiungibile
     contano come assente, cosi' un'installazione nuova resta semplice e non
     vede mai un banner."""
-    for url in LEGACY_AUTODETECT_CANDIDATES:
-        try:
-            result = probe(url)
-        except Exception:
-            continue
-        if result.state == "has_data":
-            return url
+    url, result = detect_legacy()
+    if url is not None and result is not None and result.state == "has_data":
+        return url
     return None
 
 

@@ -9,7 +9,68 @@ const IS_TAURI =
   typeof window !== "undefined" &&
   (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ !== undefined;
 
-const BASE = resolveBase(import.meta.env.VITE_API_URL as string | undefined, IS_TAURI);
+let BASE = resolveBase(import.meta.env.VITE_API_URL as string | undefined, IS_TAURI);
+
+/** Porte candidate del backend desktop: il launcher Tauri usa 8000 se libera,
+ * altrimenti una di riserva (mai contesa a server che non sono suoi). */
+export const TAURI_PORT_CANDIDATES = [8000, 8100, 8101, 8102, 8103, 8104, 8105, 8106, 8107, 8108];
+/** Backend minimo riusabile: da 2.1.1 /health dichiara la versione; un
+ * backend piu' vecchio (es. Docker 2.0.x) non ha auth locale, migrazione e
+ * connettori e NON va usato dall'app nuova. */
+export const MIN_BACKEND_VERSION = "2.1.1";
+
+export function parseVersion(v: string): [number, number, number] | null {
+  const m = /^(\d+)\.(\d+)\.(\d+)/.exec(v);
+  if (!m) return null;
+  return [Number(m[1]), Number(m[2]), Number(m[3])];
+}
+
+export function versionAtLeast(v: string, min: string): boolean {
+  const a = parseVersion(v);
+  const b = parseVersion(min);
+  if (!a || !b) return false;
+  for (let i = 0; i < 3; i++) {
+    if (a[i] !== b[i]) return a[i] > b[i];
+  }
+  return true;
+}
+
+/** Sceglie la porta del backend in Tauri: prima istanza ATLAS con versione
+ * compatibile tra le candidate; null se nessuna (il launcher mostrera'
+ * l'errore). Mai usare un backend troppo vecchio solo perche' risponde. */
+export async function probeTauriBase(
+  fetchImpl: typeof fetch,
+  candidates: number[],
+  minVersion: string,
+): Promise<string | null> {
+  for (const port of candidates) {
+    try {
+      const res = await fetchImpl(`http://127.0.0.1:${port}/health`);
+      if (!res.ok) continue;
+      const v = (await res.json()) as Record<string, unknown>;
+      if (
+        v.app === "atlas" &&
+        v.api === "v1" &&
+        typeof v.version === "string" &&
+        versionAtLeast(v.version, minVersion)
+      ) {
+        return `http://127.0.0.1:${port}`;
+      }
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}
+
+/** In Tauri senza override esplicito: scopre la porta reale del backend
+ * (il launcher puo' averne scelta una di riserva). Chiamata una volta
+ * all'avvio prima del render; in caso di fallimento resta il default. */
+export async function initApiBase(): Promise<void> {
+  if (!IS_TAURI || import.meta.env.VITE_API_URL) return;
+  const found = await probeTauriBase(fetch.bind(window), TAURI_PORT_CANDIDATES, MIN_BACKEND_VERSION);
+  if (found) BASE = found;
+}
 
 let token: string | null =
   typeof localStorage !== "undefined" ? localStorage.getItem("atlas_token") : null;
@@ -144,6 +205,14 @@ export interface WhatsAppStatus {
   qr: string | null;
 }
 
+export interface MigrationProbe {
+  source: "configured" | "detected" | "none";
+  state: "has_data" | "empty" | "unreachable" | "none";
+  counts: Record<string, number>;
+  error: string;
+  recorded: "imported" | "dismissed" | null;
+}
+
 export interface MigrationStatus {
   state: "not_configured" | "unreachable" | "empty" | "has_data" | "imported" | "dismissed";
   counts: Record<string, number>;
@@ -185,6 +254,7 @@ export const api = {
   listModels: (provider: string) =>
     req<{ models: string[] }>(`/settings/models?provider=${encodeURIComponent(provider)}`),
   getMigrationStatus: () => req<MigrationStatus>("/setup/migration-status"),
+  probeMigration: () => req<MigrationProbe>("/setup/migration-probe", { method: "POST" }),
   importMigration: () => req<MigrationStatus>("/setup/migration-import", { method: "POST" }),
   dismissMigration: () => req<MigrationStatus>("/setup/migration-dismiss", { method: "POST" }),
   getTelegramStatus: () => req<TelegramStatus>("/connectors/telegram/status"),

@@ -1,51 +1,79 @@
 //! ATLAS desktop: avvia il backend Python come sidecar e lo ferma all'uscita.
 //!
-//! Regole porta 8000 (decise con il proprietario):
-//! - se 127.0.0.1:8000 risponde gia' come istanza ATLAS compatibile
-//!   (app="atlas", api="v1"), la RIUSIAMO e non la tocchiamo mai;
-//! - se la porta e' occupata da qualcos'altro, NON uccidiamo nulla: stato
-//!   errore "porta occupata", l'utente decide;
+//! Regole porte (requisito di progetto: mai toccare server che non avviamo noi):
+//! - se 127.0.0.1:8000 risponde gia' come istanza ATLAS COMPATIBILE
+//!   (app="atlas", api="v1", versione >= MIN_REUSE_VERSION), la RIUSIAMO e
+//!   non la tocchiamo mai;
+//! - un vecchio backend (es. Docker 2.0.x senza campo version) NON viene
+//!   riusato: gli mancherebbero auth locale, migrazione e connettori. Non lo
+//!   uccidiamo e non lo tocchiamo: il sidecar parte su una porta di riserva
+//!   nostra e l'app usa quella;
+//! - stessa cura per un servizio estraneo su 8000: mai uccidere nulla di non
+//!   nostro, si passa alla porta di riserva;
 //! - chiudiamo solo il processo che abbiamo avviato noi.
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 use tauri::{Emitter, Manager};
 use tauri_plugin_shell::ShellExt;
 
-const HEALTH_URL: &str = "http://127.0.0.1:8000/health";
+const PORT_CANDIDATES: [u16; 10] = [8000, 8100, 8101, 8102, 8103, 8104, 8105, 8106, 8107, 8108];
+/// Versione minima di un backend esistente per essere riusata: la 2.1.1
+/// aggiunge auth locale, migrazione guidata e connettori WhatsApp/Telegram;
+/// un backend piu' vecchio non li avrebbe e l'app risulterebbe rotta.
+const MIN_REUSE_VERSION: (u32, u32, u32) = (2, 1, 1);
 
 struct Sidecar(Mutex<Option<tauri_plugin_shell::process::CommandChild>>);
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Debug)]
 enum Probe {
+    /// Istanza ATLAS con versione compatibile: riusabile.
     AtlasCompatible,
+    /// Istanza ATLAS troppo vecchia (senza version o sotto il minimo).
+    AtlasOutdated,
+    /// Qualcos'altro occupa la porta.
     Foreign,
+    /// Nessuno in ascolto.
     Nothing,
 }
 
-fn probe() -> Probe {
-    let Ok(resp) = ureq::get(HEALTH_URL)
-        .timeout(Duration::from_millis(800))
-        .call()
-    else {
-        return Probe::Nothing;
+fn parse_version(v: &str) -> Option<(u32, u32, u32)> {
+    let mut parts = v.split('.');
+    let major = parts.next()?.parse().ok()?;
+    let minor = parts.next()?.parse().ok()?;
+    let patch = parts.next()?.parse().ok()?;
+    Some((major, minor, patch))
+}
+
+fn probe(port: u16) -> Probe {
+    let url = format!("http://127.0.0.1:{port}/health");
+    let resp = match ureq::get(&url).timeout(Duration::from_millis(800)).call() {
+        Ok(r) => r,
+        // Qualcuno risponde con un errore HTTP: la porta e' occupata, non nostra.
+        Err(ureq::Error::Status(_, r)) => r,
+        // Connessione rifiutata o timeout: nessuno in ascolto.
+        Err(_) => return Probe::Nothing,
     };
     if resp.status() != 200 {
         return Probe::Foreign;
     }
-    match resp.into_json::<serde_json::Value>() {
-        Ok(v) if v.get("app").and_then(|a| a.as_str()) == Some("atlas")
-            && v.get("api").and_then(|a| a.as_str()) == Some("v1") =>
-        {
-            Probe::AtlasCompatible
-        }
-        _ => Probe::Foreign,
+    let Ok(v) = resp.into_json::<serde_json::Value>() else {
+        return Probe::Foreign;
+    };
+    let is_atlas = v.get("app").and_then(|a| a.as_str()) == Some("atlas")
+        && v.get("api").and_then(|a| a.as_str()) == Some("v1");
+    if !is_atlas {
+        return Probe::Foreign;
+    }
+    match v.get("version").and_then(|x| x.as_str()).and_then(parse_version) {
+        Some(ver) if ver >= MIN_REUSE_VERSION => Probe::AtlasCompatible,
+        _ => Probe::AtlasOutdated,
     }
 }
 
-fn wait_health() -> bool {
+fn wait_health(port: u16) -> bool {
     let start = Instant::now();
     while start.elapsed() < Duration::from_secs(30) {
-        if probe() == Probe::AtlasCompatible {
+        if probe(port) == Probe::AtlasCompatible {
             return true;
         }
         std::thread::sleep(Duration::from_millis(400));
@@ -58,23 +86,33 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .setup(|app| {
-            match probe() {
-                Probe::AtlasCompatible => {
-                    // Istanza ATLAS gia' attiva (avviata dall'utente o da un
-                    // altro avvio dell'app): la riusiamo. Niente da chiudere.
+            // 1) Un'istanza compatibile gia' attiva (avviata dall'utente o da
+            //    un altro avvio dell'app) viene riusata: niente da chiudere.
+            for port in PORT_CANDIDATES {
+                if probe(port) == Probe::AtlasCompatible {
                     app.manage(Sidecar(Mutex::new(None)));
                     return Ok(());
                 }
-                Probe::Foreign => {
-                    // Mai uccidere un server che non e' nostro.
-                    app.handle().emit(
-                        "backend-port-busy",
-                        "127.0.0.1:8000 e' occupata da un servizio che non e' ATLAS",
-                    )?;
-                    app.manage(Sidecar(Mutex::new(None)));
-                    return Ok(());
-                }
-                Probe::Nothing => {}
+            }
+
+            // 2) Prima porta libera tra le candidate nostre. Vecchi backend e
+            //    servizi estranei restano vivi e intoccati.
+            let free_port = PORT_CANDIDATES
+                .iter()
+                .copied()
+                .find(|&p| probe(p) == Probe::Nothing);
+            let Some(port) = free_port else {
+                app.handle().emit(
+                    "backend-port-busy",
+                    "Nessuna porta libera tra 8000 e 8108: chiudi un'istanza di ATLAS o il servizio che le occupa",
+                )?;
+                app.manage(Sidecar(Mutex::new(None)));
+                return Ok(());
+            };
+            if port != 8000 {
+                eprintln!(
+                    "[atlas] 127.0.0.1:8000 occupata (vecchia versione o altro servizio): sidecar su porta {port}"
+                );
             }
 
             let data_dir = app
@@ -87,7 +125,8 @@ pub fn run() {
                 .shell()
                 .sidecar("atlas-backend")
                 .expect("sidecar atlas-backend non trovato nel bundle")
-                .env("ATLAS_DESKTOP_DATA_DIR", &data_dir);
+                .env("ATLAS_DESKTOP_DATA_DIR", &data_dir)
+                .env("ATLAS_PORT", port.to_string());
             let (mut rx, child) = sidecar.spawn().expect("avvio sidecar fallito");
             app.manage(Sidecar(Mutex::new(Some(child))));
             // Drena stdout/stderr del sidecar: errori di avvio visibili, mai morte silenziosa.
@@ -112,8 +151,8 @@ pub fn run() {
 
             let handle = app.handle().clone();
             std::thread::spawn(move || {
-                if !wait_health() {
-                    eprintln!("ATLAS backend non risponde su 127.0.0.1:8000 entro 30s");
+                if !wait_health(port) {
+                    eprintln!("ATLAS backend non risponde su 127.0.0.1:{port} entro 30s");
                     let _ = handle.emit("backend-failed", ());
                 }
             });

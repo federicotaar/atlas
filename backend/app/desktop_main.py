@@ -55,7 +55,10 @@ def main() -> None:
     # Import statico: PyInstaller non vede import per stringa ("app.main:app").
     from app.main import app as asgi_app
 
-    uvicorn.run(asgi_app, host="127.0.0.1", port=8000, log_level="warning")
+    # Porta scelta dal launcher Tauri (8000 se libera, altrimenti una porta
+    # di riserva sua): mai contendere 8000 a un server che non e' nostro.
+    port = int(os.environ.get("ATLAS_PORT", "8000"))
+    uvicorn.run(asgi_app, host="127.0.0.1", port=port, log_level="warning")
 
 
 if __name__ == "__main__":
