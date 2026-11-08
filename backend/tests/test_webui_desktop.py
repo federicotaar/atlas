@@ -29,6 +29,7 @@ class FakeRegistryForConfig:
     def __init__(self):
         self._order = ["fake", "cloud"]
         self._enabled_overrides = {}
+        self._model_overrides = {}
 
     def spec(self, name):
         if name == "fake":
@@ -49,8 +50,12 @@ class FakeRegistryForConfig:
             return True, ""
         return False, f"chiave mancante ({spec.api_key_env} non impostata)"
 
+    def set_model(self, name, model):
+        self.spec(name)
+        self._model_overrides[name] = model
+
     def current_model(self, name):
-        return "fake-1"
+        return self._model_overrides.get(name, "fake-1")
 
 
 def make_config(tmp_path):
@@ -190,3 +195,48 @@ def test_page_escapes_model_html_and_renders_markdown(tmp_path):
     assert "d.innerHTML = md(text)" in page
     assert "d.textContent = text" not in page
     assert "<strong>" not in page.split("function md")[0]  # niente markup atteso nel chrome
+
+
+def test_config_set_model_persisted(tmp_path, monkeypatch):
+    """Il modello custom scelto dalla pagina finisce in .env (ATLAS_MODELS),
+    sopravvive a un nuovo ConfigAPI (simula riavvio) e si riapplica al
+    registry. Rifiuti: modello vuoto, con separatori, provider ignoto."""
+    monkeypatch.delenv("ATLAS_MODELS", raising=False)
+    config, _state = make_config(tmp_path)
+    assert config.set_model("fake", "")["ok"] is False
+    assert config.set_model("fake", "a=b")["ok"] is False
+    assert config.set_model("inesistente", "x:1b")["ok"] is False
+    ok = config.set_model("fake", "qwen3.8:27b")
+    assert ok["ok"] is True and ok["model"] == "qwen3.8:27b"
+    assert config._registry.current_model("fake") == "qwen3.8:27b"
+    assert "ATLAS_MODELS=fake=qwen3.8:27b" in (tmp_path / ".env").read_text()
+    # merge con un secondo provider: nessuna riga persa
+    config.set_model("cloud", "model-b:2b")
+    value = os.environ["ATLAS_MODELS"]
+    assert "fake=qwen3.8:27b" in value and "cloud=model-b:2b" in value
+    # riavvio: il .env e' la fonte, il reapply del boot la ripristina
+    monkeypatch.delenv("ATLAS_MODELS", raising=False)
+    from app.providers.registry import load_dotenv
+    load_dotenv(tmp_path / ".env")
+    config2, _ = make_config(tmp_path)
+    for pair in os.environ["ATLAS_MODELS"].split(","):
+        n, m = pair.split("=", 1)
+        config2._registry.set_model(n, m)
+    assert config2._registry.current_model("fake") == "qwen3.8:27b"
+    assert config2._registry.current_model("cloud") == "model-b:2b"
+
+
+def test_config_model_endpoint(tmp_path, monkeypatch):
+    """L'endpoint /api/config/model instrada la stessa persistenza."""
+    monkeypatch.delenv("ATLAS_MODELS", raising=False)
+    from fastapi.testclient import TestClient
+
+    session, _store = make_session(tmp_path, [])
+    config, _state = make_config(tmp_path)
+    client = TestClient(create_app(session, config))
+    resp = client.post("/api/config/model",
+                       json={"name": "fake", "model": "llama3.2:3b"})
+    assert resp.json()["ok"] is True
+    assert "ATLAS_MODELS=fake=llama3.2:3b" in (tmp_path / ".env").read_text()
+    assert client.post("/api/config/model",
+                       json={"name": "fake", "model": ""}).json()["ok"] is False
