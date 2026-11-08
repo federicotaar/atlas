@@ -103,6 +103,11 @@ def _bwrap_cmd(workdir: Path) -> list[str] | None:
     return [bwrap, "--unshare-all", "--die-with-parent", "--clearenv",
             "--setenv", "PATH", "/usr/bin:/bin",
             "--setenv", "HOME", "/work",
+            # LD_LIBRARY_PATH per libpython: su runner CI (setup-python) il
+            # loader non risolve /pyreal/lib via RPATH una volta svuotato
+            # l'ambiente; senza, /pyreal/bin/python3.12 non parte (lib
+            # libpython3.12.so.1.0 non trovata).
+            "--setenv", "LD_LIBRARY_PATH", "/pyreal/lib",
             "--setenv", "PYTHONPATH", f"/work:/pyenv/lib/{ver}/site-packages",
             *binds,
             "--bind", str(workdir), "/work",
