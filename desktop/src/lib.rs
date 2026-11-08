@@ -164,6 +164,24 @@ pub fn run() {
                 let state = window.state::<Sidecar>();
                 let child = state.0.lock().unwrap().take();
                 if let Some(child) = child {
+                    let pid = child.pid();
+                    // Prima SIGTERM: il bootloader PyInstaller lo inoltra al
+                    // server Python figlio (SIGKILL non e' inoltrabile). Solo
+                    // sul processo avviato da noi; un'istanza riusata non e'
+                    // mai nello state e resta intoccata.
+                    #[cfg(target_os = "windows")]
+                    {
+                        let _ = std::process::Command::new("taskkill")
+                            .args(["/T", "/F", "/PID", &pid.to_string()])
+                            .status();
+                    }
+                    #[cfg(not(target_os = "windows"))]
+                    {
+                        let _ = std::process::Command::new("kill")
+                            .args(["-TERM", &pid.to_string()])
+                            .status();
+                        std::thread::sleep(std::time::Duration::from_millis(800));
+                    }
                     let _ = child.kill();
                 }
             }

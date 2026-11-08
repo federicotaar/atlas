@@ -5,12 +5,37 @@ Differenze rispetto a `uvicorn app.main:app`:
 - provider di default locali (embedding hash, LLM estrattivo): zero setup;
 - bind solo su 127.0.0.1 (mai esposto in rete).
 """
+import ctypes
 import os
+import signal
 import sys
 from pathlib import Path
 
 
+def _install_parent_death_watch() -> None:
+    """Linux: SIGTERM quando il processo padre (bootloader PyInstaller) muore.
+
+    Il launcher Tauri termina il bootloader alla chiusura della finestra;
+    senza questo watch il server Python resta orfano con la porta occupata
+    (bug osservato in CI: chiusura normale, porta 8100 ancora in ascolto).
+    """
+    if sys.platform != "linux":
+        return
+    try:
+        libc = ctypes.CDLL("libc.so.6", use_errno=True)
+        PR_SET_PDEATHSIG = 1
+        if libc.prctl(PR_SET_PDEATHSIG, signal.SIGTERM) != 0:
+            return
+        # Race: padre gia' morto tra spawn e prctl.
+        if os.getppid() == 1:
+            os._exit(0)
+    except Exception:
+        # Mai bloccare l'avvio per il watch: il fallback resta il kill Rust.
+        pass
+
+
 def main() -> None:
+    _install_parent_death_watch()
     data_dir = Path(
         os.environ.get("ATLAS_DESKTOP_DATA_DIR")
         or Path.home() / ".atlas" / "desktop"
