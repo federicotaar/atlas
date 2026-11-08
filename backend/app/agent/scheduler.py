@@ -325,8 +325,8 @@ class Scheduler:
     def resume_job(self, job_id: int) -> Job | None:
         return self._store.resume(job_id)
 
-    def approve_job(self, job_id: int) -> Job | None:
-        return self._store.approve(job_id)
+    def approve_job(self, job_id: int, now: float | None = None) -> Job | None:
+        return self._store.approve(job_id, now)
 
     def delete_job(self, job_id: int) -> bool:
         return self._store.delete(job_id)
