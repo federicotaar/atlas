@@ -149,3 +149,16 @@ jobs:
             tail -50 /tmp/atlas-desktop.log >&2 || true
             exit 1
           fi
+      - name: Cattura screenshot app in esecuzione
+        run: |
+          sleep 3
+          sudo apt-get install -y imagemagick xdotool >/dev/null
+          DISPLAY=:99 import -window root /tmp/atlas-screenshot.png
+          DISPLAY=:99 xdotool search --name 'ATLAS|atlas' 2>/dev/null && echo 'finestra app presente' || echo 'nessuna finestra trovata'
+      - name: Carica artefatto screenshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: atlas-screenshot
+          path: /tmp/atlas-screenshot.png
+          if-no-files-found: warn
