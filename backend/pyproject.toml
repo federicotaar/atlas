@@ -37,7 +37,8 @@ dev = [
 atlas = "app.cli:main"
 
 [tool.setuptools]
-packages = ["app", "app.routers", "app.services", "app.providers"]
+packages = ["app", "app.agent", "app.agents", "app.channels",
+            "app.routers", "app.services", "app.providers"]
 
 [tool.ruff]
 line-length = 120
