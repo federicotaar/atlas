@@ -68,13 +68,10 @@ jobs:
         run: pip install "./backend[dev]"
       - name: Installa Ollama
         run: |
-          if curl -fsSL --retry 3 https://ollama.com/install.sh -o /tmp/ollama-install.sh; then
-            sh /tmp/ollama-install.sh
-          else
-            echo 'ollama.com irraggiungibile: fallback al tarball dei GitHub Releases'
-            curl -fsSL https://github.com/ollama/ollama/releases/latest/download/ollama-linux-amd64.tar.zst -o /tmp/ollama.tar.zst
-            sudo tar -I zstd -xf /tmp/ollama.tar.zst -C /usr/local
-          fi
+          # install.sh di ollama.com punta a un asset .tgz non piu' pubblicato
+          # (404): installiamo dal tarball ufficiale dei GitHub Releases.
+          curl -fsSL https://github.com/ollama/ollama/releases/latest/download/ollama-linux-amd64.tar.zst -o /tmp/ollama.tar.zst
+          sudo tar -I zstd -xf /tmp/ollama.tar.zst -C /usr/local
           command -v ollama
       - name: Server + modelli
         run: |
