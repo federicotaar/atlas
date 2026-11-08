@@ -219,21 +219,31 @@ sleep 1
 xdotool mousemove 500 746 click 1
 sleep 1
 xdotool type --delay 30 'ciao'
+import -window root /tmp/e2e-13c-typed.png
 xdotool key Return
 # Roundtrip RIUSCITO (provider locale, nessun segreto in CI): la risposta
 # non e' un errore di chain. Fonte di verita' API, poi il frame: mai OCR
 # sulla bolla utente chiara (nota Briciola), mai asserzione su testo libero
-# del modello.
+# del modello. Budget lungo: smollm2 su CPU condivisa + primo caricamento
+# + eventuale loop strumenti possono superare i 2 minuti.
 ok=0
-for i in $(seq 1 20); do
+for i in $(seq 1 40); do
   sleep 6
-  LAST=$(curl -s http://127.0.0.1:8000/agent/api/history | python3 -c 'import sys,json
+  RAW=$(curl -s -w '\n%{http_code}' http://127.0.0.1:8000/agent/api/history 2>/dev/null || true)
+  CODE=$(echo "$RAW" | tail -1)
+  LAST=$(echo "$RAW" | head -n -1 | python3 -c 'import sys,json
 msgs = json.load(sys.stdin)["messages"]
 asst = [m for m in msgs if m.get("role") == "assistant"]
 print(asst[-1]["content"] if asst else "")' 2>/dev/null || true)
   if [ -n "$LAST" ] && [ "${LAST#Errore}" = "$LAST" ]; then ok=1; break; fi
 done
-[ "$ok" = 1 ] || { echo "E2E UI: roundtrip NON riuscito, ultima risposta: ${LAST:0:200}"; exit 1; }
+if [ "$ok" != 1 ]; then
+  echo "E2E UI: roundtrip NON riuscito dopo 240s"
+  echo "  history http_code=$CODE ultima risposta: ${LAST:0:200}"
+  echo "  raw history tail: $(echo "$RAW" | head -c 400)"
+  import -window root /tmp/e2e-13-fail.png
+  exit 1
+fi
 import -window root /tmp/e2e-13-agente-roundtrip.png
 ! ocr_has /tmp/e2e-13-agente-roundtrip.png 'Errore' || { echo 'E2E UI: il frame mostra una risposta di errore'; exit 1; }
 echo 'E2E UI: click-through Agente + roundtrip riuscito (ollama smollm2) OK'
