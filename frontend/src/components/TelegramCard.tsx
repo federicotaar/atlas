@@ -107,7 +107,7 @@ export default function TelegramCard() {
               onChange={(e) => setToken(e.target.value)}
               aria-label="Token del bot Telegram"
             />
-            <button onClick={connect} disabled={busy || token.trim().length < 20}>
+            <button className="primary" onClick={connect} disabled={busy || token.trim().length < 20}>
               {busy ? "Verifica…" : "Collega"}
             </button>
           </div>
@@ -124,7 +124,7 @@ export default function TelegramCard() {
             <div className="item">
               <p className="muted">Il codice di accoppiamento e' scaduto (vale 15 minuti).</p>
               <div className="row">
-                <button onClick={rotate} disabled={busy}>Genera nuovo codice</button>
+                <button className="ghost" onClick={rotate} disabled={busy}>Genera nuovo codice</button>
               </div>
             </div>
           )}
@@ -143,17 +143,17 @@ export default function TelegramCard() {
                 </p>
               )}
               <div className="row">
-                <a href={st.deep_link} target="_blank" rel="noreferrer">
+                <a className="ghost" href={st.deep_link} target="_blank" rel="noreferrer">
                   Apri in Telegram
                 </a>
-                <button onClick={copyLink}>{copied ? "Copiato" : "Copia link"}</button>
-                <button onClick={rotate} disabled={busy}>Nuovo codice</button>
-                <button onClick={refresh}>Ricontrolla</button>
+                <button className="ghost" onClick={copyLink}>{copied ? "Copiato" : "Copia link"}</button>
+                <button className="ghost" onClick={rotate} disabled={busy}>Nuovo codice</button>
+                <button className="ghost" onClick={refresh}>Ricontrolla</button>
               </div>
             </div>
           )}
           <div className="row">
-            <button onClick={disconnect} disabled={busy}>Scollega</button>
+            <button className="ghost" onClick={disconnect} disabled={busy}>Scollega</button>
           </div>
         </>
       )}

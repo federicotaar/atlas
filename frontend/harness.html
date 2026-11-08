@@ -117,6 +117,7 @@
         transition: filter 0.15s ease;
       }
       .ghost:hover { filter: brightness(1.25); }
+      a.ghost { text-decoration: none; display: inline-block; }
 
       /* ---- Accesso ---- */
       .auth-wrap {
@@ -314,6 +315,8 @@
       }
       .panel h3 { margin: 0 0 12px; font-size: 15px; font-weight: 600; }
       .item { padding: 11px 0; border-top: 1px solid var(--line); font-size: 14px; }
+      .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
+      .row input[type="password"] { flex: 1; min-width: 220px; }
       .item:first-of-type { border-top: 0; padding-top: 2px; }
       .muted { color: var(--mut); font-size: 13px; }
       code {

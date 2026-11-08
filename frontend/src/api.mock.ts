@@ -117,4 +117,26 @@ export const api = {
             model: "ollama_local",
           },
     ),
+  getTelegramStatus: () => {
+    if (hash === "telegram-paired")
+      return Promise.resolve({ connected: true, bot_username: "fixture_bot",
+        paired: true, deep_link: null, pairing_expired: false });
+    if (hash === "telegram-expired")
+      return Promise.resolve({ connected: true, bot_username: "fixture_bot",
+        paired: false, deep_link: null, pairing_expired: true });
+    if (hash === "telegram-off")
+      return Promise.resolve({ connected: false, bot_username: null,
+        paired: false, deep_link: null, pairing_expired: false });
+    // telegram-unpaired: deep link sintetico, bot e codice inesistenti
+    return Promise.resolve({ connected: true, bot_username: "fixture_bot",
+      paired: false, deep_link: "https://t.me/fixture_bot?start=00000000",
+      pairing_expired: false });
+  },
+  connectTelegram: () => Promise.resolve({ connected: true,
+    bot_username: "fixture_bot", paired: false,
+    deep_link: "https://t.me/fixture_bot?start=00000000", pairing_expired: false }),
+  disconnectTelegram: () => Promise.resolve(),
+  rotateTelegramCode: () => Promise.resolve({ connected: true,
+    bot_username: "fixture_bot", paired: false,
+    deep_link: "https://t.me/fixture_bot?start=00000000", pairing_expired: false }),
 };

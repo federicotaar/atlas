@@ -35,16 +35,46 @@ def main() -> int:
     print(f"embeddings Ollama ok: dim={len(vec)}, similarita frasi correlate={sim:.3f}")
 
     generator = build_generator(settings)
-    try:
-        out = generator.answer(
-            "Cosa usa il progetto Mercurio come database? Rispondi in una frase.",
-            [{"content": "Il progetto Mercurio usa PostgreSQL.", "ref": "M1"}])
-    except Exception as exc:  # il provider deve esistere davvero
-        print(f"generazione Ollama FALLITA: {exc}")
+    prompt = "Cosa usa il progetto Mercurio come database? Rispondi in una frase."
+    mems = [{"content": "Il progetto Mercurio usa PostgreSQL.", "ref": "M1"}]
+    out = None
+    last_exc: Exception | None = None
+    # Un solo retry con richiesta nuova: il check resta genuino (deve
+    # arrivare una risposta reale), ma un singolo stallo transitorio del
+    # server non abbatte la CI senza diagnosi.
+    for attempt in (1, 2):
+        try:
+            out = generator.answer(prompt, mems)
+            break
+        except Exception as exc:  # il provider deve esistere davvero
+            last_exc = exc
+            print(f"generazione Ollama tentativo {attempt} fallito: {exc}")
+            _diagnose()
+    if out is None:
+        print(f"generazione Ollama FALLITA: {last_exc}")
         return 1
     assert out and len(out) > 3, repr(out)
     print(f"generazione Ollama ok: {out[:120]!r}")
     return 0
+
+
+def _diagnose() -> None:
+    """Evidenza sullo stato del server Ollama al momento del fallimento."""
+    import subprocess
+    for cmd in (["ollama", "--version"], ["ollama", "ps"]):
+        try:
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+            print(f"[diag] {' '.join(cmd)} -> {(r.stdout or r.stderr).strip()[:400]}")
+        except Exception as exc:
+            print(f"[diag] {' '.join(cmd)} non eseguibile: {exc}")
+    try:
+        with open("/tmp/ollama.log") as fh:
+            lines = fh.read().splitlines()
+        print(f"[diag] /tmp/ollama.log (ultime {min(50, len(lines))} righe):")
+        for line in lines[-50:]:
+            print(f"[diag]   {line}")
+    except OSError as exc:
+        print(f"[diag] /tmp/ollama.log non leggibile: {exc}")
 
 
 if __name__ == "__main__":

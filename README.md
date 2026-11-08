@@ -8,7 +8,7 @@
 
 ![status](https://img.shields.io/badge/status-fase%205%20di%206-orange)
 ![cost](https://img.shields.io/badge/costo-0%E2%82%AC%20tutto%20locale-brightgreen)
-![tests](https://img.shields.io/badge/test-161%20verdi-brightgreen)
+![tests](https://img.shields.io/badge/test-223%20verdi-brightgreen)
 
 </div>
 
@@ -34,13 +34,14 @@ esce dalla macchina senza permesso.
 - **Agenti Researcher / Planner / Critic**: messaggi strutturati, limiti di passi, timeout e budget applicati (non solo registrati), ogni esecuzione tracciata. *Baseline rule-based dichiarata, non prova di capacità generale.*
 - **Prediction Engine**: stime a intervallo dalla velocità reale di completamento, rifiuto esplicito quando i dati sono troppo pochi, confronto con l'esito alla data di verifica (`GET /predictions/due` elenca le scadenze; `POST /predictions/evaluate-due` verifica automaticamente le stime automatiche misurando lo stato reale delle attività, mentre le stime manuali restano da verificare a mano), errore e punteggio di Brier, metriche di calibrazione. La verifica automatica è un meccanismo su dati sintetici: l'accuratezza longitudinale reale si misura solo con mesi di utilizzo reale.
 - **Action Engine**: unica porta per le azioni (gli agenti non eseguono mai direttamente). Livelli 0/1/2: lettura con permesso per connettore, modifiche reversibili eseguite e annullabili, azioni verso altri con anteprima esatta e conferma esplicita ogni volta. Chiave di idempotenza contro doppie esecuzioni, esito registrato, annullamento quando possibile. Connettori fittizi per i test (calendario sintetico, bozze email) e connettori Google reali opzionali (calendario in sola lettura, bozze Gmail; OAuth gratuito, token cifrati, setup in [`docs/CONNECTORS-GOOGLE.md`](docs/CONNECTORS-GOOGLE.md)): una bozza non è un invio e non esiste alcuna operazione di invio. I connettori reali sono validati solo con fixture sintetiche: nessun account reale è mai stato collegato.
+- **Connettore Telegram**: bot ufficiale creato con @BotFather; il token resta cifrato sul dispositivo dell'utente. L'accoppiamento è sempre avviato dall'utente dalla sua app Telegram, con QR o codice monouso valido 15 minuti (rigenerabile); ATLAS legge e risponde solo ai messaggi del proprietario accoppiato. Le risposte passano dalla stessa pipeline della chat web, citazioni incluse.
 - **Time Machine**: ricostruisce lo stato a una data rileggendo i dati registrati fino a quel momento (gli eventi sono solo in aggiunta): cronologia, stato a una data, confronto tra due periodi, obiettivi abbandonati, attività ricorrenti. Le lacune (periodi senza dati) sono sempre mostrate, mai riempite.
 - **Dashboard web**: pannelli su progetti, scadenze, eventi recenti, previsioni, agenti, automazioni, memorie importanti e richieste di autorizzazione; ogni elemento si apre e mostra gli id dei dati da cui deriva.
 - **Interfacce**: API FastAPI, chat web React con dashboard, app desktop Tauri (Linux e macOS), CLI `atlas`, Docker Compose.
 
 Lo stato onesto di ogni fase è in
 [`docs/ROADMAP-STATUS.md`](docs/ROADMAP-STATUS.md): le fasi 0–6 sono
-implementate e testate in CI (161 test backend, frontend, job Ollama reale,
+implementate e testate in CI (223 test backend, frontend, job Ollama reale,
 compose e smoke desktop end-to-end). La fase 6 si chiude solo con la beta
 con persone reali, che **resta aperta**; il Counterfactual Engine (ricerca
 facoltativa) **non è implementato**.
@@ -68,21 +69,26 @@ comportamento identico (citazioni incluse).
 
 ## App desktop (Linux)
 
-Dalla [release v0.1.0](https://github.com/federicotaar/atlas/releases/tag/v0.1.0)
-scarica `ATLAS_0.1.0_amd64.AppImage` (o il `.deb`). Prerequisiti: Ubuntu
-22.04 o 24.04 (se mancanti: `sudo apt install libwebkit2gtk-4.1-0 libegl1`)
-e Docker per il backend, che deve essere in ascolto su 127.0.0.1:8000
-**prima** di aprire l'app.
+L'app desktop include il backend: all'avvio parte un processo locale con
+database SQLite incorporato, in ascolto solo su 127.0.0.1. Non servono
+Docker, un server o un indirizzo email: il profilo si crea con una password
+locale e resta solo sul dispositivo (il login con email e codice resta per
+l'installazione server con Docker Compose). Prerequisiti: Ubuntu 22.04 o
+24.04 (se mancanti: `sudo apt install libwebkit2gtk-4.1-0 libegl1`).
 
 ```bash
-cp .env.example .env   # modifica ATLAS_JWT_SECRET
-docker compose up --build        # API + database su 127.0.0.1:8000
-chmod +x ATLAS_0.1.0_amd64.AppImage
-./ATLAS_0.1.0_amd64.AppImage
+chmod +x ATLAS_*.AppImage
+./ATLAS_*.AppImage   # al primo avvio: "Crea profilo locale"
 ```
 
-Senza il backend attivo l'app mostra solo la schermata di accesso.
-Dettagli in [`docs/DESKTOP.md`](docs/DESKTOP.md).
+Il flusso è verificato in CI a ogni commit: build del pacchetto, avvio
+reale dell'app, registrazione locale, salvataggio e richiamo con citazione,
+persistenza dopo riavvio.
+
+La [release v0.1.0](https://github.com/federicotaar/atlas/releases/tag/v0.1.0)
+pubblicata è precedente a queste modifiche e richiede ancora il backend
+Docker (istruzioni in [`docs/DESKTOP.md`](docs/DESKTOP.md)); gli artefatti
+aggiornati arrivano con la prossima release.
 
 ## CLI
 
