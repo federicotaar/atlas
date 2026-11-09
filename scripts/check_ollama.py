@@ -15,6 +15,10 @@ os.environ.setdefault("ATLAS_EMBED_PROVIDER", "ollama")
 os.environ.setdefault("ATLAS_LLM_PROVIDER", "ollama")
 os.environ.setdefault("ATLAS_OLLAMA_LLM_MODEL", "llama3.2:1b")
 os.environ.setdefault("ATLAS_MODEL_CALL_TIMEOUT_S", "300")
+# Un modello da 135M puo' non emettere mai EOS e bruciare tutto il timeout
+# (visto in CI: 2 tentativi da 5 minuti). La risposta resta genuina: basta
+# che arrivi dal server, anche troncata al tetto.
+os.environ.setdefault("ATLAS_OLLAMA_GENERATE_MAX_TOKENS", "512")
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backend"))
 
