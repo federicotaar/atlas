@@ -63,6 +63,9 @@ HELP_TEXT = """Comandi:
   /remember <testo>            salva una nota persistente (spec sez. 5)
   /forget <testo>              rimuove le note che contengono il testo
   /memories                    elenca le note salvate
+  /schedule <quando> <cosa>    nuovo promemoria o job ricorrente
+  /jobs                        elenca i job (con fuso orario attivo)
+  /timezone [nome IANA]        mostra/imposta il fuso orario dell'installazione
   /help                        questo aiuto
   /quit                        esci
 Qualunque altro testo viene mandato all'agente, che puo' usare gli strumenti
@@ -481,7 +484,9 @@ def run_cli(registry: ProviderRegistry, *, active: str | None = None,
     # Scheduler jobs (spec sez. 8, stage 10): persistito in SQLite; il tick
     # e' anche il battito (heartbeat). Un job che scatta non ha nessuno a cui
     # chiedere conferma: le azioni che la richiedono vengono rifiutate.
-    job_store = JobStore(workspace / "data" / "jobs.db")
+    from .agent.localzone import get_zone
+    job_store = JobStore(workspace / "data" / "jobs.db",
+                         zone=get_zone(workspace))
     dispatchers: dict[str, Callable[[str, str], None]] = {}
 
     def raw_deliver(channel: str, sender: str, text: str) -> None:
@@ -836,7 +841,8 @@ def run_cli(registry: ProviderRegistry, *, active: str | None = None,
             # codice) e' un'operazione del proprietario, mai dalla chat.
             _handle_whatsapp(line, wa_channel, out)
             continue
-        if line.startswith("/schedule") or line.startswith("/jobs"):
+        if (line.startswith("/schedule") or line.startswith("/jobs")
+                or line.startswith("/timezone")):
             handle_command(line, CommandContext(
                 registry=registry, state=state, store=store, out=out,
                 get_active=lambda: active, set_active=set_active,
@@ -845,7 +851,8 @@ def run_cli(registry: ProviderRegistry, *, active: str | None = None,
                 skills=skills_lib, forge=forge,
                 rollback_fn=lambda: rollback(workspace),
                 post_approve_fn=post_approve,
-                channel="cli", sender="locale"))
+                channel="cli", sender="locale",
+                proactive=gate, workspace=workspace))
             continue
         if line == "/help":
             out(HELP_TEXT)
