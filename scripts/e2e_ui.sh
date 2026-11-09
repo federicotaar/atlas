@@ -246,7 +246,7 @@ if [ "$ok" != 1 ]; then
 fi
 import -window root /tmp/e2e-13-agente-roundtrip.png
 ! ocr_has /tmp/e2e-13-agente-roundtrip.png 'Errore' || { echo 'E2E UI: il frame mostra una risposta di errore'; exit 1; }
-echo 'E2E UI: click-through Agente + roundtrip riuscito (ollama smollm2) OK'
+echo 'E2E UI: click-through Agente + roundtrip plain-chat riuscito (ollama smollm2, no tools nativi) OK'
 
 # Ritorno alla dashboard: "indietro" (history.back) chiude il ciclo di
 # navigazione nella stessa finestra.
