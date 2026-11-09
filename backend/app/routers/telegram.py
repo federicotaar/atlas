@@ -25,13 +25,18 @@ class TelegramStatusOut(BaseModel):
     deep_link: str | None = None
     pairing_expired: bool = False
     last_update_at: datetime | None = None
+    # True = i messaggi inbound arrivano all'agente (app desktop); False =
+    # pipeline classica v2.x (server mode o stack agente non attivo).
+    agent: bool = False
 
 
 def _status(db: Session, user: User) -> TelegramStatusOut:
     link = tg.get_link(db, user)
     if link is None:
-        return TelegramStatusOut(connected=False)
+        return TelegramStatusOut(connected=False,
+                                 agent=tg.agent_bridge_active())
     return TelegramStatusOut(
+        agent=tg.agent_bridge_active(),
         connected=True,
         bot_username=link.bot_username,
         paired=link.owner_chat_id is not None,
