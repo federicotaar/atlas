@@ -251,3 +251,63 @@ def test_parse_prompt_declares_timezone():
     prompt = reg.messages[0]["content"]
     assert "Europe/Rome" in prompt
     assert parsed["kind"] == "once"
+
+
+# --- i job conservano il fuso della creazione ---------------------------------
+
+def test_jobs_keep_creation_zone_across_install_zone_change(tmp_path):
+    """Cron = orario di parete nel fuso richiesto; una-tantum = istante gia'
+    risolto. Cambiare /timezone dell'installazione non sposta NESSUNO dei
+    due, nemmeno dopo riavvio o pause/resume."""
+    rome = JobStore(tmp_path / "jobs.db", zone=ROME)
+    cron = rome.add(kind="cron", schedule="0 8 * * *", task="brief",
+                    channel="cli", sender="s", source="user")
+    once = rome.add(kind="once", schedule="2026-12-01 09:00", task="x",
+                    channel="cli", sender="s", source="user")
+    cron_nf, once_nf = cron.next_fire, once.next_fire
+    rome.close()
+
+    # l'installazione passa a New York (riavvio con altro fuso configurato)
+    ny = JobStore(tmp_path / "jobs.db", zone=NY)
+    j_cron, j_once = ny.get(cron.id), ny.get(once.id)
+    assert j_cron.zone == "Europe/Rome" and j_once.zone == "Europe/Rome"
+    assert j_cron.next_fire == cron_nf and j_once.next_fire == once_nf
+    # resume ricalcola NEL FUSO DEL JOB: la una-tantum resta 09:00 Roma
+    # (14:00 UTC d'inverno? no: 1 dicembre Roma = UTC+1 -> 08:00 UTC)
+    ny.resume(once.id)
+    assert ny.get(once.id).next_fire == once_nf
+    # idem il cron: 08:00 di Roma, non di New York
+    ny.pause(cron.id)
+    ny.resume(cron.id)
+    wall = epoch_to_wall(ny.get(cron.id).next_fire, ROME)
+    assert (wall.hour, wall.minute) == (8, 0)
+    ny.close()
+
+
+def test_legacy_rows_without_zone_use_store_zone(tmp_path):
+    """Righe scritte prima dei fusi (zone=''): niente crash, valgono nel
+    fuso attivo dello store, next_fire gia' salvato intatto."""
+    import sqlite3
+    db = tmp_path / "jobs.db"
+    raw = sqlite3.connect(str(db))
+    raw.execute(
+        "CREATE TABLE jobs (id INTEGER PRIMARY KEY AUTOINCREMENT,"
+        " kind TEXT NOT NULL, schedule TEXT NOT NULL, task TEXT NOT NULL,"
+        " channel TEXT NOT NULL, sender TEXT NOT NULL, source TEXT NOT NULL,"
+        " approved INTEGER NOT NULL, paused INTEGER NOT NULL DEFAULT 0,"
+        " next_fire REAL, last_run REAL, created REAL NOT NULL)")
+    raw.execute(
+        "INSERT INTO jobs (kind,schedule,task,channel,sender,source,"
+        " approved,paused,next_fire,created)"
+        " VALUES ('once','2026-12-01 09:00','vecchio','cli','s','user',1,0,?,?)",
+        (rome(2026, 12, 1, 9, 0), time.time()))
+    raw.commit()
+    raw.close()
+    store = JobStore(db, zone=ROME)   # migrazione: aggiunge la colonna
+    job = store.list()[0]
+    assert job.zone == ""
+    assert job.next_fire == rome(2026, 12, 1, 9, 0)
+    # resume sulla riga legacy: ricalcola nel fuso dello store, stesso esito
+    store.resume(job.id)
+    assert store.get(job.id).next_fire == rome(2026, 12, 1, 9, 0)
+    store.close()
