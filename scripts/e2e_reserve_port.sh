@@ -34,11 +34,16 @@ sleep 2
 echo "T_app_launch $(date +%T.%3N)"
 DISPLAY=:98 ./desktop/target/release/atlas-desktop > /tmp/atlas-reserve.log 2>&1 &
 
+# La versione attesa NON e' pinnata: segue backend/app/__init__.py, cosi' un
+# bump di versione non rompe questo test (rotto una volta sul pin 2.1.2 e di
+# nuovo sul pin 2.1.3 al bump 3.0.0).
+EXPECTED_VERSION=$(grep -o '__version__ = "[^"]*"' backend/app/__init__.py | cut -d'"' -f2)
+[ -n "$EXPECTED_VERSION" ] || { echo 'FALLITO: __version__ non leggibile' >&2; exit 1; }
 ok=0
 for i in $(seq 1 90); do
   sleep 1
   BODY=$(curl -s http://127.0.0.1:8100/health || true)
-  if echo "$BODY" | grep -q '"app":"atlas"' && echo "$BODY" | grep -q '"version":"2.1.3"'; then
+  if echo "$BODY" | grep -q '"app":"atlas"' && echo "$BODY" | grep -q "\"version\":\"$EXPECTED_VERSION\""; then
     ok=1; break
   fi
 done
