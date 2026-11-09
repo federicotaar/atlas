@@ -120,6 +120,12 @@ def main() -> None:
     @asgi_app.on_event("shutdown")
     def _agent_shutdown() -> None:
         if agent_stack is not None:
+            from .services import dashboard as dash_svc
+            from .services import telegram as tg_svc
+            from .services import whatsapp as wa_svc
+            tg_svc.set_agent_bridge(None)
+            wa_svc.set_agent_bridge(None)
+            dash_svc.set_agent_jobs_provider(None)
             agent_stack.shutdown()
 
     # Porta scelta dal launcher Tauri (8000 se libera, altrimenti una porta
@@ -213,6 +219,17 @@ def _mount_agent(asgi_app, data_dir: Path):
                      f"{type(exc).__name__}. La dashboard resta usabile.")
         return None
     asgi_app.mount("/agent", stack.app)
+
+    # Connettori della dashboard -> stack agente: da qui in poi le card
+    # Telegram/WhatsApp collegano canali che parlano col loop agente
+    # (allowlist hub: proprietario + pairing approvati dalla dashboard).
+    # Il pannello Automazioni mostra i job dello scheduler dell'agente.
+    from .services import dashboard as dash_svc
+    from .services import telegram as tg_svc
+    from .services import whatsapp as wa_svc
+    tg_svc.set_agent_bridge(stack.channels)
+    wa_svc.set_agent_bridge(stack.channels)
+    dash_svc.set_agent_jobs_provider(stack.list_jobs)
     return stack
 
 
