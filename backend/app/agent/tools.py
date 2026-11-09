@@ -363,7 +363,178 @@ PROPOSE_TOOL = Tool(
 )
 
 
+def _strip_html(html: str) -> str:
+    """Testo grezzo da HTML: parser stdlib, niente dipendenze."""
+    from html.parser import HTMLParser
+
+    class _Text(HTMLParser):
+        def __init__(self) -> None:
+            super().__init__()
+            self.parts: list[str] = []
+            self._skip = 0
+
+        def handle_starttag(self, tag, attrs):
+            if tag in ("script", "style", "noscript"):
+                self._skip += 1
+
+        def handle_endtag(self, tag):
+            if tag in ("script", "style", "noscript") and self._skip:
+                self._skip -= 1
+
+        def handle_data(self, data):
+            if not self._skip:
+                self.parts.append(data)
+
+    parser = _Text()
+    parser.feed(html)
+    return " ".join("".join(parser.parts).split())
+
+
+def _web_search(args: dict[str, Any], ctx: ToolContext) -> str:
+    """Ricerca web via endpoint HTML pubblico di DuckDuckGo: nessuna chiave,
+    nessun dato dell'utente oltre la query stessa."""
+    import httpx
+
+    query = str(args.get("query", "")).strip()
+    if not query:
+        return "errore: query vuota"
+    try:
+        resp = httpx.post("https://html.duckduckgo.com/html/",
+                          data={"q": query},
+                          headers={"User-Agent": "ATLAS-agent/3.0"},
+                          timeout=15, follow_redirects=True)
+        resp.raise_for_status()
+    except httpx.HTTPError as exc:
+        return f"errore ricerca web: {type(exc).__name__}"
+    import re
+    results = []
+    for m in re.finditer(
+            r'<a[^>]*class="result__a"[^>]*href="([^"]+)"[^>]*>(.*?)</a>',
+            resp.text, re.S):
+        href, title = m.group(1), _strip_html(m.group(2))
+        if "uddg=" in href:
+            from urllib.parse import parse_qs, urlparse
+            href = parse_qs(urlparse(href).query).get("uddg", [href])[0]
+        results.append(f"- {title}: {href}")
+        if len(results) >= 8:
+            break
+    if not results:
+        return "nessun risultato trovato"
+    return _clip("\n".join(results))
+
+
+def _is_public_host(url: str) -> str | None:
+    """Rifiuta host privati/loopback: il tool non deve raggiungere la
+    macchina locale o la rete interna (niente SSRF verso l'agente stesso)."""
+    import ipaddress
+    import socket
+    from urllib.parse import urlparse
+
+    host = urlparse(url).hostname or ""
+    if not host:
+        return "url senza host"
+    try:
+        infos = socket.getaddrinfo(host, None)
+    except socket.gaierror:
+        return f"host non risolvibile: {host}"
+    for info in infos:
+        addr = ipaddress.ip_address(info[4][0])
+        if addr.is_private or addr.is_loopback or addr.is_link_local or addr.is_reserved:
+            return f"host non pubblico: {host}"
+    return None
+
+
+def _fetch_url(args: dict[str, Any], ctx: ToolContext) -> str:
+    """Scarica una pagina pubblica e ne restituisce il testo (max 4000
+    caratteri al modello). Solo http/https su host pubblici."""
+    import httpx
+
+    url = str(args.get("url", "")).strip()
+    if not url.startswith(("http://", "https://")):
+        return "errore: url deve iniziare con http:// o https://"
+    blocked = _is_public_host(url)
+    if blocked:
+        return f"errore: {blocked}"
+    try:
+        resp = httpx.get(url, headers={"User-Agent": "ATLAS-agent/3.0"},
+                         timeout=15, follow_redirects=True)
+        resp.raise_for_status()
+    except httpx.HTTPError as exc:
+        return f"errore fetch: {type(exc).__name__}"
+    ctype = resp.headers.get("content-type", "")
+    text = resp.text[:200_000]
+    if "html" in ctype:
+        text = _strip_html(text)
+    return _clip(text)
+
+
+def _python_exec(args: dict[str, Any], ctx: ToolContext) -> str:
+    """Esegue codice Python nel workspace: interprete di sistema, stdin
+    chiuso, timeout fisso, ambiente ripulito dai segreti. Nessuna shell."""
+    import os
+    import subprocess
+
+    code = str(args.get("code", ""))
+    if not code.strip():
+        return "errore: codice vuoto"
+    env = {k: v for k, v in os.environ.items()
+           if not any(t in k.upper() for t in ("KEY", "SECRET", "TOKEN", "PASSWORD"))}
+    try:
+        proc = subprocess.run(
+            ["python3", "-c", code],
+            cwd=str(ctx.workspace), env=env, stdin=subprocess.DEVNULL,
+            capture_output=True, text=True, timeout=30)
+    except subprocess.TimeoutExpired:
+        return "errore: timeout di 30s superato"
+    except OSError as exc:
+        return f"errore esecuzione: {exc}"
+    out = proc.stdout + (("\n[stderr]\n" + proc.stderr) if proc.stderr else "")
+    if proc.returncode != 0:
+        out = f"[exit {proc.returncode}]\n" + out
+    return _clip(out) or "(nessun output)"
+
+
+WEB_SEARCH = Tool(
+    name="web_search",
+    description=("Cerca sul web con DuckDuckGo: titoli e link dei primi "
+                 "risultati. Per leggere una pagina usa fetch_url. La query "
+                 "esce dal PC verso il motore di ricerca."),
+    parameters={"type": "object",
+                "properties": {"query": {"type": "string",
+                                         "description": "testo da cercare"}},
+                "required": ["query"]},
+    run=_web_search,
+    read_only=True,
+)
+
+FETCH_URL = Tool(
+    name="fetch_url",
+    description=("Scarica una pagina web pubblica e ne restituisce il testo. "
+                 "Solo http/https su host pubblici: mai la macchina locale o "
+                 "la rete interna."),
+    parameters={"type": "object",
+                "properties": {"url": {"type": "string",
+                                       "description": "url http/https da scaricare"}},
+                "required": ["url"]},
+    run=_fetch_url,
+    read_only=True,
+)
+
+PYTHON_EXEC = Tool(
+    name="python_exec",
+    description=("Esegue codice Python nel workspace (interprete python3 di "
+                 "sistema, timeout 30s, stdin chiuso, ambiente senza "
+                 "segreti). Per calcoli, parsing e piccoli script."),
+    parameters={"type": "object",
+                "properties": {"code": {"type": "string",
+                                        "description": "codice Python da eseguire"}},
+                "required": ["code"]},
+    run=_python_exec,
+)
+
+
 ALL_TOOLS: tuple[Tool, ...] = (READ_FILE, WRITE_FILE, LIST_DIR, SHELL,
+                               WEB_SEARCH, FETCH_URL, PYTHON_EXEC,
                                SCHEDULE_JOB, PROACTIVE_FEEDBACK, SAVE_SKILL,
                                PROPOSE_TOOL)
 TOOLS_BY_NAME: dict[str, Tool] = {t.name: t for t in ALL_TOOLS}
