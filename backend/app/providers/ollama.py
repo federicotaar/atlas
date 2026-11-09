@@ -8,7 +8,10 @@ Modelli SENZA tool-calling nativo (400 "does not support tools"): il provider
 riprova UNA volta senza tools — la chat funziona in modalita' plain (solo
 testo), ma GLI STRUMENTI NON SONO DISPONIBILI con quel modello: niente
 esecuzione tool finche' non si sceglie un modello capace (es. llama3.2,
-qwen2.5). Nessuna pretesa di fallback JSON-in-testo: non implementato.
+qwen2.5). In quel caso il loop agente (app/agent/loop.py) ripiega sul
+formato JSON nel testo: se il modello scrive la chiamata come oggetto
+JSON (anche in un blocco ```json), il loop la interpreta ed esegue lo
+strumento.
 """
 from __future__ import annotations
 
