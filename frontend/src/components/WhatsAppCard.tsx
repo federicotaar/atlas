@@ -1,6 +1,8 @@
 /** Connettore WhatsApp: linked-device tramite bridge locale (rotta non
  *  ufficiale). Il pairing e' sempre uno scan esplicito dell'utente dal suo
- *  WhatsApp; ATLAS legge/risponde solo nella chat con se stessi. L'avviso
+ *  WhatsApp. Con lo stack agente attivo (app desktop) ATLAS risponde nella
+ *  self-chat e ai numeri approvati dal proprietario nella card Richieste
+ *  di pairing; in server mode risponde solo nella self-chat. L'avviso
  *  rischio restrizioni/ban resta visibile nella card, sempre. */
 import { useEffect, useRef, useState } from "react";
 import QRCode from "qrcode";
@@ -91,8 +93,10 @@ export default function WhatsAppCard() {
       {error && <div className="err">{error}</div>}
       <p className="muted">
         Collegamento non ufficiale (dispositivo collegato): puo' comportare
-        restrizioni o il ban dell&apos;account WhatsApp. ATLAS risponde solo
-        nella chat con te stesso.
+        restrizioni o il ban dell&apos;account WhatsApp.{" "}
+        {st.agent
+          ? "Risponde l'agente ATLAS: nella chat con te stesso e ai contatti che approvi in Richieste di pairing. Chi non e' approvato non riceve mai risposta."
+          : "ATLAS risponde solo nella chat con te stesso (modalita' classica, senza il nuovo agente)."}
       </p>
 
       {!st.connected && (
@@ -132,8 +136,10 @@ export default function WhatsAppCard() {
       {st.connected && st.linked && (
         <>
           <p>
-            WhatsApp collegato{st.pushname ? <> come <strong>{st.pushname}</strong></> : null}.
-            Scrivi ad ATLAS nella chat con te stesso: ricorda e risponde come nella app.
+            WhatsApp collegato{st.pushname ? <> come <strong>{st.pushname}</strong></> : null}.{" "}
+            {st.agent
+              ? "Scrivi ad ATLAS nella chat con te stesso o dai contatti approvati: risponde l'agente, con strumenti e memoria."
+              : "Scrivi ad ATLAS nella chat con te stesso: ricorda e risponde come nella app."}
           </p>
           <div className="row">
             <button className="ghost" onClick={disconnect} disabled={busy}>Scollega</button>
