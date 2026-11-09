@@ -20,7 +20,8 @@ from __future__ import annotations
 
 import json
 import os
-from datetime import datetime, timedelta, timezone as _dt_tz
+from datetime import datetime
+from datetime import timezone as _dt_tz
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
