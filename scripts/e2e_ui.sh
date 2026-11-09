@@ -244,9 +244,33 @@ if [ "$ok" != 1 ]; then
   import -window root /tmp/e2e-13-fail.png
   exit 1
 fi
-import -window root /tmp/e2e-13-agente-roundtrip.png
+# La risposta e' nell'API, ma la PROVA visiva richiede la bolla renderizzata:
+# la UI aggiorna su poll, quindi si aspetta che lo stato torni "pronto" e che
+# una parola della risposta sia visibile nel frame (run 42542139388: il frame
+# catturato subito dopo l'assert API mostrava ancora "sta lavorando...").
+# La coda della risposta e' la parte visibile (il log scorre in basso):
+# si accetta una qualunque delle ultime parole "vere" (>=5 lettere).
+REPLY_WORDS=$(echo "$LAST" | grep -oE '[A-Za-z]{5,}' | tail -3 || true)
+rendered=0
+for i in $(seq 1 20); do
+  import -window root /tmp/e2e-13-agente-roundtrip.png
+  if ocr_has /tmp/e2e-13-agente-roundtrip.png 'sta lavorando'; then
+    sleep 3; continue
+  fi
+  if [ -z "$REPLY_WORDS" ]; then rendered=1; break; fi
+  for w in $REPLY_WORDS; do
+    if ocr_has /tmp/e2e-13-agente-roundtrip.png "$w"; then rendered=1; break; fi
+  done
+  [ "$rendered" = 1 ] && break
+  sleep 3
+done
+if [ "$rendered" != 1 ]; then
+  echo "E2E UI: bolla della risposta NON renderizzata nel frame (parole attese: '$REPLY_WORDS')"
+  exit 1
+fi
+REPLY_WORD=$(echo "$REPLY_WORDS" | tr '\n' ' ')
 ! ocr_has /tmp/e2e-13-agente-roundtrip.png 'Errore' || { echo 'E2E UI: il frame mostra una risposta di errore'; exit 1; }
-echo 'E2E UI: click-through Agente + roundtrip plain-chat riuscito (ollama smollm2, no tools nativi) OK'
+echo "E2E UI: click-through Agente + roundtrip plain-chat riuscito (bolla renderizzata: '$REPLY_WORD'; ollama smollm2, no tools nativi) OK"
 
 # Ritorno alla dashboard: "Indietro" (history.back) chiude il ciclo di
 # navigazione nella stessa finestra. Etichetta SENZA il glifo "«":
