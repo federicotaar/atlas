@@ -117,6 +117,12 @@ def test_user_once_job_fires_at_requested_time_even_in_quiet_hours(tmp_path):
     consegna immediata attraverso il gate. Job dell'agente -> digest."""
     gate, store, sent, flushed = make_gate(tmp_path, quiet_start="23:00",
                                            quiet_end="07:30")
+    # la consegna valuta le ore silenziose sull'orologio reale: qui il job
+    # scatta alle 03:00 simulate, quindi il gate va congelato allo stesso
+    # istante (altrimenti l'esito dipende dall'ora in cui gira la suite).
+    at_3am_ts = rome(2026, 11, 9, 3, 0)
+    real_deliver = gate.deliver
+    gate.deliver = lambda c, s, t, **kw: real_deliver(c, s, t, now=at_3am_ts, **kw)
     jobs = JobStore(tmp_path / "data" / "jobs.db", zone=ROME)
     sched = Scheduler(jobs, run_task=lambda j: f"out:{j.task}",
                       dispatch=_dispatch_job_wiring(gate), tick_seconds=999)
