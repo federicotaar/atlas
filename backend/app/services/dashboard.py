@@ -17,6 +17,17 @@ from .predictions import metrics as prediction_metrics
 IMPORTANT_CONFIDENCE = 0.85
 
 
+_agent_jobs_provider = None
+
+
+def set_agent_jobs_provider(provider) -> None:
+    """App desktop: funzione che elenca i job dello scheduler dell'agente
+    (automazioni del nuovo stack). None in server mode: il pannello mostra
+    solo i connettori classici."""
+    global _agent_jobs_provider
+    _agent_jobs_provider = provider
+
+
 def _aware(dt: datetime) -> datetime:
     if dt.tzinfo is None:
         return dt.replace(tzinfo=timezone.utc)
@@ -128,11 +139,23 @@ def build_dashboard(db: Session, user_id: uuid.UUID,
     action_counts: dict[str, int] = {}
     for status, _ in action_rows:
         action_counts[status] = action_counts.get(status, 0) + 1
+    # Job dello scheduler dell'agente (app desktop): le automazioni del
+    # nuovo stack (promemoria, ricorrenze) create dalle chat dell'agente.
+    agent_jobs = []
+    if _agent_jobs_provider is not None:
+        try:
+            agent_jobs = _agent_jobs_provider() or []
+        except Exception:
+            agent_jobs = []
     automations_panel = {
         "connectors": [
             {"id": str(c.id), "kind": c.kind, "status": c.status,
              "derived_from": {"connector_id": str(c.id)}}
             for c in connectors
+        ],
+        "agent_jobs": [
+            {**j, "derived_from": {"agent_job_id": str(j.get("id"))}}
+            for j in agent_jobs
         ],
         "engine_actions_by_status": action_counts,
     }
