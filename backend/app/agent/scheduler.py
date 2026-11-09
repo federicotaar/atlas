@@ -33,8 +33,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from .localzone import (FALLBACK_ZONE, detect_system_zone, epoch_to_wall,
-                        wall_to_epoch)
+from .localzone import FALLBACK_ZONE, detect_system_zone, epoch_to_wall, wall_to_epoch
 
 
 def _default_zone() -> ZoneInfo:
