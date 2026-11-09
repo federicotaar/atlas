@@ -248,9 +248,11 @@ import -window root /tmp/e2e-13-agente-roundtrip.png
 ! ocr_has /tmp/e2e-13-agente-roundtrip.png 'Errore' || { echo 'E2E UI: il frame mostra una risposta di errore'; exit 1; }
 echo 'E2E UI: click-through Agente + roundtrip plain-chat riuscito (ollama smollm2, no tools nativi) OK'
 
-# Ritorno alla dashboard: "indietro" (history.back) chiude il ciclo di
-# navigazione nella stessa finestra.
-click_word /tmp/e2e-13-agente-roundtrip.png 'indietro' || { echo 'E2E UI: pulsante indietro NON trovato nella superficie agente'; exit 1; }
+# Ritorno alla dashboard: "Indietro" (history.back) chiude il ciclo di
+# navigazione nella stessa finestra. Etichetta SENZA il glifo "«":
+# tesseract la leggeva come "ietro." (glifo incollato) e l'OCR non
+# trovava mai la parola pur essendo il pulsante visibile (run 42539512470).
+click_word /tmp/e2e-13-agente-roundtrip.png 'Indietro' || { echo 'E2E UI: pulsante Indietro NON trovato nella superficie agente'; exit 1; }
 sleep 5
 xdotool mousemove 640 400
 for i in $(seq 1 12); do xdotool click 5; sleep 0.2; done
