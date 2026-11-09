@@ -178,6 +178,27 @@ atlas ask "Dove gira il server di produzione?"
 atlas search "server"
 ```
 
+## Fuso orario, promemoria e ore silenziose
+
+Scheduler, ore silenziose e schedulazioni in linguaggio naturale usano un
+fuso orario **esplicito**, non quello del processo. Precedenza: il fuso
+scelto in `config/app.json` (chiave `timezone`, nome IANA), poi quello
+rilevato dal sistema, poi UTC come ripiego. Il fuso attivo e' sempre
+visibile con `/jobs` e `/timezone`; si cambia con `/timezone Europe/Rome`
+(persistito, attivo subito per scheduler, ore silenziose e nuove
+schedulazioni).
+
+Un promemoria **richiesto** per una certa ora arriva a quell'ora: non viene
+mai soppresso dalle categorie silenziate, non viene ritardato dalle ore
+silenziose, non conta nel tetto dei messaggi non richiesti e non finisce
+nel digest. Le ore silenziose trattengono solo il traffico **non**
+richiesto e non urgente.
+
+Cambio dell'ora legale con regole deterministiche: un orario che non esiste
+(primavera, es. 02:30 del 29 marzo a Roma) scatta spostato in avanti del
+salto (03:30); un orario ambiguo (autunno) scatta solo alla prima
+occorrenza. Mai esecuzioni doppie, mai job persi.
+
 ## Frontend (chat web)
 
 ```bash
