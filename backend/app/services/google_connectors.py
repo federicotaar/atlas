@@ -26,7 +26,8 @@ from .credentials import decrypt_secret, encrypt_secret
 
 SCOPE_SETS = {
     "calendar": ["https://www.googleapis.com/auth/calendar.readonly"],
-    "gmail": ["https://www.googleapis.com/auth/gmail.compose"],
+    "gmail": ["https://www.googleapis.com/auth/gmail.compose",
+              "https://www.googleapis.com/auth/gmail.readonly"],
 }
 KIND_FOR_SCOPE_SET = {"calendar": "google_calendar", "gmail": "google_gmail"}
 
@@ -201,3 +202,27 @@ def delete_gmail_draft(db: Session, settings: Settings, user_id: uuid.UUID,
     """Annullamento: elimina la bozza creata dall'azione."""
     access = _valid_access_token(db, settings, conn)
     google_api.gmail_delete_draft(access, draft_id)
+
+
+def list_gmail_messages(db: Session, settings: Settings, user_id: uuid.UUID,
+                        conn: Connector, query: str = "",
+                        max_results: int = 10) -> dict:
+    """Lettura della inbox reale (scope gmail.readonly): mittente, oggetto,
+    data e snippet. Livello 0: sola lettura, nessuna modifica. I contenuti
+    restano nel contesto dell'utente proprietario del connettore."""
+    access = _valid_access_token(db, settings, conn)
+    data = google_api.gmail_list_messages(access, query=query,
+                                          max_results=max_results)
+    for msg in data["messages"]:
+        msg["source"] = "google_gmail"
+    return data
+
+
+def get_gmail_message(db: Session, settings: Settings, user_id: uuid.UUID,
+                      conn: Connector, message_id: str) -> dict:
+    """Corpo completo di un messaggio (scope gmail.readonly). Sola lettura:
+    nessuna bozza, nessun invio, allegati mai scaricati."""
+    access = _valid_access_token(db, settings, conn)
+    data = google_api.gmail_get_message(access, message_id)
+    data["source"] = "google_gmail"
+    return data
