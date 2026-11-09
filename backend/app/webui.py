@@ -112,8 +112,13 @@ function md(s){ return esc(s)
 function add(cls, text){ const d = document.createElement('div');
   d.className = 'msg ' + cls; d.innerHTML = md(text); log.appendChild(d);
   log.scrollTop = log.scrollHeight; }
+/* polling resta true solo per un giro: il flag viene SEMPRE rilasciato a
+   fine giro, altrimenti il poll schedulato trova polling=true, esce subito
+   e la pagina resta su "sta lavorando..." per sempre con la risposta gia'
+   in history (bug visto in CI, run 42550530371). */
 async function poll(){
   if (polling) return; polling = true;
+  let again = true;
   try {
     const r = await fetch('api/state'); const s = await r.json();
     if (s.seq !== lastSeq) {
@@ -123,8 +128,10 @@ async function poll(){
     }
     st.textContent = s.state === 'running' ? 'sta lavorando...' :
                      s.state === 'question' ? 'attende conferma' : 'pronto';
-    if (s.state !== 'idle') setTimeout(poll, 700); else polling = false;
-  } catch(e){ polling = false; }
+    again = s.state !== 'idle';
+  } catch(e){ again = true; }
+  polling = false;
+  if (again) setTimeout(poll, 700);
 }
 async function send(){
   const text = inp.value.trim(); if (!text) return;
