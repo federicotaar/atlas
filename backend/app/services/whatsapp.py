@@ -37,6 +37,22 @@ log = logging.getLogger("atlas.whatsapp")
 _bridge_proc: subprocess.Popen | None = None
 _bridge_lock = threading.Lock()
 
+# Ponte verso lo stack agente (app desktop): registrato da desktop_main.
+# None nel server mode: self-chat + pipeline classica, come v2.x.
+_agent_bridge = None
+
+
+def set_agent_bridge(bridge) -> None:
+    """Registra (o rimuove, con None) il ponte dashboard -> agente.
+    Con il ponte attivo il bridge cattura anche i DM 1:1 (-allow-dms):
+    chi riceve risposta lo decide SEMPRE l'allowlist dell'hub agente."""
+    global _agent_bridge
+    _agent_bridge = bridge
+
+
+def agent_bridge_active() -> bool:
+    return _agent_bridge is not None
+
 
 def _base(settings: Settings) -> str:
     return f"http://127.0.0.1:{settings.wa_bridge_port}"
@@ -82,6 +98,10 @@ def ensure_bridge() -> None:
                "-addr", f"127.0.0.1:{settings.wa_bridge_port}",
                "-token", token,
                "-db", settings.wa_bridge_db or "wa-session.db"]
+        if _agent_bridge is not None:
+            # Desktop: anche i DM 1:1 arrivano al backend; l'allowlist
+            # dell'hub agente (self-chat + approvati) filtra le risposte.
+            cmd.append("-allow-dms")
         _bridge_proc = subprocess.Popen(
             cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         for _ in range(50):
@@ -158,6 +178,11 @@ def _sync_linked(db: Session, settings: Settings, link: WhatsAppLink) -> None:
         link.jid = hz.get("jid") or link.jid
         link.pushname = hz.get("pushname") or link.pushname
         db.commit()
+        if _agent_bridge is not None and link.jid:
+            # La self-chat e' l'account collegato: identita' del
+            # proprietario provata dallo scan QR fatto nell'app.
+            _agent_bridge.on_identity("whatsapp", link.jid,
+                                      link.pushname or "")
 
 
 def status(db: Session, settings: Settings, user: User) -> WhatsAppLink | None:
@@ -203,11 +228,25 @@ def handle_event(db: Session, settings: Settings, link: WhatsAppLink,
     text = (event.get("text") or "").strip()
     if not text:
         return
-    user = db.get(User, link.user_id)
-    if user is None:
-        return
-    out = handle_ask(db, settings, user, text)
-    resp = _bridge(settings, "POST", "/send", json={"text": out.answer[:4000]})
+    if _agent_bridge is not None:
+        # Desktop: il messaggio va all'hub dell'agente. Il mittente
+        # ("from" del bridge) decide la risposta via allowlist; gli
+        # sconosciuti restano in silenzio (richiesta di pairing locale).
+        sender = (event.get("from") or "").strip()
+        if not sender:
+            return
+        resp = {}
+        _agent_bridge.dispatch(
+            "whatsapp", sender, "", text,
+            lambda t: resp.update(
+                _bridge(settings, "POST", "/send",
+                        json={"text": t[:4000], "to": sender})))
+    else:
+        user = db.get(User, link.user_id)
+        if user is None:
+            return
+        out = handle_ask(db, settings, user, text)
+        resp = _bridge(settings, "POST", "/send", json={"text": out.answer[:4000]})
     if event.get("id"):
         processed.add(event["id"])
         link.processed_ids = json.dumps(sorted(processed)[-200:])
