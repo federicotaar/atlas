@@ -1,6 +1,8 @@
 """E2E isolato (stage 10+11, clock simulato): un job richiesto dall'utente
 viene eseguito dallo scheduler e consegnato attraverso il gate proattivo —
-consegna diretta di giorno, digest in ore silenziose, persistenza al
+consegna diretta di giorno E in ore silenziose per i job richiesti
+dall'utente (un promemoria chiesto per un'ora arriva a quell'ora), digest
+in ore silenziose solo per il traffico non richiesto, persistenza al
 riavvio, nessuna doppia esecuzione. Nessuna rete, nessun messaggio reale.
 """
 from __future__ import annotations
@@ -45,7 +47,9 @@ def test_requested_job_delivered_end_to_end(tmp_path):
     assert sent == [("cli", "locale", "svolto: ricordami la chiamata")]
 
 
-def test_requested_job_in_quiet_hours_goes_to_digest_then_flushes(tmp_path):
+def test_requested_job_in_quiet_hours_delivered_immediately(tmp_path):
+    """Regressione: il promemoria RICHIESTO per le 23:30 arriva alle 23:30,
+    non viene trattenuto nel digest fino al mattino."""
     sent = []
     jobs, gate, scheduler, dispatch = build(tmp_path, sent)
     job = scheduler.add_job(kind="once", schedule="2026-11-08 23:30",
@@ -53,9 +57,8 @@ def test_requested_job_in_quiet_hours_goes_to_digest_then_flushes(tmp_path):
                             sender="locale", source="user", now=NOON)
     dispatch.now = job.next_fire + 1
     assert scheduler.tick(job.next_fire + 1) == 1
-    assert sent == []  # ore silenziose: trattenuto, non perso
-    assert gate.heartbeat(now=MORNING) == 1
-    assert len(sent) == 1 and "promemoria notturno" in sent[0][2]
+    assert sent == [("cli", "locale", "svolto: promemoria notturno")]
+    assert gate.store.pending_digest_count() == 0
 
 
 def test_job_survives_restart_and_runs_once(tmp_path):
