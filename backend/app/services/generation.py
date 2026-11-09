@@ -33,10 +33,13 @@ class ExtractiveGenerator:
 class OllamaGenerator:
     name = "ollama"
 
-    def __init__(self, base_url: str, model: str, timeout: float = 30.0):
+    def __init__(self, base_url: str, model: str, timeout: float = 30.0, max_tokens: int = 0):
         self.base_url = base_url.rstrip("/")
         self.model = model
         self.timeout = timeout
+        # 0 = illimitato (comportamento storico). Un tetto evita che un
+        # modello che non emette EOS tenga la richiesta aperta fino al timeout.
+        self.max_tokens = max_tokens
 
     def answer(self, question: str, memories: list[dict]) -> str:
         context = "\n".join(f"[M{i}] {m['content']}" for i, m in enumerate(memories, start=1))
@@ -47,9 +50,12 @@ class OllamaGenerator:
             f"Memorie:\n{context}\n\nDomanda: {question}\nRisposta:"
         )
         try:
+            payload: dict = {"model": self.model, "prompt": prompt, "stream": False}
+            if self.max_tokens > 0:
+                payload["options"] = {"num_predict": self.max_tokens}
             resp = httpx.post(
                 f"{self.base_url}/api/generate",
-                json={"model": self.model, "prompt": prompt, "stream": False},
+                json=payload,
                 timeout=self.timeout,
             )
             resp.raise_for_status()
@@ -60,5 +66,10 @@ class OllamaGenerator:
 
 def build_generator(settings: Settings) -> Generator:
     if settings.llm_provider == "ollama":
-        return OllamaGenerator(settings.ollama_base_url, settings.ollama_llm_model, settings.model_call_timeout_s)
+        return OllamaGenerator(
+            settings.ollama_base_url,
+            settings.ollama_llm_model,
+            settings.model_call_timeout_s,
+            settings.ollama_generate_max_tokens,
+        )
     return ExtractiveGenerator()
