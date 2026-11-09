@@ -155,6 +155,7 @@ class Job:
     next_fire: float | None
     last_run: float | None
     created: float
+    zone: str = ""   # fuso IANA alla creazione; "" = riga pre-fusi (ripiego)
 
 
 class JobStore:
@@ -172,7 +173,14 @@ class JobStore:
             "schedule TEXT NOT NULL, task TEXT NOT NULL, channel TEXT NOT NULL, "
             "sender TEXT NOT NULL, source TEXT NOT NULL, approved INTEGER NOT NULL, "
             "paused INTEGER NOT NULL DEFAULT 0, next_fire REAL, last_run REAL, "
-            "created REAL NOT NULL)")
+            "created REAL NOT NULL, zone TEXT NOT NULL DEFAULT '')")
+        # Migrazione db esistenti: colonna zone. Le righe pre-fusi (zone='')
+        # usano il fuso attivo dello store, cioe' il comportamento di prima;
+        # i loro next_fire (epoch assoluti) non vengono toccati.
+        cols = {r[1] for r in self._db.execute("PRAGMA table_info(jobs)")}
+        if "zone" not in cols:
+            self._db.execute(
+                "ALTER TABLE jobs ADD COLUMN zone TEXT NOT NULL DEFAULT ''")
         self._db.commit()
 
     def close(self) -> None:
@@ -180,12 +188,26 @@ class JobStore:
 
     @staticmethod
     def _row_to_job(row: sqlite3.Row) -> Job:
+        keys = row.keys()
         return Job(id=row["id"], kind=row["kind"], schedule=row["schedule"],
                    task=row["task"], channel=row["channel"],
                    sender=row["sender"], source=row["source"],
                    approved=bool(row["approved"]), paused=bool(row["paused"]),
                    next_fire=row["next_fire"], last_run=row["last_run"],
-                   created=row["created"])
+                   created=row["created"],
+                   zone=row["zone"] if "zone" in keys else "")
+
+    def _job_zone(self, job: Job) -> ZoneInfo:
+        """Fuso previsto del job: quello alla creazione. I job conservano il
+        proprio fuso anche se l'installazione cambia /timezone - un cron
+        'ogni giorno alle 8' resta alle 8 del fuso per cui e' stato chiesto,
+        e una tantum resta all'istante gia' risolto."""
+        if job.zone:
+            try:
+                return ZoneInfo(job.zone)
+            except Exception:
+                pass
+        return self._zone
 
     @property
     def zone(self) -> ZoneInfo:
@@ -218,9 +240,10 @@ class JobStore:
         with self._lock:
             cur = self._db.execute(
                 "INSERT INTO jobs (kind, schedule, task, channel, sender, source,"
-                " approved, paused, next_fire, created) VALUES (?,?,?,?,?,?,?,0,?,?)",
+                " approved, paused, next_fire, created, zone)"
+                " VALUES (?,?,?,?,?,?,?,0,?,?,?)",
                 (kind, schedule.strip(), task.strip(), channel, sender, source,
-                 int(approved), nxt, now))
+                 int(approved), nxt, now, self._zone.key))
             self._db.commit()
             row = self._db.execute("SELECT * FROM jobs WHERE id=?",
                                    (cur.lastrowid,)).fetchone()
@@ -255,7 +278,8 @@ class JobStore:
         if job is None:
             return None
         now = time.time() if now is None else now
-        nxt = self._compute_next(job.kind, job.schedule, now, self._zone)
+        nxt = self._compute_next(job.kind, job.schedule, now,
+                                 self._job_zone(job))
         return self._set(job_id, paused=0, next_fire=nxt)
 
     def approve(self, job_id: int, now: float | None = None) -> Job | None:
@@ -263,7 +287,8 @@ class JobStore:
         if job is None:
             return None
         now = time.time() if now is None else now
-        nxt = self._compute_next(job.kind, job.schedule, now, self._zone)
+        nxt = self._compute_next(job.kind, job.schedule, now,
+                                 self._job_zone(job))
         return self._set(job_id, approved=1, next_fire=nxt)
 
     def delete(self, job_id: int) -> bool:
@@ -297,7 +322,8 @@ class JobStore:
             if fresh is None or fresh.next_fire != job.next_fire:
                 continue  # gia' preso da un altro processo
             self._set(job.id, last_run=now,
-                      next_fire=next_fire(job.schedule, now, self._zone))
+                      next_fire=next_fire(job.schedule, now,
+                                          self._job_zone(job)))
             claimed.append(job)
         return claimed
 
@@ -309,7 +335,8 @@ class JobStore:
             self.delete(job_id)  # i promemoria una tantum si consumano
             return
         self._set(job_id, last_run=ran_at,
-                  next_fire=next_fire(job.schedule, ran_at, self._zone))
+                  next_fire=next_fire(job.schedule, ran_at,
+                                      self._job_zone(job)))
 
 
 class Scheduler:
