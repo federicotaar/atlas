@@ -136,24 +136,86 @@ def test_fetch_url_too_many_redirects(ctx, monkeypatch):
 
 def test_fetch_url_byte_cap(ctx, monkeypatch):
     """Il tetto ai byte e' applicato in streaming dentro _request_once."""
-    class _Stream:
-        status_code = 200
-        headers = {"content-type": "text/plain"}
+    import http.client
 
-        def __enter__(self):
-            return self
+    class _Resp:
+        status = 200
 
-        def __exit__(self, *a):
-            return False
+        def getheaders(self):
+            return [("content-type", "text/plain")]
 
-        def iter_bytes(self, n):
-            yield b"x" * 100_000
-            yield b"x" * 100_000
-            yield b"x" * 100_000
+        def read(self, n=-1):
+            return b"x" * 100_000
 
-    monkeypatch.setattr("httpx.stream", lambda *a, **k: _Stream())
-    out = TOOLS_BY_NAME["fetch_url"].run({"url": "https://esempio.it"}, ctx)
+    class _Conn:
+        def __init__(self, *a, **k):
+            self.sock = None
+
+        def putrequest(self, *a, **k):
+            pass
+
+        def endheaders(self):
+            pass
+
+        def getresponse(self):
+            return _Resp()
+
+    monkeypatch.setattr(http.client, "HTTPConnection", _Conn)
+    monkeypatch.setattr("app.agent.tools._validated_ips",
+                        lambda host, port=0: ["93.184.216.34"])
+    monkeypatch.setattr("socket.create_connection",
+                        lambda *a, **k: __import__("socket").socket())
+    out = TOOLS_BY_NAME["fetch_url"].run({"url": "http://esempio.it"}, ctx)
     assert "oltre il limite" in out
+
+
+# --- pinning anti DNS-rebinding ---------------------------------------------
+
+def test_fetch_url_dns_rebinding_blocked(ctx, monkeypatch):
+    """Attacco: la risoluzione usata dalla VALIDAZIONE vede un IP pubblico,
+    quella della CONNESSIONE cambia in loopback/metadata. Nessuna
+    connessione verso la destinazione vietata puo' avvenire: il trasporto
+    rivalida la risoluzione che usa davvero."""
+    import socket as _socket
+
+    calls = {"dns": 0, "connect": []}
+
+    def fake_getaddrinfo(host, port=None, *a, **k):
+        calls["dns"] += 1
+        ip = "93.184.216.34" if calls["dns"] == 1 else "127.0.0.1"
+        return [(_socket.AF_INET, _socket.SOCK_STREAM, 6, "", (ip, port or 80))]
+
+    def spy_create(address, *a, **k):
+        calls["connect"].append(address[0])
+        raise OSError("stop: niente rete nel test")
+
+    monkeypatch.setattr("socket.getaddrinfo", fake_getaddrinfo)
+    monkeypatch.setattr("socket.create_connection", spy_create)
+    out = TOOLS_BY_NAME["fetch_url"].run({"url": "http://esempio.it"}, ctx)
+    assert "errore" in out and "non pubblico" in out
+    assert "127.0.0.1" not in calls["connect"]
+
+
+def test_fetch_url_connection_pinned_to_validated_ip(ctx, monkeypatch):
+    """La connessione TCP va all'IP approvato dalla validazione, non a una
+    risoluzione successiva diversa."""
+    import socket as _socket
+
+    seen = {"connect": []}
+
+    def fake_getaddrinfo(host, port=None, *a, **k):
+        return [(_socket.AF_INET, _socket.SOCK_STREAM, 6, "",
+                 ("93.184.216.34", port or 80))]
+
+    def spy_create(address, *a, **k):
+        seen["connect"].append(address[0])
+        raise OSError("stop: niente rete nel test")
+
+    monkeypatch.setattr("socket.getaddrinfo", fake_getaddrinfo)
+    monkeypatch.setattr("socket.create_connection", spy_create)
+    out = TOOLS_BY_NAME["fetch_url"].run({"url": "http://esempio.it"}, ctx)
+    assert seen["connect"] == ["93.184.216.34"]
+    assert "connessione fallita" in out
 
 
 def test_fetch_url_binary_rejected(ctx, monkeypatch):
