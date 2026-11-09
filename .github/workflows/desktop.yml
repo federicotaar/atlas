@@ -79,11 +79,11 @@ jobs:
           npm ci
           npm run build
 
-      # Workaround runner: i download degli strumenti AppImage dalle release
-      # tauri-apps/binary-releases (host github.com/releases/download) rispondono
-      # 504 in modo persistente dalla rete dei runner. Pre-seed della cache del
-      # bundler ($HOME/.cache/tauri) via endpoint asset di api.github.com, che
-      # risponde: il bundler salta il download se il file esiste gia'.
+      # Workaround runner: i download degli strumenti di bundle dalle release
+      # GitHub (host github.com/releases/download) rispondono 504 in modo
+      # persistente dalla rete dei runner. Pre-seed di TUTTO il tooling via
+      # endpoint asset di api.github.com, che risponde: bundler e plugin non
+      # scaricano piu' nulla a tempo di build.
       - name: Pre-seed cache AppImage tooling (workaround 504 runner)
         if: runner.os == 'Linux'
         shell: bash
@@ -92,11 +92,11 @@ jobs:
           CACHE="$HOME/.cache/tauri"
           mkdir -p "$CACHE"
           seed() {
-            local tag="$1" asset="$2" dest="$3"
+            local repo="$1" tag="$2" asset="$3" dest="$4"
             if [ -s "$dest" ]; then echo "gia' in cache: $dest"; return 0; fi
             local url=""
             for i in 1 2 3 4; do
-              url=$(curl -sfL "https://api.github.com/repos/tauri-apps/binary-releases/releases/tags/$tag" \
+              url=$(curl -sfL "https://api.github.com/repos/$repo/releases/tags/$tag" \
                 | jq -r --arg n "$asset" '.assets[] | select(.name==$n) | .url') || url=""
               if [ -n "$url" ] && curl -sfL -H 'Accept: application/octet-stream' "$url" -o "$dest"; then
                 echo "scaricato $asset -> $dest"
@@ -108,9 +108,68 @@ jobs:
             [ -s "$dest" ] || { echo "FALLITO seed $asset"; exit 1; }
             chmod +x "$dest"
           }
-          seed apprun-old AppRun-x86_64 "$CACHE/AppRun-x86_64"
-          seed linuxdeploy-07333c6 linuxdeploy-x86_64.AppImage "$CACHE/linuxdeploy-07333c6-x86_64.AppImage"
+          # cache del bundler Tauri: salta i download se i file esistono gia'
+          seed tauri-apps/binary-releases apprun-old AppRun-x86_64 "$CACHE/AppRun-x86_64"
+          seed tauri-apps/binary-releases linuxdeploy-07333c6 linuxdeploy-x86_64.AppImage "$CACHE/linuxdeploy-07333c6-x86_64.AppImage"
+          seed linuxdeploy/linuxdeploy-plugin-appimage continuous linuxdeploy-plugin-appimage-x86_64.AppImage "$CACHE/linuxdeploy-plugin-appimage.AppImage"
+          # il plugin appimage cerca appimagetool su PATH e gli passa
+          # --runtime-file da LDAI_RUNTIME_FILE: senza, scaricherebbe entrambi
+          seed AppImage/appimagetool continuous appimagetool-x86_64.AppImage /tmp/appimagetool
+          sudo install -m 0755 /tmp/appimagetool /usr/local/bin/appimagetool
+          seed AppImage/type2-runtime continuous runtime-x86_64 "$CACHE/runtime-x86_64"
+          echo "LDAI_RUNTIME_FILE=$CACHE/runtime-x86_64" >> "$GITHUB_ENV"
           ls -la "$CACHE"
+
+      # Stesso workaround su Windows: il bundler scaricherebbe NSIS e WiX da
+      # github.com/releases/download (504 dai runner). Ricostruiamo la cache
+      # esattamente come farebbe il bundler (stessi zip, stessi hash, stesso
+      # layout), cosi' i suoi controlli passano e non scarica nulla.
+      - name: Pre-seed cache NSIS/WiX (workaround 504 runner)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $CACHE = Join-Path $env:LOCALAPPDATA 'tauri'
+          New-Item -ItemType Directory -Force -Path $CACHE | Out-Null
+          function Get-Asset($repo, $tag, $name, $dest) {
+            if ((Test-Path $dest) -and (Get-Item $dest).Length -gt 0) { Write-Host "gia' in cache: $dest"; return }
+            $ok = $false
+            foreach ($i in 1..4) {
+              try {
+                $rel = Invoke-RestMethod "https://api.github.com/repos/$repo/releases/tags/$tag"
+                $asset = $rel.assets | Where-Object { $_.name -eq $name } | Select-Object -First 1
+                if ($asset) {
+                  & curl.exe -sfL -H 'Accept: application/octet-stream' $asset.url -o $dest
+                  if ($LASTEXITCODE -eq 0 -and (Test-Path $dest) -and (Get-Item $dest).Length -gt 0) { $ok = $true; break }
+                }
+              } catch { Write-Host "errore download: $($_.Exception.Message)" }
+              Write-Host "tentativo $i fallito per $name"
+              Start-Sleep -Seconds 10
+            }
+            if (-not $ok) { Write-Host "FALLITO seed $name"; exit 1 }
+            Write-Host "scaricato $name -> $dest"
+          }
+          # NSIS: zip estratto e rinominato come fa get_and_extract_nsis,
+          # poi nsis_tauri_utils.dll nella cartella plugin attesa
+          $nsisZip = Join-Path $env:TEMP 'nsis-3.13.zip'
+          Get-Asset 'tauri-apps/binary-releases' 'nsis-3.13' 'nsis-3.13.zip' $nsisZip
+          if ((Get-FileHash $nsisZip -Algorithm SHA1).Hash -ne 'DB14F8AF2EA346B786C6AE19343F61AAF5E09B8E') { Write-Host 'FALLITO hash nsis-3.13.zip'; exit 1 }
+          Expand-Archive -Force $nsisZip $CACHE
+          $nsisDir = Join-Path $CACHE 'NSIS'
+          if (Test-Path $nsisDir) { Remove-Item -Recurse -Force $nsisDir }
+          Rename-Item (Join-Path $CACHE 'nsis-3.13') $nsisDir
+          $dllDir = Join-Path $nsisDir 'Plugins\x86-unicode\additional'
+          New-Item -ItemType Directory -Force -Path $dllDir | Out-Null
+          Get-Asset 'tauri-apps/nsis-tauri-utils' 'nsis_tauri_utils-v0.5.3' 'nsis_tauri_utils.dll' (Join-Path $dllDir 'nsis_tauri_utils.dll')
+          if ((Get-FileHash (Join-Path $dllDir 'nsis_tauri_utils.dll') -Algorithm SHA1).Hash -ne '75197FEE3C6A814FE035788D1C34EAD39349B860') { Write-Host 'FALLITO hash nsis_tauri_utils.dll'; exit 1 }
+          # WiX: zip estratto direttamente in WixTools314 (file in radice)
+          $wixZip = Join-Path $env:TEMP 'wix314-binaries.zip'
+          Get-Asset 'wixtoolset/wix3' 'wix3141rtm' 'wix314-binaries.zip' $wixZip
+          if ((Get-FileHash $wixZip -Algorithm SHA256).Hash -ne '6AC824E1642D6F7277D0ED7EA09411A508F6116BA6FAE0AA5F2C7DAA2FF43D31') { Write-Host 'FALLITO hash wix314-binaries.zip'; exit 1 }
+          $wixDir = Join-Path $CACHE 'WixTools314'
+          if (Test-Path $wixDir) { Remove-Item -Recurse -Force $wixDir }
+          Expand-Archive -Force $wixZip $wixDir
+          Get-ChildItem $CACHE
 
       # beforeBuildCommand in tauri.conf.json e' volutamente vuoto: il frontend
       # viene costruito dallo step sopra (CWD esplicita, cross-shell). tauri
