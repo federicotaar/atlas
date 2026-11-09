@@ -63,7 +63,7 @@ padding:0 16px;font:inherit;cursor:pointer}
 button:hover{background:#30363d}
 #stop{color:#f85149}
 </style></head><body>
-<header><button id="back" title="Torna alla dashboard" style="display:none">&laquo; indietro</button>
+<header><button id="back" title="Torna alla dashboard" style="display:none">Indietro</button>
 ATLAS <span id="st">pronto</span>
 <button id="gear" title="Provider e chiavi" style="float:right">&#9881;</button>
 </header>
