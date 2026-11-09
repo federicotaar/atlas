@@ -259,7 +259,6 @@ def _handle_schedule(line: str, cc: CommandContext) -> None:
     La frase passa dal modello attivo per diventare cron/una-tantum; il job
     creato qui e' dell'UTENTE: attivo subito (l'approvazione riguarda i job
     ricorrenti proposti dall'agente, non quelli chiesti da Fred)."""
-    import time as _time
 
     from .scheduler import parse_schedule_phrase
 
@@ -290,7 +289,6 @@ def _handle_schedule(line: str, cc: CommandContext) -> None:
 
 def _handle_jobs(line: str, cc: CommandContext) -> None:
     """/jobs | /jobs pause|resume|delete|approve <id> (spec sez. 8)."""
-    import time as _time
 
     if cc.scheduler is None:
         cc.out("Scheduler non attivo in questa interfaccia.")
@@ -346,8 +344,7 @@ def _handle_timezone(line: str, cc: CommandContext) -> None:
     Il fuso e' persistito in config/app.json e governa scheduler, ore
     silenziose e parsing delle schedulazioni. Senza argomenti mostra quello
     attivo e la sua fonte."""
-    from .localzone import (detect_system_zone, load_timezone_name,
-                            save_timezone)
+    from .localzone import detect_system_zone, load_timezone_name, save_timezone
     arg = line[len("/timezone"):].strip()
     workspace = cc.workspace
     if workspace is None:
