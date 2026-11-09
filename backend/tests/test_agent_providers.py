@@ -539,3 +539,101 @@ def test_chat_no_retry_on_other_400_or_when_tools_absent(monkeypatch):
     with pytest.raises(ProviderError):
         p.chat([{"role": "user", "content": "ciao"}])  # senza tools: mai retry
     assert len(calls) == 1
+
+
+def _fake_stream_resp(status, chunks=(), error=""):
+    class FakeResp:
+        status_code = status
+
+        def iter_lines(self):
+            return iter(_ndjson_lines(list(chunks)).splitlines())
+
+        def read(self):
+            return None
+
+        @property
+        def text(self):
+            return error
+
+        def json(self):
+            return {"error": error} if error else {}
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    return FakeResp()
+
+
+def test_stream_retries_once_without_tools_no_duplicate_output(monkeypatch):
+    """Streaming: 400 'does not support tools' prima di qualsiasi delta ->
+    UNA ritirata senza tools; i delta escono una sola volta."""
+    calls = []
+    ok_chunks = [
+        {"message": {"role": "assistant", "content": "ciao"}, "done": False},
+        {"message": {"role": "assistant", "content": ""}, "done": True,
+         "done_reason": "stop"},
+    ]
+
+    def fake_stream(*a, **kw):
+        calls.append(kw.get("json") or {})
+        if (calls[-1]).get("tools"):
+            return _fake_stream_resp(
+                400, error="registry.ollama.ai/library/m:1b does not support tools")
+        return _fake_stream_resp(200, ok_chunks)
+
+    monkeypatch.setattr(httpx, "stream", fake_stream)
+    p = _ollama({"model": "m"})
+    tools = [{"name": "shell", "description": "run",
+              "parameters": {"type": "object"}}]
+    stream = p.chat([{"role": "user", "content": "c"}], tools, stream=True)
+    assert list(stream) == ["ciao"]
+    assert stream.response is not None and stream.response.text == "ciao"
+    assert len(calls) == 2 and "tools" not in calls[1]
+
+
+def test_stream_no_retry_after_partial_output(monkeypatch):
+    """Se un delta e' gia' uscito, l'errore si propaga: mai output duplicato."""
+    partial = [{"message": {"role": "assistant", "content": "par"}, "done": False}]
+    calls = []
+
+    def fake_stream(*a, **kw):
+        calls.append(kw.get("json") or {})
+
+        class Resp:
+            status_code = 200
+
+            def iter_lines(self):
+                for line in _ndjson_lines(partial).splitlines():
+                    yield line
+                raise httpx.RemoteProtocolError("boom")
+
+            def read(self):
+                return None
+
+            @property
+            def text(self):
+                return ""
+
+            def json(self):
+                return {}
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+        return Resp()
+
+    monkeypatch.setattr(httpx, "stream", fake_stream)
+    p = _ollama({"model": "m"})
+    tools = [{"name": "shell", "description": "run",
+              "parameters": {"type": "object"}}]
+    stream = p.chat([{"role": "user", "content": "c"}], tools, stream=True)
+    import pytest as _pt
+    with _pt.raises(Exception):
+        list(stream)
+    assert len(calls) == 1
