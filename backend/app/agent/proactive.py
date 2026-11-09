@@ -10,9 +10,12 @@ ProactiveGate decide se un messaggio puo' partire ORA verso un canale:
   consecutive senza nessun messaggio dell'utente in mezzo) scende di un
   passo; sotto soglia minima la categoria non parte proprio.
 
-I job richiesti dall'utente (/schedule) sono sollecitati: non contano nel
-tetto e non finiscono nel digest, ma rispettano le ore silenziose (salvo
-urgenti).
+I messaggi richiesti dall'utente (promemoria e job creati da Fred) sono
+sollecitati e NON sono ping non richiesti: partono sempre e subito - mai
+soppressi da una categoria silenziata, mai ritardati dalle ore silenziose,
+mai finiscono nel digest, mai contati nel tetto. Un promemoria chiesto per
+le 7:00 arriva alle 7:00, anche in ore silenziose e anche se la sua
+categoria e' stata abbassata dal feedback sul traffico NON richiesto.
 
 Il digest si svuota al primo heartbeat fuori dalle ore silenziose.
 """
@@ -23,7 +26,11 @@ import sqlite3
 import threading
 import time
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
+
+from .localzone import FALLBACK_ZONE, detect_system_zone, load_timezone_name
 
 URGENT = "urgent"
 HIGH = "high"
@@ -47,12 +54,13 @@ DEFAULT_IMPORTANCES = {
 
 @dataclass
 class ProactiveConfig:
-    quiet_start: str = "23:00"     # "HH:MM" locali
+    quiet_start: str = "23:00"     # "HH:MM" nel fuso dell'installazione
     quiet_end: str = "07:30"
     max_unsolicited_per_day: int = 8
     heartbeat_minutes: int = 15
     batch_digest: bool = True
     habits_local_only: bool = False
+    timezone: str = ""             # nome IANA; vuoto = risolto da localzone
 
     @classmethod
     def load(cls, workspace: Path) -> "ProactiveConfig":
@@ -68,6 +76,9 @@ class ProactiveConfig:
                         setattr(cfg, key, data[key])
             except (ValueError, TypeError):
                 pass  # config rotta: default, mai bloccare l'avvio
+        # Il fuso e' unico per tutta l'installazione (config/app.json via
+        # localzone), mai un'impostazione a parte della proattivita'.
+        cfg.timezone = load_timezone_name(workspace)
         return cfg
 
 
@@ -76,9 +87,20 @@ def _hhmm_to_minutes(hhmm: str) -> int:
     return int(hours) * 60 + int(minutes)
 
 
+def _zone_of(cfg: ProactiveConfig) -> ZoneInfo:
+    name = (cfg.timezone or "").strip()
+    if name:
+        try:
+            return ZoneInfo(name)
+        except Exception:
+            pass
+    return ZoneInfo(detect_system_zone() or FALLBACK_ZONE)
+
+
 def in_quiet_hours(cfg: ProactiveConfig, now: float | None = None) -> bool:
-    t = time.localtime(now)
-    minute = t.tm_hour * 60 + t.tm_min
+    t = datetime.fromtimestamp(time.time() if now is None else now,
+                               _zone_of(cfg))
+    minute = t.hour * 60 + t.minute
     start, end = _hhmm_to_minutes(cfg.quiet_start), _hhmm_to_minutes(cfg.quiet_end)
     if start == end:
         return False
@@ -217,6 +239,11 @@ class ProactiveGate:
     def decide(self, category: str, priority: str, solicited: bool,
                now: float | None = None) -> DeliveryDecision:
         now = time.time() if now is None else now
+        # Un messaggio RICHIESTO non e' un ping non sollecitato: parte sempre
+        # e subito, qualunque sia lo stato della categoria, le ore silenziose
+        # o il batching di bassa priorita'.
+        if solicited:
+            return DeliveryDecision(True, "richiesto dall'utente")
         if self.store.importance(category) < SEND_THRESHOLD:
             return DeliveryDecision(False, "categoria sotto soglia")
         if in_quiet_hours(self.cfg, now):
