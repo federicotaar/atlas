@@ -128,6 +128,24 @@ def _run_in_bwrap(workdir: Path, argv: list[str],
                           capture_output=True, text=True)
 
 
+def run_python_snippet(code: str,
+                       timeout: int = 30) -> subprocess.CompletedProcess | None:
+    """Esegue uno snippet Python nella stessa sandbox bwrap dei tool generati:
+    niente rete, filesystem di sistema in sola lettura, unica parte scrivibile
+    una directory temporanea dedicata (montata su /work e distrutta subito
+    dopo), ambiente pulito dai segreti. None se bwrap non e' disponibile: il
+    chiamante DEVE rifiutare l'esecuzione (fail-closed, nessun fallback
+    sull'host)."""
+    import shutil as _sh
+    import tempfile
+    workdir = Path(tempfile.mkdtemp(prefix="atlas-pyexec-"))
+    try:
+        (workdir / "snippet.py").write_text(code, encoding="utf-8")
+        return _run_in_bwrap(workdir, ["snippet.py"], timeout=timeout)
+    finally:
+        _sh.rmtree(workdir, ignore_errors=True)
+
+
 def inspect_interface(workdir: Path, name: str,
                       timeout: int = 30) -> dict | None:
     """Carica il modulo in bwrap e ritorna l'interfaccia come dict.
