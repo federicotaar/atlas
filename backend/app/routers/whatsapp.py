@@ -25,6 +25,10 @@ class WhatsAppStatusOut(BaseModel):
     qr: str | None = None
     last_event_at: datetime | None = None
     bridge_available: bool = False
+    # True = i messaggi inbound arrivano all'agente (app desktop, allowlist
+    # hub: self-chat + numeri approvati); False = pipeline classica v2.x
+    # (solo self-chat).
+    agent: bool = False
 
 
 def _status(db: Session, user: User) -> WhatsAppStatusOut:
@@ -32,9 +36,11 @@ def _status(db: Session, user: User) -> WhatsAppStatusOut:
     link = wa.status(db, settings, user)
     if link is None:
         return WhatsAppStatusOut(connected=False,
+                                 agent=wa.agent_bridge_active(),
                                  bridge_available=wa.bridge_available(settings))
     qr = wa.qr_state(db, settings, user)
     return WhatsAppStatusOut(
+        agent=wa.agent_bridge_active(),
         connected=True,
         linked=link.jid is not None,
         jid=link.jid,
