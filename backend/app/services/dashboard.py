@@ -18,6 +18,13 @@ IMPORTANT_CONFIDENCE = 0.85
 
 
 _agent_jobs_provider = None
+_agent_timezone = ""
+
+
+def set_agent_timezone(name: str) -> None:
+    global _agent_timezone
+    _agent_timezone = name or ""
+
 
 
 def set_agent_jobs_provider(provider) -> None:
@@ -157,6 +164,7 @@ def build_dashboard(db: Session, user_id: uuid.UUID,
             {**j, "derived_from": {"agent_job_id": str(j.get("id"))}}
             for j in agent_jobs
         ],
+        "timezone": _agent_timezone,
         "engine_actions_by_status": action_counts,
     }
 
