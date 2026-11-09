@@ -497,3 +497,45 @@ def test_parse_model_target():
         parse_model_target(":modello")
     with pytest.raises(ConfigError):
         parse_model_target("provider:")
+
+
+def test_chat_retries_once_without_tools_when_model_lacks_support(monkeypatch):
+    """Un modello senza tool-calling nativo (400 "does not support tools")
+    provoca UNA ritirata senza tools: il loop ripiega sul JSON nel testo."""
+    calls = []
+
+    def handler(request):
+        body = json.loads(request.content)
+        calls.append(body)
+        if body.get("tools"):
+            return httpx.Response(400, json={
+                "error": "registry.ollama.ai/library/smollm2:135m does not support tools"})
+        return httpx.Response(200, json={
+            "message": {"role": "assistant", "content": "ciao"},
+            "done_reason": "stop"})
+
+    monkeypatch.setattr(httpx, "post", lambda url, **kw: httpx.Client(
+        transport=_mock_transport(handler)).post(url, **kw))
+    p = _ollama({"model": "m"})
+    tools = [{"name": "shell", "description": "run",
+              "parameters": {"type": "object"}}]
+    resp = p.chat([{"role": "user", "content": "ciao"}], tools)
+    assert resp.text == "ciao"
+    assert len(calls) == 2 and "tools" not in calls[1]
+
+
+def test_chat_no_retry_on_other_400_or_when_tools_absent(monkeypatch):
+    calls = []
+
+    def handler(request):
+        body = json.loads(request.content)
+        calls.append(body)
+        return httpx.Response(400, json={"error": "does not support tools"})
+
+    monkeypatch.setattr(httpx, "post", lambda url, **kw: httpx.Client(
+        transport=_mock_transport(handler)).post(url, **kw))
+    p = _ollama({"model": "m"})
+    import pytest
+    with pytest.raises(ProviderError):
+        p.chat([{"role": "user", "content": "ciao"}])  # senza tools: mai retry
+    assert len(calls) == 1
