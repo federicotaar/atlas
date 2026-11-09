@@ -53,6 +53,12 @@ nel `.env` locale: non vanno mai in chat, nel repo o in un sito pubblico.
    `google_gmail.list_messages` / `google_gmail.get_message` (livello 0)
    e `google_gmail.create_draft` (livello 1, con anteprima esatta e
    annullamento che elimina la bozza).
+4. L'agente legge i connettori autorizzati con lo strumento
+   `google_read` (solo le azioni di livello 0, stesso percorso
+   dell'ActionEngine). Collegare un connettore non scarica ne' invia
+   nulla: il contenuto letto entra nel contesto solo su richiesta
+   esplicita, marcato come fonte esterna non verificata; con un
+   provider cloud attivo, quel testo esce dal PC verso il provider.
 
 ## Verifica
 
