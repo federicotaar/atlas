@@ -11,6 +11,7 @@ from typing import Callable
 
 from ..providers.base import ProviderError
 from ..providers.registry import ConfigError, ProviderRegistry
+from .localzone import fmt_wall
 from .memory import MemoryStore
 from .permissions import parse_mode
 
@@ -36,6 +37,9 @@ class CommandContext:
     post_approve_fn: object | None = None  # registra tool + health check
     channel: str = "cli"
     sender: str = "local"
+    # Fuso orario: gate proattivo e workspace (per /timezone, persistenza).
+    proactive: object | None = None
+    workspace: object | None = None
 
 
 def parse_model_target(arg: str) -> tuple[str, str | None]:
@@ -244,6 +248,9 @@ def handle_command(line: str, cc: CommandContext) -> bool:
     if line.startswith("/jobs"):
         _handle_jobs(line, cc)
         return True
+    if line.startswith("/timezone"):
+        _handle_timezone(line, cc)
+        return True
     return False
 
 
@@ -265,7 +272,8 @@ def _handle_schedule(line: str, cc: CommandContext) -> None:
                "feriale alle 8 mandami il brief")
         return
     try:
-        parsed = parse_schedule_phrase(cc.registry, cc.get_active(), phrase)
+        parsed = parse_schedule_phrase(cc.registry, cc.get_active(), phrase,
+                                       zone=cc.scheduler.zone)
         job = cc.scheduler.add_job(
             kind=parsed["kind"], schedule=parsed["schedule"],
             task=parsed["task"], channel=cc.channel, sender=cc.sender,
@@ -273,10 +281,11 @@ def _handle_schedule(line: str, cc: CommandContext) -> None:
     except ValueError as exc:
         cc.out(f"Errore: {exc}")
         return
-    next_at = _time.strftime("%Y-%m-%d %H:%M", _time.localtime(job.next_fire))
+    next_at = fmt_wall(job.next_fire, cc.scheduler.zone)
     kind_it = "ricorrente" if job.kind == "cron" else "una tantum"
     cc.out(f"Job #{job.id} creato ({kind_it}): \"{job.task}\" - "
-           f"prossima esecuzione {next_at}.")
+           f"prossima esecuzione {next_at} "
+           f"(fuso {cc.scheduler.zone.key}).")
 
 
 def _handle_jobs(line: str, cc: CommandContext) -> None:
@@ -292,6 +301,7 @@ def _handle_jobs(line: str, cc: CommandContext) -> None:
         if not jobs:
             cc.out("Nessun job. /schedule <quando> <cosa> per crearne uno.")
             return
+        cc.out(f"Fuso orario attivo: {cc.scheduler.zone.key}")
         for job in jobs:
             flags = []
             if job.paused:
@@ -299,9 +309,7 @@ def _handle_jobs(line: str, cc: CommandContext) -> None:
             if not job.approved:
                 flags.append("DA APPROVARE (/jobs approve "
                              f"{job.id})")
-            next_at = (_time.strftime("%Y-%m-%d %H:%M",
-                                      _time.localtime(job.next_fire))
-                       if job.next_fire else "-")
+            next_at = fmt_wall(job.next_fire, cc.scheduler.zone)
             flag_txt = f"  [{', '.join(flags)}]" if flags else ""
             cc.out(f"  #{job.id} ({job.kind}) {job.schedule} - \"{job.task}\""
                    f" - prossima: {next_at}{flag_txt}")
@@ -330,3 +338,36 @@ def _handle_jobs(line: str, cc: CommandContext) -> None:
         return
     cc.out("Uso: /jobs | /jobs pause <id> | /jobs resume <id> | "
            "/jobs delete <id> | /jobs approve <id>")
+
+
+def _handle_timezone(line: str, cc: CommandContext) -> None:
+    """/timezone [nome-IANA] - mostra o imposta il fuso dell'installazione.
+
+    Il fuso e' persistito in config/app.json e governa scheduler, ore
+    silenziose e parsing delle schedulazioni. Senza argomenti mostra quello
+    attivo e la sua fonte."""
+    from .localzone import (detect_system_zone, load_timezone_name,
+                            save_timezone)
+    arg = line[len("/timezone"):].strip()
+    workspace = cc.workspace
+    if workspace is None:
+        cc.out("Fuso orario non configurabile in questa interfaccia.")
+        return
+    if not arg:
+        active = load_timezone_name(workspace)
+        cc.out(f"Fuso orario attivo: {active} "
+               f"(sistema rilevato: {detect_system_zone() or 'n/d'}). "
+               "Cambialo con /timezone <nome IANA>, es. /timezone Europe/Rome.")
+        return
+    try:
+        name = save_timezone(workspace, arg)
+    except ValueError as exc:
+        cc.out(f"Errore: {exc}")
+        return
+    if cc.scheduler is not None:
+        from zoneinfo import ZoneInfo
+        cc.scheduler.set_zone(ZoneInfo(name))
+    if cc.proactive is not None:
+        cc.proactive.cfg.timezone = name
+    cc.out(f"Fuso orario impostato: {name}. Vale da subito per scheduler, "
+           "ore silenziose e nuove schedulazioni.")
