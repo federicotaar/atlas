@@ -222,7 +222,9 @@ export interface DashboardData {
       connectors: Array<{ id: string; kind: string; status: string; derived_from: Record<string, string | null> }>;
       agent_jobs: Array<{ id: number; kind: string; schedule: string; task: string; channel: string;
                           approved: boolean; paused: boolean; next_fire: string | null; last_run: string | null;
+                          timezone?: string;
                           derived_from: Record<string, string | null> }>;
+      timezone?: string;
       engine_actions_by_status: Record<string, number>;
     };
     important_memories: Array<{
