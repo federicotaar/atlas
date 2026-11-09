@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from threading import Event
 from typing import Any, Callable
 
-from ..providers.base import Message, ProviderResponse
+from ..providers.base import Message, ProviderResponse, ToolCall
 from ..providers.registry import ProviderRegistry
 from .actionlog import ActionLog
 from .permissions import Decision, Mode, decide
@@ -40,6 +40,34 @@ class LoopResult:
 AskFn = Callable[[str], bool]           # domanda -> True se approvato
 FallbackFn = Callable[[str, str, str], None]
 DeltaFn = Callable[[str], None]         # delta di testo in streaming verso la CLI
+
+
+def _parse_text_tool_call(text: str) -> ToolCall | None:
+    """Fallback JSON-in-testo (spec sez. 2): un modello senza tool-calling
+    nativo puo' emettere la chiamata come oggetto JSON nel testo
+    ({"name": ..., "arguments": {...}}, anche in blocco ```json). Vale solo
+    se il nome e' un tool noto e gli argomenti un oggetto: altrimenti il
+    testo resta la risposta finale, mai eseguito."""
+    import re
+
+    candidates: list[str] = []
+    for m in re.finditer(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.S):
+        candidates.append(m.group(1))
+    stripped = text.strip()
+    if stripped.startswith("{") and stripped.endswith("}"):
+        candidates.append(stripped)
+    for cand in candidates:
+        try:
+            data = json.loads(cand)
+        except (ValueError, TypeError):
+            continue
+        if not isinstance(data, dict):
+            continue
+        name = data.get("name") or data.get("tool")
+        args = data.get("arguments") or data.get("args") or data.get("parameters")
+        if isinstance(name, str) and name in TOOLS_BY_NAME and isinstance(args, dict):
+            return ToolCall(name=name, arguments=args)
+    return None
 
 
 def _describe_call(name: str, args: dict[str, Any]) -> str:
@@ -99,7 +127,14 @@ def run_agent_loop(
             on_delta("\n")  # chiusura riga dopo lo stream / prima delle note strumento
 
         if not response.tool_calls:
-            return LoopResult(text=response.text, steps=step, notes=notes)
+            fallback = _parse_text_tool_call(response.text or "")
+            if fallback is None:
+                return LoopResult(text=response.text, steps=step, notes=notes)
+            note = f"[tool-call letta dal testo (fallback JSON): {fallback.name}]"
+            notes.append(note)
+            if on_step:
+                on_step(note)
+            response = ProviderResponse(text="", tool_calls=[fallback])
 
         # Turno assistente con tool-call: va nella storia prima dei risultati.
         messages.append({
