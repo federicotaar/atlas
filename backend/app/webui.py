@@ -265,7 +265,8 @@ class WebUISession:
                 set_active=self._set_active,
                 describe_registry=self._describe_registry,
                 scheduler=self._scheduler, habits=self._ctx.habits,
-                channel=SENDER, sender=SENDER))
+                channel=SENDER, sender=SENDER,
+                proactive=self._proactive, workspace=self._ctx.workspace))
             if self._proactive is not None:
                 self._proactive.user_message_seen()
             if self._ctx.habits is not None:
@@ -600,7 +601,9 @@ def build_webui_stack(registry: ProviderRegistry, *, active: str,
     # Scheduler (stage 10): stesso jobs.db della CLI; l'atomic claim dello
     # store evita doppie esecuzioni se girano entrambe le interfacce.
     from .agent.scheduler import JobStore, Scheduler
-    job_store = JobStore(workspace / "data" / "jobs.db")
+    from .agent.localzone import get_zone
+    job_store = JobStore(workspace / "data" / "jobs.db",
+                         zone=get_zone(workspace))
     dispatchers: dict = {}
 
     def raw_deliver(channel: str, sender: str, text: str) -> None:
