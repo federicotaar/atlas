@@ -34,6 +34,25 @@ log = logging.getLogger("atlas.telegram")
 API_BASE = "https://api.telegram.org"
 POLL_TIMEOUT_S = 20
 
+# Ponte verso lo stack agente (app desktop): registrato da desktop_main al
+# mount di /agent. None nel server mode: resta la pipeline classica.
+_agent_bridge = None
+
+
+def set_agent_bridge(bridge) -> None:
+    """Registra (o rimuove, con None) il ponte dashboard -> agente."""
+    global _agent_bridge
+    _agent_bridge = bridge
+
+
+def agent_bridge_active() -> bool:
+    return _agent_bridge is not None
+
+
+def agent_bridge():
+    """Il ponte registrato (desktop) o None (server mode)."""
+    return _agent_bridge
+
 
 def _api(token: str, method: str, **params):
     """Chiamata Bot API. Unico punto di rete: i test lo sostituiscono intero."""
@@ -147,6 +166,8 @@ def handle_update(db: Session, settings: Settings, link: TelegramLink,
     chat_id = (msg.get("chat") or {}).get("id")
     if not text or chat_id is None:
         return
+    frm = msg.get("from") or {}
+    display = frm.get("username") or frm.get("first_name") or ""
     token = decrypt_secret(link.bot_token_enc, settings.credentials_key)
 
     if text.startswith("/start"):
@@ -158,6 +179,11 @@ def handle_update(db: Session, settings: Settings, link: TelegramLink,
             link.pairing_code = None  # codice monouso: consumato
             link.pairing_expires_at = None
             db.commit()
+            if _agent_bridge is not None:
+                # Identita' provata dal codice monouso mostrato solo
+                # nell'app: il proprietario entra in allowlist (subito e
+                # ai prossimi avvii).
+                _agent_bridge.on_identity("telegram", str(chat_id), display)
             _api(token, "sendMessage", chat_id=chat_id,
                  text="ATLAS collegato. Scrivimi qui: ricordero' quello che mi "
                       "chiedi di ricordare e rispondero' alle tue domande, come "
@@ -166,6 +192,17 @@ def handle_update(db: Session, settings: Settings, link: TelegramLink,
             _api(token, "sendMessage", chat_id=chat_id,
                  text="Codice non valido o scaduto. Genera un nuovo codice "
                       "dalla app ATLAS.")
+        return
+
+    if _agent_bridge is not None:
+        # Desktop: ogni messaggio va all'hub dell'agente. L'allowlist
+        # (proprietario + pairing approvati dalla dashboard) decide chi
+        # riceve risposta; gli sconosciuti restano in silenzio e finiscono
+        # solo tra le richieste di pairing locali.
+        _agent_bridge.dispatch(
+            "telegram", str(chat_id), display, text,
+            lambda t: _api(token, "sendMessage", chat_id=chat_id,
+                           text=t[:4000]))
         return
 
     if link.owner_chat_id is None or chat_id != link.owner_chat_id:
