@@ -17,6 +17,7 @@ from .routers import (
     graph,
     me,
     memories,
+    pairing,
     predictions,
     projects,
     settings,
@@ -61,6 +62,7 @@ app.include_router(settings.router)
 app.include_router(setup.router)
 app.include_router(telegram.router)
 app.include_router(whatsapp.router)
+app.include_router(pairing.router)
 
 
 @app.get("/health")
