@@ -317,10 +317,30 @@ jobs:
           if [ ! -f /tmp/atlas-screenshot.png ]; then echo 'nessuno screenshot da pubblicare'; exit 0; fi
           git config user.email "ci@atlas.local"
           git config user.name "atlas-ci"
-          git checkout --orphan ci-artifacts-local
-          git rm -rf . >/dev/null 2>&1 || true
-          cp /tmp/atlas-screenshot.png atlas-screenshot.png
-          for f in /tmp/e2e-*.png; do [ -e "$f" ] && cp "$f" . || true; done
-          git add -A '*.png'
-          git commit -q -m "ci: screenshot app desktop (run $GITHUB_RUN_ID) [skip ci]"
-          git push -f origin HEAD:refs/heads/ci-artifacts
+          # Ogni run scrive nella SUA directory runs/<id>/ (artefatto legato
+          # in modo univoco al commit) e aggiorna la copia "latest" in root.
+          # Push NON forzato con retry: due run concorrenti non si
+          # sovrascrivono piu' gli screenshot a vicenda.
+          for attempt in 1 2 3; do
+            if git fetch origin ci-artifacts; then
+              git checkout -B ci-artifacts-local origin/ci-artifacts
+            else
+              git checkout --orphan ci-artifacts-local
+              git rm -rf . >/dev/null 2>&1 || true
+            fi
+            mkdir -p "runs/$GITHUB_RUN_ID"
+            cp /tmp/atlas-screenshot.png "runs/$GITHUB_RUN_ID/atlas-screenshot.png"
+            cp /tmp/atlas-screenshot.png atlas-screenshot.png
+            for f in /tmp/e2e-*.png; do
+              [ -e "$f" ] || continue
+              cp "$f" "runs/$GITHUB_RUN_ID/"
+              cp "$f" .
+            done
+            git add -A '*.png'
+            git commit -q -m "ci: screenshot app desktop (run $GITHUB_RUN_ID) [skip ci]" || true
+            if git push origin HEAD:refs/heads/ci-artifacts; then
+              echo "screenshot pubblicati in ci-artifacts/runs/$GITHUB_RUN_ID/"
+              break
+            fi
+            echo "push rifiutato (run concorrente): riprovo ($attempt/3)"
+          done
