@@ -27,6 +27,9 @@ ACTION_KINDS: dict[str, tuple[int, str | None]] = {
     # bozze Gmail (livello 1, reversibili: annullare elimina la bozza).
     "google_calendar.list_events": (0, "google_calendar"),
     "google_gmail.create_draft": (1, "google_gmail"),
+    # Lettura inbox Gmail (scope gmail.readonly): sola lettura, livello 0.
+    "google_gmail.list_messages": (0, "google_gmail"),
+    "google_gmail.get_message": (0, "google_gmail"),
 }
 
 FIXTURE_EVENTS = [
@@ -121,6 +124,13 @@ def _preview(kind: str, payload: dict) -> dict:
                           "body": payload.get("body")}}
     if kind == "google_calendar.list_events":
         return {"description": "Legge gli eventi del tuo Google Calendar reale (sola lettura)."}
+    if kind == "google_gmail.list_messages":
+        return {"description": "Legge la tua inbox Gmail reale (sola lettura).",
+                "query": payload.get("query", ""),
+                "max_results": int(payload.get("max_results", 10))}
+    if kind == "google_gmail.get_message":
+        return {"description": "Legge un messaggio Gmail completo (sola lettura).",
+                "message_id": payload["message_id"]}
     if kind == "google_gmail.create_draft":
         return {"description": "Crea una BOZZA reale su Gmail. Una bozza non e un invio.",
                 "draft": {"to": payload.get("to"),
@@ -184,6 +194,19 @@ def _execute(db: Session, action: EngineAction) -> dict:
         conn = db.get(Connector, action.connector_id)
         return create_gmail_draft(db, get_settings(), user_id, conn,
                                   payload["to"], payload["subject"], payload["body"])
+    if action.kind == "google_gmail.list_messages":
+        from ..config import get_settings
+        from .google_connectors import list_gmail_messages
+        conn = db.get(Connector, action.connector_id)
+        return list_gmail_messages(db, get_settings(), user_id, conn,
+                                   query=payload.get("query", ""),
+                                   max_results=int(payload.get("max_results", 10)))
+    if action.kind == "google_gmail.get_message":
+        from ..config import get_settings
+        from .google_connectors import get_gmail_message
+        conn = db.get(Connector, action.connector_id)
+        return get_gmail_message(db, get_settings(), user_id, conn,
+                                 payload["message_id"])
     raise AtlasError("unknown_action", f"Azione sconosciuta: {action.kind}.")
 
 
@@ -193,6 +216,7 @@ def _validate_payload(kind: str, payload: dict) -> None:
         "tasks.add": ("content",),
         "email.create_draft": ("to", "subject", "body"),
         "google_gmail.create_draft": ("to", "subject", "body"),
+        "google_gmail.get_message": ("message_id",),
     }.get(kind, ())
     missing = [k for k in required if not payload.get(k)]
     if missing:
