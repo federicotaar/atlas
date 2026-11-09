@@ -148,8 +148,11 @@ L'app desktop include il backend: all'avvio parte un processo locale con
 database SQLite incorporato, in ascolto solo su 127.0.0.1. Non servono
 Docker, un server o un indirizzo email: il profilo si crea con una password
 locale e resta solo sul dispositivo (il login con email e codice resta per
-l'installazione server con Docker Compose). Prerequisiti: Ubuntu 22.04 o
-24.04 (se mancanti: `sudo apt install libwebkit2gtk-4.1-0 libegl1`).
+l'installazione server con Docker Compose). Prerequisiti: Ubuntu 24.04 LTS o
+più recente (glibc >= 2.39; il .deb dichiara già le dipendenze
+`libwebkit2gtk-4.1-0`, `libgtk-3-0`, `libc6 (>= 2.39)` — se mancanti:
+`sudo apt install libwebkit2gtk-4.1-0 libegl1`). Ubuntu 22.04 non è
+supportato: le librerie incluse richiedono glibc 2.39.
 
 ```bash
 chmod +x ATLAS_*.AppImage
