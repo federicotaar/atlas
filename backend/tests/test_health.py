@@ -12,7 +12,7 @@ def test_health_version_is_current(client):
     """Il desktop riusa un backend esistente solo se dichiara una versione
     compatibile: /health deve esporla, senza autenticazione."""
     r = client.get("/health")
-    assert r.json()["version"] == "3.0.0"
+    assert r.json()["version"] == "3.0.1"
 
 
 def test_health_no_auth_needed(client):
