@@ -138,6 +138,13 @@ export default function TelegramCard() {
             Bot collegato: <strong>@{st.bot_username}</strong>{" "}
             {st.paired ? "— accoppiato al tuo account." : "— in attesa di accoppiamento."}
           </p>
+          {st.paired && (
+            <p className="muted">
+              {st.agent
+                ? "Risponde l'agente ATLAS. Puo' scriverti anche chi approvi in Richieste di pairing; gli altri non ricevono mai risposta."
+                : "Modalita' classica: le risposte su Telegram non usano il nuovo agente."}
+            </p>
+          )}
           {!st.paired && st.pairing_expired && (
             <div className="item">
               <p className="muted">Il codice di accoppiamento e' scaduto (vale 15 minuti).</p>
