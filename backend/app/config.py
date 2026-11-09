@@ -34,6 +34,11 @@ class Settings(BaseSettings):
     embedding_dim: int = 768
     model_call_timeout_s: float = 30.0
 
+    # Tetto token per il percorso legacy /api/generate (0 = illimitato, default
+    # invariato). Un modello piccolo puo' non emettere mai EOS: il check CI lo
+    # limita (ATLAS_OLLAMA_GENERATE_MAX_TOKENS) per non dipendere dalla fortuna.
+    ollama_generate_max_tokens: int = 0
+
     retrieval_candidates: int = 40
     retrieval_top_k: int = 8
     w_semantic: float = 0.55
