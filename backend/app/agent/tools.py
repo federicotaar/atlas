@@ -430,14 +430,36 @@ _TEXT_TYPES = ("text/", "application/json", "application/xml",
                "application/rss", "image/svg+xml")
 
 
-def _validate_public_url(url: str) -> str | None:
-    """http/https su host pubblico, altrimenti il motivo del rifiuto.
-    Controlla OGNI IP risolto (IPv4 e IPv6): loopback, privati, link-local
-    (incluso 169.254.169.254 dei metadata cloud), riservati, multicast e
-    non specificati sono vietati. Da chiamare sulla destinazione iniziale
-    E su ogni redirect prima di seguirlo."""
+def _validated_ips(host: str, port: int = 0) -> list[str]:
+    """Risolve host e rifiuta se ANCHE UN SOLO IP e' vietato (loopback,
+    privato, link-local incluso 169.254.169.254 dei metadata cloud,
+    riservato, multicast, non specificato; IPv4 e IPv6). Ritorna gli IP
+    approvati: la connessione DEVE usare questa stessa risoluzione (anti
+    DNS-rebinding), mai una seconda risoluzione non validata."""
     import ipaddress
     import socket
+
+    try:
+        infos = socket.getaddrinfo(host, port or None, type=socket.SOCK_STREAM)
+    except socket.gaierror:
+        raise _FetchError(f"host non risolvibile: {host}")
+    ips: list[str] = []
+    for info in infos:
+        addr = ipaddress.ip_address(info[4][0])
+        if (addr.is_private or addr.is_loopback or addr.is_link_local
+                or addr.is_reserved or addr.is_multicast
+                or addr.is_unspecified):
+            raise _FetchError(f"host non pubblico: {host}")
+        ips.append(info[4][0])
+    if not ips:
+        raise _FetchError(f"host non risolvibile: {host}")
+    return ips
+
+
+def _validate_public_url(url: str) -> str | None:
+    """http/https su host pubblico, altrimenti il motivo del rifiuto.
+    Pre-controllo per hop: la connessione vera rivalida e pinnata e' in
+    _request_once."""
     from urllib.parse import urlparse
 
     if not url.startswith(("http://", "https://")):
@@ -446,35 +468,70 @@ def _validate_public_url(url: str) -> str | None:
     if not host:
         return "url senza host"
     try:
-        infos = socket.getaddrinfo(host, None)
-    except socket.gaierror:
-        return f"host non risolvibile: {host}"
-    if not infos:
-        return f"host non risolvibile: {host}"
-    for info in infos:
-        addr = ipaddress.ip_address(info[4][0])
-        if (addr.is_private or addr.is_loopback or addr.is_link_local
-                or addr.is_reserved or addr.is_multicast
-                or addr.is_unspecified):
-            return f"host non pubblico: {host}"
+        _validated_ips(host)
+    except _FetchError as exc:
+        return str(exc)
     return None
 
 
 def _request_once(url: str, timeout: float,
                   max_bytes: int) -> tuple[int, dict, bytes]:
-    """Una sola GET, SENZA redirect automatici e con tetto ai byte letti:
-    i redirect vanno rivalidati uno a uno dal chiamante prima di seguirli."""
-    import httpx
+    """Una sola GET con l'indirizzo PINNATO sulla risoluzione validata:
+    la connessione TCP va all'IP approvato (anti DNS-rebinding/seconda
+    risoluzione), TLS verifica comunque il certificato sul nome host (SNI).
+    stdlib http.client su socket manuale: niente proxy ereditati
+    dall'ambiente (http.client non li legge affatto), niente redirect
+    automatici, byte letti con tetto."""
+    import http.client
+    import socket
+    import ssl
+    from urllib.parse import urlparse
 
-    with httpx.stream("GET", url, headers={"User-Agent": "ATLAS-agent/3.0"},
-                      timeout=timeout, follow_redirects=False) as resp:
+    parsed = urlparse(url)
+    scheme = parsed.scheme
+    host = parsed.hostname or ""
+    port = parsed.port or (443 if scheme == "https" else 80)
+    path = parsed.path or "/"
+    if parsed.query:
+        path += "?" + parsed.query
+    ips = _validated_ips(host, port)  # la risoluzione usata per connettersi
+    sock = None
+    last: OSError | None = None
+    for ip in ips:
+        try:
+            sock = socket.create_connection((ip, port), timeout=timeout)
+            break
+        except OSError as exc:
+            last = exc
+    if sock is None:
+        raise _FetchError(
+            f"connessione fallita: {type(last).__name__ if last else '?'}")
+    try:
+        if scheme == "https":
+            tls = ssl.create_default_context()
+            sock = tls.wrap_socket(sock, server_hostname=host)
+        conn = http.client.HTTPConnection(host, port, timeout=timeout)
+        conn.sock = sock  # gia' connesso e pinnato: connect() non riparte
+        conn.putrequest("GET", path,
+                        headers={"Host": host,
+                                 "User-Agent": "ATLAS-agent/3.0",
+                                 "Accept-Encoding": "identity",
+                                 "Connection": "close"})
+        conn.endheaders()
+        resp = conn.getresponse()
         body = bytearray()
-        for chunk in resp.iter_bytes(65536):
+        while True:
+            chunk = resp.read(65536)
+            if not chunk:
+                break
             body += chunk
             if len(body) > max_bytes:
                 raise _FetchError(
                     f"risposta oltre il limite di {max_bytes} byte")
-        return resp.status_code, dict(resp.headers), bytes(body)
+        headers = {k.lower(): v for k, v in resp.getheaders()}
+        return resp.status, headers, bytes(body)
+    finally:
+        sock.close()
 
 
 def _http_get_public(url: str, *, max_bytes: int = 262_144,
