@@ -274,3 +274,79 @@ def test_encryption_roundtrip_and_wrong_key():
         decrypt_secret(enc, Fernet.generate_key().decode())
     with pytest.raises(AtlasError):
         encrypt_secret("segreto", "")
+
+
+def test_gmail_list_messages_readonly(client, google_env, monkeypatch):
+    """Livello 0: lettura inbox reale (gmail.readonly). Nessuna scrittura."""
+    u = make_user(client, "g-read")
+    h = u["headers"]
+    _do_callback(client, h, monkeypatch, scope_set="gmail")
+
+    def _list_ok(access_token, query="", max_results=10):
+        assert query == "in:inbox"
+        return {"messages": [
+            {"id": "m1", "thread_id": "t1", "from": "prof@example.com",
+             "subject": "Verifica", "date": "Mon, 9 Nov 2026",
+             "snippet": "ricorda la consegna"},
+        ]}
+    monkeypatch.setattr("app.services.google_api.gmail_list_messages", _list_ok)
+
+    r = client.post("/actions",
+                    json={"kind": "google_gmail.list_messages",
+                          "payload": {"query": "in:inbox", "max_results": 5},
+                          "idempotency_key": "glist-1"},
+                    headers=h)
+    assert r.status_code in (200, 201), r.text
+    action = r.json()["action"] if "action" in r.json() else r.json()
+    assert action["status"] == "executed"
+    msgs = action["result"]["messages"]
+    assert msgs[0]["from"] == "prof@example.com"
+    assert msgs[0]["source"] == "google_gmail"
+
+
+def test_gmail_get_message_readonly(client, google_env, monkeypatch):
+    """Corpo completo di un messaggio (gmail.readonly), sempre sola lettura."""
+    u = make_user(client, "g-readmsg")
+    h = u["headers"]
+    _do_callback(client, h, monkeypatch, scope_set="gmail")
+
+    def _get_ok(access_token, message_id):
+        assert message_id == "m1"
+        return {"id": "m1", "thread_id": "t1", "from": "prof@example.com",
+                "to": "me@example.com", "subject": "Verifica",
+                "date": "Mon, 9 Nov 2026", "body": "Testo del messaggio."}
+    monkeypatch.setattr("app.services.google_api.gmail_get_message", _get_ok)
+
+    r = client.post("/actions",
+                    json={"kind": "google_gmail.get_message",
+                          "payload": {"message_id": "m1"},
+                          "idempotency_key": "gget-1"},
+                    headers=h)
+    assert r.status_code in (200, 201), r.text
+    action = r.json()["action"] if "action" in r.json() else r.json()
+    assert action["status"] == "executed"
+    assert action["result"]["body"] == "Testo del messaggio."
+    assert action["result"]["source"] == "google_gmail"
+
+    # livello 0: niente annullamento, e' sola lettura
+    r = client.post(f"/actions/{action['id']}/cancel", headers=h)
+    assert r.status_code == 409
+
+
+def test_gmail_scope_set_includes_readonly(client, google_env, monkeypatch):
+    """Il consenso gmail copre bozze (compose) e lettura inbox (readonly)."""
+    from app.services import google_connectors
+    scopes = google_connectors.SCOPE_SETS["gmail"]
+    assert "https://www.googleapis.com/auth/gmail.compose" in scopes
+    assert "https://www.googleapis.com/auth/gmail.readonly" in scopes
+
+
+def test_gmail_get_message_requires_message_id(client, google_env, monkeypatch):
+    u = make_user(client, "g-noid")
+    h = u["headers"]
+    _do_callback(client, h, monkeypatch, scope_set="gmail")
+    r = client.post("/actions",
+                    json={"kind": "google_gmail.get_message",
+                          "payload": {}, "idempotency_key": "gget-2"},
+                    headers=h)
+    assert r.status_code == 400
