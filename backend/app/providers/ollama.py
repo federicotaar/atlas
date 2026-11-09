@@ -123,7 +123,14 @@ class OllamaProvider(LLMProvider):
                               timeout=self.timeout)
             self._raise_for_status(resp)
             data = resp.json()
-        except ProviderError:
+        except ProviderError as exc:
+            # Modelli senza tool-calling nativo (ollama risponde 400
+            # "does not support tools"): UNA sola ritirata senza tools, poi
+            # il loop agente ripiega sul formato JSON nel testo (stage 3).
+            # Senza questo, un modello custom inserito dal pannello puo'
+            # rendere il provider inutilizzabile.
+            if tools and "does not support tools" in str(exc):
+                return self.chat(messages, None, False)
             raise
         except _NETWORK_ERRORS as exc:
             raise ProviderUnavailable(self.name, f"irraggiungibile ({type(exc).__name__})") from exc
