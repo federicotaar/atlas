@@ -538,12 +538,36 @@ class WebUIStack:
     scheduler e rilascia il lock (chiusura pulita del desktop/servizio)."""
 
     def __init__(self, session: WebUISession, app, scheduler,
-                 lock: AgentLock, config: ConfigAPI):
+                 lock: AgentLock, config: ConfigAPI, channels=None):
         self.session = session
         self.app = app
         self.scheduler = scheduler
         self.lock = lock
         self.config = config
+        # Ponte verso i connettori della dashboard (Telegram/WhatsApp):
+        # instrada l'inbound dei canali al loop agente. None nei test che
+        # costruiscono lo stack senza canali.
+        self.channels = channels
+
+    def list_jobs(self) -> list[dict]:
+        """Job dello scheduler agente (automazioni): lettura per la
+        dashboard desktop. Mai eccezioni verso il chiamante."""
+        try:
+            from datetime import datetime, timezone
+            out = []
+            for j in self.scheduler.list_jobs():
+                out.append({
+                    "id": j.id, "kind": j.kind, "schedule": j.schedule,
+                    "task": j.task, "channel": j.channel,
+                    "approved": j.approved, "paused": j.paused,
+                    "next_fire": (datetime.fromtimestamp(j.next_fire, tz=timezone.utc).isoformat()
+                                  if j.next_fire else None),
+                    "last_run": (datetime.fromtimestamp(j.last_run, tz=timezone.utc).isoformat()
+                                 if j.last_run else None),
+                })
+            return out
+        except Exception:
+            return []
 
     def shutdown(self) -> None:
         try:
@@ -634,7 +658,19 @@ def build_webui_stack(registry: ProviderRegistry, *, active: str,
                        lambda: state["active"],
                        lambda n: state.__setitem__("active", n))
     app = create_app(session, config)
-    return WebUIStack(session, app, scheduler, lock, config)
+
+    # Ponte connettori dashboard -> agente: le card Telegram/WhatsApp
+    # collegano i canali, questo hub li fa parlare col loop (strumenti,
+    # memoria, conferme). Allowlist: pairing store del workspace.
+    from .channels.desktop_bridge import DesktopChannelBridge
+    channels = DesktopChannelBridge(
+        workspace=workspace, registry=registry,
+        get_active=lambda: state["active"],
+        set_active=lambda n: state.__setitem__("active", n),
+        describe_registry=describe, ctx=ctx, store=store, log=log,
+        seal=seal_guard, secrets=secrets, scheduler=scheduler,
+        proactive=gate, max_steps=max_steps)
+    return WebUIStack(session, app, scheduler, lock, config, channels)
 
 
 def run_webui(registry: ProviderRegistry, *, active: str, workspace: Path,
