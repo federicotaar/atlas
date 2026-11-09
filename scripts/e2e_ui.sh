@@ -184,13 +184,24 @@ echo 'E2E UI: registrazione + salvataggio + riavvio + relogin UI + persistenza O
 # il browser di sistema, la cattura deve vedere quello.
 click_word /tmp/e2e-10-richiamo-relogin.png 'Dashboard' || { echo 'E2E UI: voce Dashboard NON trovata via OCR'; exit 1; }
 sleep 3
-# La sezione "Agente ATLAS" e' sotto la piega a 1280x800: scrollare in fondo
-# (rotella sul centro pagina) prima della cattura e del click OCR su "Apri".
+# La posizione della sezione "Agente ATLAS" dipende da quante card la
+# dashboard renderizza (pairing, migrazione, ...): NESSUNA posizione di
+# scroll fissa e' affidabile (run 42547608328: 12 scatti fissi in giu'
+# lasciavano il link "Apri" sopra il bordo visibile pur essendo
+# renderizzato). Si parte dall'alto e si scorre a passi, catturando finche'
+# il link non entra nel frame; il click avviene sul frame che lo contiene.
 xdotool mousemove 640 400
-for i in $(seq 1 12); do xdotool click 5; sleep 0.2; done
+for i in $(seq 1 30); do xdotool click 4; sleep 0.1; done
 sleep 1
-shot /tmp/e2e-11-dashboard.png
-click_word /tmp/e2e-11-dashboard.png 'Apri' || { echo 'E2E UI: link Apri agente NON trovato via OCR in dashboard'; exit 1; }
+found=0
+for i in $(seq 1 12); do
+  shot /tmp/e2e-11-dashboard.png
+  if ocr_has /tmp/e2e-11-dashboard.png 'Apri'; then found=1; break; fi
+  for j in 1 2 3 4; do xdotool click 5; sleep 0.15; done
+  sleep 0.5
+done
+[ "$found" = 1 ] || { echo 'E2E UI: link Apri agente NON trovato via OCR in dashboard (scansione completa)'; exit 1; }
+click_word /tmp/e2e-11-dashboard.png 'Apri' || { echo 'E2E UI: link Apri agente NON cliccabile nel frame catturato'; exit 1; }
 sleep 6
 import -window root /tmp/e2e-12-agente.png
 ocr_has /tmp/e2e-12-agente.png 'invia' || ocr_has /tmp/e2e-12-agente.png 'Scrivi ad ATLAS' || { echo 'E2E UI: click su Apri agente NON ha aperto la superficie agente (composer assente nel frame)'; exit 1; }
@@ -279,8 +290,14 @@ echo "E2E UI: click-through Agente + roundtrip plain-chat riuscito (bolla render
 click_word /tmp/e2e-13-agente-roundtrip.png 'Indietro' || { echo 'E2E UI: pulsante Indietro NON trovato nella superficie agente'; exit 1; }
 sleep 5
 xdotool mousemove 640 400
-for i in $(seq 1 12); do xdotool click 5; sleep 0.2; done
+for i in $(seq 1 30); do xdotool click 4; sleep 0.1; done
 sleep 1
-shot /tmp/e2e-14-ritorno.png
-ocr_has /tmp/e2e-14-ritorno.png 'Apri' || { echo 'E2E UI: ritorno alla dashboard NON riuscito (link Apri agente non visibile)'; exit 1; }
+found=0
+for i in $(seq 1 12); do
+  shot /tmp/e2e-14-ritorno.png
+  if ocr_has /tmp/e2e-14-ritorno.png 'Apri'; then found=1; break; fi
+  for j in 1 2 3 4; do xdotool click 5; sleep 0.15; done
+  sleep 0.5
+done
+[ "$found" = 1 ] || { echo 'E2E UI: ritorno alla dashboard NON riuscito (link Apri agente non visibile)'; exit 1; }
 echo 'E2E UI: ciclo completo dashboard -> agente -> dashboard OK'
