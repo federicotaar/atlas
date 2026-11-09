@@ -70,6 +70,17 @@ parte); segreti e allowlist SOLO in `.env`.
   Stato: codice, test e smoke locali; non ancora verificato end-to-end su
   account reale. Il canale ufficiale (Cloud API) richiede l'app Meta del
   proprietario e un tunnel avviato da lui.
+- **Nell'app desktop i canali si collegano dalle card della dashboard**
+  (token Telegram, QR WhatsApp): da quel momento i messaggi inbound vanno
+  all'agente (loop con strumenti, memoria e conferme), non alla pipeline
+  classica. L'allowlist si popola cosi': il proprietario entra con la
+  prova d'identita' del connettore (codice monouso mostrato solo nell'app
+  per Telegram; la self-chat per WhatsApp); chiunque altro scrive e resta
+  in silenzio, e la sua richiesta compare nella card **Richieste di
+  pairing** della dashboard, dove il proprietario lo approva o respinge.
+  Le approvazioni avvengono solo da quella superficie locale autenticata,
+  mai dalla chat. In server mode (senza stack agente in processo) le card
+  restano sulla pipeline classica v2.x e lo dicono.
 
 ### App desktop
 
@@ -97,8 +108,8 @@ proposte restano registrate ma non vengono eseguite ne' attivate.
 - **Agenti Researcher / Planner / Critic**: messaggi strutturati, limiti di passi, timeout e budget applicati (non solo registrati), ogni esecuzione tracciata. *Baseline rule-based dichiarata, non prova di capacità generale.*
 - **Prediction Engine**: stime a intervallo dalla velocità reale di completamento, rifiuto esplicito quando i dati sono troppo pochi, confronto con l'esito alla data di verifica (`GET /predictions/due` elenca le scadenze; `POST /predictions/evaluate-due` verifica automaticamente le stime automatiche misurando lo stato reale delle attività, mentre le stime manuali restano da verificare a mano), errore e punteggio di Brier, metriche di calibrazione. La verifica automatica è un meccanismo su dati sintetici: l'accuratezza longitudinale reale si misura solo con mesi di utilizzo reale.
 - **Action Engine**: unica porta per le azioni (gli agenti non eseguono mai direttamente). Livelli 0/1/2: lettura con permesso per connettore, modifiche reversibili eseguite e annullabili, azioni verso altri con anteprima esatta e conferma esplicita ogni volta. Chiave di idempotenza contro doppie esecuzioni, esito registrato, annullamento quando possibile. Connettori fittizi per i test (calendario sintetico, bozze email) e connettori Google reali opzionali (calendario in sola lettura, bozze Gmail; OAuth gratuito, token cifrati, setup in [`docs/CONNECTORS-GOOGLE.md`](docs/CONNECTORS-GOOGLE.md)): una bozza non è un invio e non esiste alcuna operazione di invio. I connettori reali sono validati solo con fixture sintetiche: nessun account reale è mai stato collegato.
-- **Connettore Telegram**: bot ufficiale creato con @BotFather; il token resta cifrato sul dispositivo dell'utente. L'accoppiamento è sempre avviato dall'utente dalla sua app Telegram, con QR o codice monouso valido 15 minuti (rigenerabile); ATLAS legge e risponde solo ai messaggi del proprietario accoppiato. Le risposte passano dalla stessa pipeline della chat web, citazioni incluse.
-- **Connettore WhatsApp**: rotta **non ufficiale** (bridge locale `wa-bridge`, Go/whatsmeow, protocollo multi-dispositivo): comporta rischio di restrizioni o ban del numero e l'avviso resta visibile in ogni stato dell'interfaccia. L'accoppiamento avviene **solo** con scansione QR avviata dall'utente, mai in background; ATLAS legge e risponde solo nella chat con se stessi, con dedup persistita contro replay e doppie risposte e anti-eco per id preassegnato. Sessione e credenziali restano sul dispositivo. *Non ancora collegato a un account reale: validato solo con fixture sintetiche e test locali.*
+- **Connettore Telegram**: bot ufficiale creato con @BotFather; il token resta cifrato sul dispositivo dell'utente. L'accoppiamento è sempre avviato dall'utente dalla sua app Telegram, con QR o codice monouso valido 15 minuti (rigenerabile). Nell'app desktop i messaggi arrivano all'agente (strumenti, memoria, conferme) e l'allowlist comprende il proprietario accoppiato più eventuali contatti approvati dalla card Richieste di pairing; gli sconosciuti non ricevono mai risposta. In server mode resta la pipeline classica con citazioni, solo proprietario.
+- **Connettore WhatsApp**: rotta **non ufficiale** (bridge locale `wa-bridge`, Go/whatsmeow, protocollo multi-dispositivo): comporta rischio di restrizioni o ban del numero e l'avviso resta visibile in ogni stato dell'interfaccia. L'accoppiamento avviene **solo** con scansione QR avviata dall'utente, mai in background. Nell'app desktop l'agente risponde nella chat con se stessi e nei DM 1:1 dei numeri approvati dalla card Richieste di pairing (allowlist centrale nell'hub; gruppi e canali mai catturati), con dedup persistita contro replay e doppie risposte e anti-eco per id preassegnato. In server mode resta solo self-chat con pipeline classica. Sessione e credenziali restano sul dispositivo. *Non ancora collegato a un account reale: validato solo con fixture sintetiche e test locali.*
 - **Time Machine**: ricostruisce lo stato a una data rileggendo i dati registrati fino a quel momento (gli eventi sono solo in aggiunta): cronologia, stato a una data, confronto tra due periodi, obiettivi abbandonati, attività ricorrenti. Le lacune (periodi senza dati) sono sempre mostrate, mai riempite.
 - **Dashboard web**: pannelli su progetti, scadenze, eventi recenti, previsioni, agenti, automazioni, memorie importanti e richieste di autorizzazione; ogni elemento si apre e mostra gli id dei dati da cui deriva.
 - **Interfacce**: API FastAPI, chat web React con dashboard, app desktop Tauri (Linux e macOS), CLI `atlas`, Docker Compose.
