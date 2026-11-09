@@ -220,6 +220,9 @@ export interface DashboardData {
     };
     automations: {
       connectors: Array<{ id: string; kind: string; status: string; derived_from: Record<string, string | null> }>;
+      agent_jobs: Array<{ id: number; kind: string; schedule: string; task: string; channel: string;
+                          approved: boolean; paused: boolean; next_fire: string | null; last_run: string | null;
+                          derived_from: Record<string, string | null> }>;
       engine_actions_by_status: Record<string, number>;
     };
     important_memories: Array<{
@@ -260,6 +263,14 @@ export interface TelegramStatus {
   paired: boolean;
   deep_link: string | null;
   pairing_expired: boolean;
+  agent: boolean;
+}
+
+export interface PairingRequest {
+  channel: string;
+  sender: string;
+  display: string;
+  ts: number;
 }
 
 export interface WhatsAppStatus {
@@ -269,6 +280,7 @@ export interface WhatsAppStatus {
   pushname: string | null;
   qr_state: "idle" | "qr" | "paired" | "expired";
   qr: string | null;
+  agent: boolean;
 }
 
 export interface MigrationProbe {
@@ -338,4 +350,13 @@ export const api = {
     req<WhatsAppStatus>("/connectors/whatsapp/connect", { method: "POST" }),
   disconnectWhatsApp: () =>
     req<void>("/connectors/whatsapp/disconnect", { method: "POST" }),
+  getPairingRequests: () => req<PairingRequest[]>("/connectors/pairing"),
+  approvePairing: (channel: string, sender: string) =>
+    req<{ approved: boolean }>("/connectors/pairing/approve", {
+      method: "POST", body: JSON.stringify({ channel, sender }),
+    }),
+  rejectPairing: (channel: string, sender: string) =>
+    req<{ rejected: boolean }>("/connectors/pairing/reject", {
+      method: "POST", body: JSON.stringify({ channel, sender }),
+    }),
 };
