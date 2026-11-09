@@ -609,8 +609,8 @@ def build_webui_stack(registry: ProviderRegistry, *, active: str,
 
     # Scheduler (stage 10): stesso jobs.db della CLI; l'atomic claim dello
     # store evita doppie esecuzioni se girano entrambe le interfacce.
-    from .agent.scheduler import JobStore, Scheduler
     from .agent.localzone import get_zone
+    from .agent.scheduler import JobStore, Scheduler
     job_store = JobStore(workspace / "data" / "jobs.db",
                          zone=get_zone(workspace))
     dispatchers: dict = {}
