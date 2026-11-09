@@ -134,6 +134,9 @@ export default function Dashboard({ onRelogin }: { onRelogin: () => void }) {
       <MigrationCard onRelogin={onRelogin} />
 
       <Section title="Automazioni">
+        {p.automations.timezone && (
+          <p className="muted">Fuso orario attivo: {p.automations.timezone}</p>
+        )}
         {p.automations.agent_jobs.map((j) => (
           <div className="item" key={`job-${j.id}`}>
             Agente — {j.task}{" "}
