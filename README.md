@@ -38,7 +38,11 @@ o va in rate limit.
 1. **Python 3.12+** e dipendenze: `pip install ./backend` (include CLI,
    canali Telegram/WhatsApp, web UI e scheduler).
 2. **Ollama**: installa da <https://ollama.com/download>, poi scarica un
-   modello: `ollama pull llama3.2:3b`.
+   modello: `ollama pull llama3.2:3b`. Scegli un modello CON tool-calling
+   nativo (llama3.2, qwen2.5 e simili): con un modello senza, la chat
+   funziona in modalita' solo testo ma gli strumenti dell'agente non sono
+   disponibili. Il modello si cambia anche dal pannello ⚙ della web UI
+   (campo "modello") senza toccare file.
 3. **Chiavi provider** (opzionali, per i cloud): crea `.env` dal root del
    repo (vedi `.env.example`) con ad esempio `GROQ_API_KEY=...`. Le chiavi
    non finiscono mai nel codice, nei log o nei messaggi.
