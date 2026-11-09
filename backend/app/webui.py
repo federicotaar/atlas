@@ -572,10 +572,19 @@ class WebUIStack:
                                   if j.next_fire else None),
                     "last_run": (datetime.fromtimestamp(j.last_run, tz=timezone.utc).isoformat()
                                  if j.last_run else None),
+                    "timezone": j.zone or self.scheduler.zone.key,
                 })
             return out
         except Exception:
             return []
+
+    @property
+    def timezone_name(self) -> str:
+        """Fuso orario attivo dell'installazione (per la dashboard)."""
+        try:
+            return self.scheduler.zone.key
+        except Exception:
+            return ""
 
     def shutdown(self) -> None:
         try:
