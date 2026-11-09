@@ -230,6 +230,7 @@ def _mount_agent(asgi_app, data_dir: Path):
     tg_svc.set_agent_bridge(stack.channels)
     wa_svc.set_agent_bridge(stack.channels)
     dash_svc.set_agent_jobs_provider(stack.list_jobs)
+    dash_svc.set_agent_timezone(stack.timezone_name)
     return stack
 
 
