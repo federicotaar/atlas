@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { api, apiBase, type DashboardData } from "../api";
 import TelegramCard from "./TelegramCard";
 import WhatsAppCard from "./WhatsAppCard";
+import PairingCard from "./PairingCard";
 import MigrationCard from "./MigrationCard";
 
 function Provenance({ data }: { data: Record<string, unknown> }) {
@@ -121,7 +122,7 @@ export default function Dashboard({ onRelogin }: { onRelogin: () => void }) {
         </div>
         {/* Stessa finestra: target=_blank e' un no-op nel webview Tauri
             (provato dal click-through E2E in CI). La pagina agente offre
-            "indietro" (history.back) per tornare alla dashboard. */}
+            "Indietro" (history.back) per tornare alla dashboard. */}
         <a className="ghost" href={`${apiBase()}/agent/`}>
           Apri l'agente
         </a>
@@ -129,16 +130,30 @@ export default function Dashboard({ onRelogin }: { onRelogin: () => void }) {
 
       <TelegramCard />
       <WhatsAppCard />
+      <PairingCard />
       <MigrationCard onRelogin={onRelogin} />
 
       <Section title="Automazioni">
+        {p.automations.agent_jobs.map((j) => (
+          <div className="item" key={`job-${j.id}`}>
+            Agente — {j.task}{" "}
+            <span className="muted">
+              ({j.kind === "cron" ? `ricorrente: ${j.schedule}` : `una volta: ${j.schedule}`}
+              {j.paused ? ", in pausa" : ""}
+              {j.next_fire && <> — prossima: {new Date(j.next_fire).toLocaleString("it-IT")}</>})
+            </span>
+            <Provenance data={j.derived_from} />
+          </div>
+        ))}
         {p.automations.connectors.map((c) => (
           <div className="item" key={c.id}>
-            Connettore {c.kind} — {c.status}
+            Connettore {c.kind} — {c.status} <span className="muted">(dati della versione precedente)</span>
             <Provenance data={c.derived_from} />
           </div>
         ))}
-        {p.automations.connectors.length === 0 && <p className="muted">Nessun connettore.</p>}
+        {p.automations.agent_jobs.length === 0 && p.automations.connectors.length === 0 && (
+          <p className="muted">Nessuna automazione. Chiedi all'agente di ricordarti qualcosa per crearne una.</p>
+        )}
       </Section>
 
       <Section title="Memorie importanti">
