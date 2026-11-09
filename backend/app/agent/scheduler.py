@@ -6,8 +6,11 @@ dalla spec: "APScheduler or equivalent"). Sintassi cron a 5 campi
 (minuto ora giorno mese giorno-settimana) con *, liste, intervalli, step
 */n e a-b/n, nomi di mesi (jan-dec) e giorni (mon-sun); domenica = 0 o 7.
 Semantica Vixie per giorno-del-mese + giorno-della-settimana entrambi
-ristretti: vale l'OR. Orari in ora locale; i casi limite di cambio ora
-legale non sono gestiti (documentato).
+ristretti: vale l'OR. Orari nel fuso esplicito dell'installazione (vedi
+localzone): configurabile e persistito, mai ereditato in silenzio dal
+processo. Cambio ora legale con regole deterministiche documentate in
+localzone (orario inesistente -> spostato in avanti; ambiguo -> prima
+occorrenza; mai doppie esecuzioni).
 
 Approvazioni (spec sez. 8): i job creati dall'UTENTE (CLI o chat) sono
 attivi subito; i job RICORRENTI proposti dall'agente (tool schedule_job)
@@ -26,7 +29,18 @@ import sqlite3
 import threading
 import time
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from pathlib import Path
+from zoneinfo import ZoneInfo
+
+from .localzone import (FALLBACK_ZONE, detect_system_zone, epoch_to_wall,
+                        wall_to_epoch)
+
+
+def _default_zone() -> ZoneInfo:
+    """Fuso del sistema quando il chiamante non ne passa uno esplicito.
+    Le superfici dell'app passano sempre il fuso configurato (localzone)."""
+    return ZoneInfo(detect_system_zone() or FALLBACK_ZONE)
 
 _MONTHS = {m: i + 1 for i, m in enumerate(
     ("jan", "feb", "mar", "apr", "may", "jun",
@@ -79,38 +93,38 @@ def parse_cron(expr: str) -> list[set[int]]:
             for i, (f, (lo, hi)) in enumerate(zip(fields, _FIELD_BOUNDS))]
 
 
-def cron_match(expr: str, when: float) -> bool:
+def cron_match(expr: str, when: float, zone: ZoneInfo | None = None) -> bool:
+    zone = zone or _default_zone()
     minute, hour, dom, month, dow = parse_cron(expr)
-    tm = time.localtime(when)
-    cron_dow = (tm.tm_wday + 1) % 7  # python: lun=0; cron: dom=0
-    if tm.tm_min not in minute or tm.tm_hour not in hour or tm.tm_mon not in month:
+    tm = epoch_to_wall(when, zone)
+    cron_dow = (tm.weekday() + 1) % 7  # python: lun=0; cron: dom=0
+    if tm.minute not in minute or tm.hour not in hour or tm.month not in month:
         return False
     fields = expr.split()
     dom_restricted = fields[2] != "*"
     dow_restricted = fields[4] != "*"
-    dom_ok = tm.tm_mday in dom
+    dom_ok = tm.day in dom
     dow_ok = cron_dow in dow
     if dom_restricted and dow_restricted:
         return dom_ok or dow_ok  # semantica Vixie
     return dom_ok and dow_ok
 
 
-def next_fire(expr: str, after: float) -> float | None:
-    """Prossimo istante (> after) in cui l'espressione scatta. None se mai
-    entro un anno (es. 31 febbraio)."""
+def next_fire(expr: str, after: float, zone: ZoneInfo | None = None) -> float | None:
+    """Prossimo istante (> after) in cui l'espressione scatta nel fuso dato.
+    None se mai entro un anno (es. 31 febbraio)."""
+    zone = zone or _default_zone()
     minute, hour, dom, month, dow = parse_cron(expr)
     fields = expr.split()
     dom_restricted = fields[2] != "*"
     dow_restricted = fields[4] != "*"
-    day = time.localtime(after)
-    base = time.mktime((day.tm_year, day.tm_mon, day.tm_mday, 0, 0, 0, 0, 0, -1))
+    start = epoch_to_wall(after, zone).date()
     for offset in range(0, 367):
-        day_start = base + offset * 86400
-        tm = time.localtime(day_start)
-        if tm.tm_mon not in month:
+        day = start + timedelta(days=offset)
+        if day.month not in month:
             continue
-        cron_dow = (tm.tm_wday + 1) % 7
-        dom_ok = tm.tm_mday in dom
+        cron_dow = (day.weekday() + 1) % 7
+        dom_ok = day.day in dom
         dow_ok = cron_dow in dow
         if dom_restricted and dow_restricted:
             day_ok = dom_ok or dow_ok
@@ -120,8 +134,8 @@ def next_fire(expr: str, after: float) -> float | None:
             continue
         for h in sorted(hour):
             for m in sorted(minute):
-                ts = time.mktime((tm.tm_year, tm.tm_mon, tm.tm_mday,
-                                  h, m, 0, 0, 0, -1))
+                ts = wall_to_epoch(
+                    datetime(day.year, day.month, day.day, h, m), zone)
                 if ts > after:
                     return ts
     return None
@@ -146,8 +160,9 @@ class Job:
 class JobStore:
     """Persistenza SQLite dei jobs (workspace/data/jobs.db)."""
 
-    def __init__(self, path: Path):
+    def __init__(self, path: Path, zone: ZoneInfo | None = None):
         path.parent.mkdir(parents=True, exist_ok=True)
+        self._zone = zone or _default_zone()
         self._db = sqlite3.connect(str(path), check_same_thread=False)
         self._db.row_factory = sqlite3.Row
         self._lock = threading.Lock()
@@ -172,27 +187,32 @@ class JobStore:
                    next_fire=row["next_fire"], last_run=row["last_run"],
                    created=row["created"])
 
+    @property
+    def zone(self) -> ZoneInfo:
+        return self._zone
+
     @staticmethod
-    def _compute_next(kind: str, schedule: str, now: float) -> float | None:
+    def _compute_next(kind: str, schedule: str, now: float,
+                      zone: ZoneInfo) -> float | None:
         if kind == "cron":
-            nxt = next_fire(schedule, now)
+            nxt = next_fire(schedule, now, zone)
             if nxt is None:
                 raise ValueError(f"cron senza occorrenze entro un anno: {schedule}")
             return nxt
         if kind == "once":
             try:
-                ts = time.mktime(time.strptime(schedule.strip(), "%Y-%m-%d %H:%M"))
+                parsed = time.strptime(schedule.strip(), "%Y-%m-%d %H:%M")
             except ValueError as exc:
                 raise ValueError(
                     f"data/ora non valida (atteso 'YYYY-MM-DD HH:MM'): {schedule}") from exc
-            return ts
+            return wall_to_epoch(datetime(*parsed[:6]), zone)
         raise ValueError(f"kind non valido: {kind}")
 
     def add(self, *, kind: str, schedule: str, task: str, channel: str,
             sender: str, source: str, now: float | None = None) -> Job:
         now = time.time() if now is None else now
         # Validazione preventiva: un job mai eseguibile non entra nello store.
-        nxt = self._compute_next(kind, schedule, now)
+        nxt = self._compute_next(kind, schedule, now, self._zone)
         # Spec sez. 8: i job RICORRENTI dell'agente richiedono approvazione.
         approved = not (source == "agent" and kind == "cron")
         with self._lock:
@@ -235,7 +255,7 @@ class JobStore:
         if job is None:
             return None
         now = time.time() if now is None else now
-        nxt = self._compute_next(job.kind, job.schedule, now)
+        nxt = self._compute_next(job.kind, job.schedule, now, self._zone)
         return self._set(job_id, paused=0, next_fire=nxt)
 
     def approve(self, job_id: int, now: float | None = None) -> Job | None:
@@ -243,7 +263,7 @@ class JobStore:
         if job is None:
             return None
         now = time.time() if now is None else now
-        nxt = self._compute_next(job.kind, job.schedule, now)
+        nxt = self._compute_next(job.kind, job.schedule, now, self._zone)
         return self._set(job_id, approved=1, next_fire=nxt)
 
     def delete(self, job_id: int) -> bool:
@@ -277,7 +297,7 @@ class JobStore:
             if fresh is None or fresh.next_fire != job.next_fire:
                 continue  # gia' preso da un altro processo
             self._set(job.id, last_run=now,
-                      next_fire=next_fire(job.schedule, now))
+                      next_fire=next_fire(job.schedule, now, self._zone))
             claimed.append(job)
         return claimed
 
@@ -289,7 +309,7 @@ class JobStore:
             self.delete(job_id)  # i promemoria una tantum si consumano
             return
         self._set(job_id, last_run=ran_at,
-                  next_fire=next_fire(job.schedule, ran_at))
+                  next_fire=next_fire(job.schedule, ran_at, self._zone))
 
 
 class Scheduler:
@@ -312,6 +332,16 @@ class Scheduler:
         self._ticks = 0
 
     # Facciata usata dai comandi (/schedule, /jobs) e dal tool schedule_job.
+
+    @property
+    def zone(self) -> ZoneInfo:
+        return self._store.zone
+
+    def set_zone(self, zone: ZoneInfo) -> None:
+        """Cambio di fuso a caldo (comando /timezone): i prossimi calcoli
+        usano il nuovo fuso; i next_fire gia' salvati restano epoch assoluti
+        e vengono riallineati alla prossima esecuzione/resume."""
+        self._store._zone = zone
 
     def add_job(self, **kwargs) -> Job:
         return self._store.add(**kwargs)
@@ -363,14 +393,18 @@ class Scheduler:
         self._stop.set()
 
 
-def parse_schedule_phrase(registry, active: str, phrase: str) -> dict:
+def parse_schedule_phrase(registry, active: str, phrase: str,
+                          zone: ZoneInfo | None = None) -> dict:
     """Frase in linguaggio naturale -> {"kind", "schedule", "task"}.
     Usa il provider attivo con un prompt stretto (risposta = solo JSON);
-    solleva ValueError se il risultato non e' valido o non verificabile."""
+    solleva ValueError se il risultato non e' valido o non verificabile.
+    Gli orari sono nel fuso esplicito dell'installazione, dichiarato al
+    modello nel prompt."""
     import json
     import re
 
-    now = time.strftime("%Y-%m-%d %H:%M (%A)")
+    zone = zone or _default_zone()
+    now = datetime.now(zone).strftime("%Y-%m-%d %H:%M (%A)")
     prompt = (
         "Converti questa richiesta di schedulazione in JSON puro, nient'altro. "
         "Formati accettati:\n"
@@ -379,7 +413,7 @@ def parse_schedule_phrase(registry, active: str, phrase: str) -> dict:
         '{"kind":"once","schedule":"<YYYY-MM-DD HH:MM>","task":"<cosa fare>"}\n'
         "Regole: niente testo fuori dal JSON; task conserva l'intera azione "
         "richiesta; per 'ogni giorno feriale alle 8' usa '0 8 * * 1-5'. "
-        f"Ora corrente dell'utente: {now}.\n"
+        f"Ora corrente dell'utente: {now}; fuso orario: {zone.key}.\n"
         f"Richiesta: {phrase}")
     response = registry.chat_with_fallback(
         active, [{"role": "user", "content": prompt}], stream=False)
@@ -397,5 +431,5 @@ def parse_schedule_phrase(registry, active: str, phrase: str) -> dict:
     if kind not in ("cron", "once") or not schedule or not task:
         raise ValueError("non riesco a interpretare la schedulazione")
     # Validazione vera: il job deve essere eseguibile, non solo ben formato.
-    JobStore._compute_next(kind, schedule, time.time())
+    JobStore._compute_next(kind, schedule, time.time(), zone)
     return {"kind": kind, "schedule": schedule, "task": task}
