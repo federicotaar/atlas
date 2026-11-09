@@ -322,6 +322,10 @@ jobs:
           # Push NON forzato con retry: due run concorrenti non si
           # sovrascrivono piu' gli screenshot a vicenda.
           for attempt in 1 2 3; do
+            # La build lascia file nel working tree (es. tsconfig.tsbuildinfo):
+            # pulire prima del checkout o il cambio branch abortisce.
+            git reset --hard HEAD >/dev/null 2>&1 || true
+            git clean -fdx >/dev/null 2>&1 || true
             if git fetch origin ci-artifacts; then
               git checkout -B ci-artifacts-local origin/ci-artifacts
             else
