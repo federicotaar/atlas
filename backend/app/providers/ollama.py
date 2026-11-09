@@ -4,8 +4,11 @@ cambia solo base_url e presenza della chiave.
 
 Tool-call: Ollama supporta il formato nativo {type: function, function: {...}}
 per i modelli capaci; le chiamate in uscita vengono normalizzate in ToolCall.
-I modelli piccoli senza tool-calling nativo useranno il formato JSON nel testo
-(fallback del loop agente, stage 3).
+Modelli SENZA tool-calling nativo (400 "does not support tools"): il provider
+riprova UNA volta senza tools — la chat funziona in modalita' plain (solo
+testo), ma GLI STRUMENTI NON SONO DISPONIBILI con quel modello: niente
+esecuzione tool finche' non si sceglie un modello capace (es. llama3.2,
+qwen2.5). Nessuna pretesa di fallback JSON-in-testo: non implementato.
 """
 from __future__ import annotations
 
@@ -149,29 +152,43 @@ class OllamaProvider(LLMProvider):
     def _stream(self, payload: dict[str, Any]) -> ChatStream:
         def events() -> Iterator[Any]:
             final: dict[str, Any] | None = None
-            try:
-                with httpx.stream("POST", self._url("/api/chat"), headers=self._headers(),
-                                  json=payload, timeout=self.timeout) as resp:
-                    self._raise_for_status(resp)
-                    for line in resp.iter_lines():
-                        if not line.strip():
-                            continue
-                        try:
-                            chunk = json.loads(line)
-                        except json.JSONDecodeError:
-                            continue
-                        message = chunk.get("message") or {}
-                        if chunk.get("done"):
-                            final = chunk
-                        delta = message.get("content") or ""
-                        if delta:
-                            yield delta
-            except ProviderError:
-                raise
-            except _NETWORK_ERRORS as exc:
-                raise ProviderUnavailable(self.name, f"irraggiungibile ({type(exc).__name__})") from exc
-            except httpx.HTTPError as exc:
-                raise ProviderError(self.name, f"errore HTTP ({type(exc).__name__})") from exc
+            current = payload
+            retried = False
+            emitted = False
+            while True:
+                try:
+                    with httpx.stream("POST", self._url("/api/chat"), headers=self._headers(),
+                                      json=current, timeout=self.timeout) as resp:
+                        self._raise_for_status(resp)
+                        for line in resp.iter_lines():
+                            if not line.strip():
+                                continue
+                            try:
+                                chunk = json.loads(line)
+                            except json.JSONDecodeError:
+                                continue
+                            message = chunk.get("message") or {}
+                            if chunk.get("done"):
+                                final = chunk
+                            delta = message.get("content") or ""
+                            if delta:
+                                emitted = True
+                                yield delta
+                    break
+                except ProviderError as exc:
+                    # Modelli senza tool-calling nativo (400 "does not
+                    # support tools"): UNA ritirata senza tools, solo se
+                    # nessun delta e' gia' uscito (mai output duplicato).
+                    if (not retried and not emitted and current.get("tools")
+                            and "does not support tools" in str(exc)):
+                        retried = True
+                        current = {k: v for k, v in current.items() if k != "tools"}
+                        continue
+                    raise
+                except _NETWORK_ERRORS as exc:
+                    raise ProviderUnavailable(self.name, f"irraggiungibile ({type(exc).__name__})") from exc
+                except httpx.HTTPError as exc:
+                    raise ProviderError(self.name, f"errore HTTP ({type(exc).__name__})") from exc
             if final is not None:
                 yield ProviderResponse(
                     text="",  # riempito da ChatStream con i delta accumulati
