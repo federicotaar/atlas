@@ -12,8 +12,9 @@ collegato dall'installazione di base.
 ## Cosa fa (e cosa non fa)
 
 - `google_calendar`: SOLA LETTURA (scope `calendar.readonly`), livello 0.
-- `google_gmail`: crea BOZZE (scope `gmail.compose`), livello 1; annullare
-  l'azione elimina la bozza. **Non esiste alcuna operazione di invio nel
+- `google_gmail`: legge la casella (scope `gmail.readonly`, livello 0:
+  lista messaggi e singolo messaggio) e crea BOZZE (scope
+  `gmail.compose`, livello 1); annullare l'azione elimina la bozza. **Non esiste alcuna operazione di invio nel
   codice.** Nota sul permesso: lo scope Google `gmail.compose` e definito
   da Google come "Gestisci bozze e invia email", quindi il consenso OAuth
   mostra anche l'invio; ATLAS non lo usa mai (nessuna chiamata di invio
@@ -48,13 +49,14 @@ nel `.env` locale: non vanno mai in chat, nel repo o in un sito pubblico.
    token ATLAS -> apri `auth_url` nel browser e concedi.
 2. Google torna su `/connectors/google/callback`: token cifrati salvati,
    connettore autorizzato.
-3. Azioni: `google_calendar.list_events` (livello 0) e
-   `google_gmail.create_draft` (livello 1, con anteprima esatta e
+3. Azioni: `google_calendar.list_events` (livello 0),
+   `google_gmail.list_messages` / `google_gmail.get_message` (livello 0)
+   e `google_gmail.create_draft` (livello 1, con anteprima esatta e
    annullamento che elimina la bozza).
 
 ## Verifica
 
-I test (`tests/test_google_connectors.py`, 14 test) coprono OAuth (state
+I test (`tests/test_google_connectors.py`, 18 test) coprono OAuth (state
 firmato, scadenza, fail-closed senza chiave), cifratura round-trip e chiave
 sbagliata, mapping eventi, bozza + annullamento, isolamento utenti, 401/403.
 Le chiamate Google sono sostituite con monkeypatch e fixture sintetiche:
