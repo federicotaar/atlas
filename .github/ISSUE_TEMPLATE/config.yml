@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Sicurezza e privacy
+    url: https://github.com/federicotaar/atlas/blob/main/docs/SECURITY.md
+    about: Leggi il modello di sicurezza prima di segnalare problemi di sicurezza.
