@@ -1,3 +1,9 @@
+"""Router `/projects`: i progetti dell'utente.
+
+Creazione, elenco e dettaglio. Ogni progetto raccoglie eventi, memorie
+collegate e previsioni; lo stato mostrato altrove (dashboard, Time
+Machine) deriva sempre da questi dati registrati.
+"""
 import uuid
 
 from fastapi import APIRouter, Depends
