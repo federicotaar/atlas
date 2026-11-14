@@ -39,6 +39,8 @@ packages = ["app", "app.routers", "app.services"]
 
 [tool.ruff]
 line-length = 120
+# Le migrazioni Alembic sono file generati: il lint non le tocca.
+extend-exclude = ["alembic"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I"]
