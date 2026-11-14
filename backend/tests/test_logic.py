@@ -120,3 +120,19 @@ def test_classify_declarative_with_question_word_is_new_info():
 def test_cosine_zero_vector_is_zero_not_error():
     e = LocalHashEmbedder()
     assert cosine(e.embed(""), e.embed("test")) == 0.0
+
+
+def test_embedder_bigrams_make_word_order_matter():
+    e = LocalHashEmbedder()
+    ab = e.embed("cane gatto")
+    ba = e.embed("gatto cane")
+    assert ab == e.embed("cane gatto")
+    assert cosine(ab, ba) < 1.0
+
+
+def test_extractive_answer_lists_memories_with_citations():
+    from app.services.generation import ExtractiveGenerator
+    out = ExtractiveGenerator().answer("q?", [{"content": "il deploy e venerdi"},
+                                              {"content": "il server e Oracle"}])
+    assert "1. il deploy e venerdi [M1]" in out
+    assert "2. il server e Oracle [M2]" in out
