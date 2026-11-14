@@ -223,3 +223,25 @@ def test_level0_not_cancellable(client):
     }, headers=h)
     a = r.json()
     assert client.post(f"/actions/{a['id']}/cancel", headers=h).status_code == 409
+
+
+def test_create_event_rejects_invalid_dates(client):
+    """Date non ISO o intervallo rovesciato: 400 invalid_payload, non un 500,
+    e nessuna azione resta registrata."""
+    u = make_user(client, "act-bad-dates")
+    h = u["headers"]
+    _connector(client, h)
+    start = (datetime.now(timezone.utc) + timedelta(days=3)).replace(microsecond=0)
+    for key, starts, ends in [
+        ("bad-dt", "not-a-date", start.isoformat()),
+        ("rev-dt", start.isoformat(), (start - timedelta(hours=1)).isoformat()),
+        ("eq-dt", start.isoformat(), start.isoformat()),
+    ]:
+        r = client.post("/actions", json={
+            "kind": "calendar.create_event",
+            "payload": {"title": "x", "starts_at": starts, "ends_at": ends},
+            "idempotency_key": key,
+        }, headers=h)
+        assert r.status_code == 400, r.text
+        assert r.json()["error"]["code"] == "invalid_payload"
+    assert client.get("/actions", headers=h).json() == []
