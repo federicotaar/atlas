@@ -1,3 +1,10 @@
+"""Autenticazione e password di ATLAS.
+
+Password hashate con Argon2 (mai in chiaro, mai loggate), sessioni come
+JWT firmati con `ATLAS_JWT_SECRET` e scadenza configurabile. Il bearer e'
+opzionale a livello di schema: e' la dipendenza `get_current_user` a
+rifiutare le richieste senza token valido con un `AtlasError` 401.
+"""
 import uuid
 from datetime import datetime, timedelta, timezone
 
