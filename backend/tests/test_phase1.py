@@ -158,3 +158,17 @@ def test_project_status_without_projects(client):
     r = client.post("/ask", json={"text": "A che punto sono con il progetto?"}, headers=u["headers"])
     assert r.status_code == 200
     assert "Non lo so" in r.json()["answer"]
+
+
+def test_project_status_mentions_need_word_boundaries(client):
+    """Un progetto "app" non combacia con "applicazione": i nomi si
+    riconoscono solo a parole intere, altrimenti una sottostringa casuale
+    tirerebbe in ballo il progetto sbagliato."""
+    u = make_user(client, "status-boundary")
+    h = u["headers"]
+    client.post("/projects", json={"name": "app"}, headers=h)
+    client.post("/projects", json={"name": "Mercurio"}, headers=h)
+    r = client.post("/ask", json={"text": "A che punto sono con l'applicazione?"}, headers=h)
+    assert "Non lo so" in r.json()["answer"]
+    r = client.post("/ask", json={"text": "A che punto sono con app?"}, headers=h)
+    assert "Progetto app" in r.json()["answer"]
