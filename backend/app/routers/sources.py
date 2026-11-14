@@ -1,3 +1,10 @@
+"""Router `/sources`: registro delle fonti.
+
+Ogni memoria punta a una fonte (una chat, un documento, un connettore).
+`require_source` verifica che la fonte appartenga all'utente prima di
+legarla a nuovi dati; `get_or_create_chat_source` fornisce la fonte
+standard delle conversazioni con l'assistente.
+"""
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
