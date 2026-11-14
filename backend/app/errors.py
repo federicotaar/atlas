@@ -1,3 +1,12 @@
+"""Errori API di ATLAS: forma unica e codici stabili.
+
+Ogni risposta di errore ha la stessa struttura
+`{"error": {"code": ..., "message": ...}}`, cosi il frontend puo' fare
+switch sul codice invece di leggere messaggi. `AtlasError` e' l'eccezione
+che i router e i servizi sollevano; qui viene convertita in JSON con lo
+status scelto da chi la lancia. Anche gli errori di validazione Pydantic
+(422) passano per la stessa forma, con i primi dettagli utili.
+"""
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
