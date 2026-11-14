@@ -8,7 +8,7 @@
 
 ![status](https://img.shields.io/badge/status-fase%205%20di%206-orange)
 ![cost](https://img.shields.io/badge/costo-0%E2%82%AC%20tutto%20locale-brightgreen)
-![tests](https://img.shields.io/badge/test-223%20verdi-brightgreen)
+![tests](https://img.shields.io/badge/test-249%20verdi-brightgreen)
 
 </div>
 
@@ -42,7 +42,8 @@ esce dalla macchina senza permesso.
 
 Lo stato onesto di ogni fase è in
 [`docs/ROADMAP-STATUS.md`](docs/ROADMAP-STATUS.md): le fasi 0–6 sono
-implementate e testate in CI (242 test backend, frontend, job Ollama reale,
+implementate e testate in CI (262 test backend raccolti — 249 verdi in locale
+su SQLite, verificato il 2026-11-14 — più frontend, job Ollama reale,
 compose e smoke desktop end-to-end). La fase 6 si chiude solo con la beta
 con persone reali, che **resta aperta**; il Counterfactual Engine (ricerca
 facoltativa) **non è implementato**.
