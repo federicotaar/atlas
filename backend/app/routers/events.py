@@ -1,3 +1,10 @@
+"""Router `/events`: gli eventi dei progetti.
+
+POST aggiunge un evento (data, tipo, descrizione) a un progetto
+dell'utente; GET elenca gli eventi in ordine. Gli eventi sono solo in
+aggiunta: lo stato ricostruito si ottiene rileggendoli, mai
+sovrascrivendoli.
+"""
 import uuid
 from datetime import datetime
 
