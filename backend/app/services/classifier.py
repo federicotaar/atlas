@@ -41,8 +41,6 @@ def classify(text: str) -> str:
     if "?" in t or any(t.startswith(k) for k in QUESTION_HINTS):
         return "question"
     # frase dichiarativa senza punto interrogativo: la trattiamo come nuova informazione
-    if any(k in t for k in QUESTION_HINTS):
-        return "question"
     return "new_info"
 
 
