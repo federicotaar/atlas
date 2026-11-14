@@ -1,3 +1,11 @@
+"""Modelli SQLAlchemy di ATLAS.
+
+Tabelle per utenti, fonti, memorie (append-only: le correzioni sono nuove
+righe che sostituiscono le precedenti), progetti, eventi, grafo di entita
+e relazioni, previsioni, agenti, azioni e connettori. `EmbeddingVector`
+rende il tipo vettore portabile: pgvector su Postgres, lista JSON su
+SQLite, cosi i test girano senza servizi esterni.
+"""
 import uuid
 from datetime import date, datetime
 
