@@ -115,3 +115,8 @@ def test_combine_score_weights():
 def test_classify_declarative_with_question_word_is_new_info():
     assert classify("Mi chiedo quando parte il treno") == "new_info"
     assert classify("Ho capito come funziona il deploy") == "new_info"
+
+
+def test_cosine_zero_vector_is_zero_not_error():
+    e = LocalHashEmbedder()
+    assert cosine(e.embed(""), e.embed("test")) == 0.0
