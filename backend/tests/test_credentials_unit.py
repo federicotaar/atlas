@@ -1,0 +1,33 @@
+"""Crittografia credenziali: chiave mancante o sbagliata deve fallire chiusa."""
+import pytest
+from cryptography.fernet import Fernet
+
+from app.errors import AtlasError
+from app.services.credentials import decrypt_secret, encrypt_secret
+
+KEY = Fernet.generate_key().decode()
+
+
+def test_roundtrip():
+    enc = encrypt_secret("segreto", KEY)
+    assert enc != "segreto"
+    assert decrypt_secret(enc, KEY) == "segreto"
+
+
+def test_missing_key_fails_closed():
+    with pytest.raises(AtlasError) as exc:
+        encrypt_secret("segreto", "")
+    assert exc.value.code == "credentials_key_missing"
+
+
+def test_invalid_key_format():
+    with pytest.raises(AtlasError) as exc:
+        encrypt_secret("segreto", "not-a-fernet-key")
+    assert exc.value.code == "credentials_key_invalid"
+
+
+def test_wrong_key_cannot_decrypt():
+    enc = encrypt_secret("segreto", KEY)
+    with pytest.raises(AtlasError) as exc:
+        decrypt_secret(enc, Fernet.generate_key().decode())
+    assert exc.value.code == "credentials_decrypt_failed"
