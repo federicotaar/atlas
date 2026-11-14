@@ -110,3 +110,8 @@ def test_combine_score_weights():
     relevance, score = combine_score(1.0, 1.0, 1.0, 1.0, 0.55, 0.25, 0.1, 0.1)
     assert relevance == 0.8
     assert abs(score - 1.0) < 1e-9
+
+
+def test_classify_declarative_with_question_word_is_new_info():
+    assert classify("Mi chiedo quando parte il treno") == "new_info"
+    assert classify("Ho capito come funziona il deploy") == "new_info"
