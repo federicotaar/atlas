@@ -269,7 +269,14 @@ def confirm_action(db: Session, action: EngineAction) -> EngineAction:
                          status=409)
     now = datetime.now(timezone.utc)
     action.confirmed_at = now
-    action.result = _execute(db, action)
+    try:
+        action.result = _execute(db, action)
+    except AtlasError:
+        # Come in request_action: l'esecuzione fallita resta registrata
+        # invece di lasciare l'azione per sempre in attesa di conferma.
+        action.status = "failed"
+        db.commit()
+        raise
     action.status = "executed"
     action.executed_at = now
     db.commit()
