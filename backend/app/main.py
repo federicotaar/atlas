@@ -1,3 +1,11 @@
+"""Punto di ingresso del backend ATLAS.
+
+Costruisce l'app FastAPI: CORS per il frontend, gestori d'errore centrali
+(eccetto la forma unica in `errors.py`) e tutti i router (auth, memorie,
+progetti, eventi, fonti, agenti, previsioni, azioni, connettori).
+All'avvio verifica il collegamento al database cosi un backend senza DB
+fallisce subito e non alla prima richiesta.
+"""
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text as sql_text
