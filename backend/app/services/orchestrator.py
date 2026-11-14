@@ -4,6 +4,7 @@ future) e registra la conversazione. Gli agenti (fase 2) si agganciano qui.
 
 Risposte di progetto oneste (spec 5A esempio): elenca solo cio che risulta
 dagli eventi e dalle memorie; non inventa progressi."""
+import re
 import uuid
 
 from sqlalchemy.orm import Session
@@ -64,9 +65,12 @@ def _save_turn(db: Session, conv: Conversation, user_text: str, answer: str) -> 
 
 
 def _mentioned_projects(db: Session, user: User, text: str) -> list[Project]:
-    low = text.lower()
     projects = db.query(Project).filter(Project.user_id == user.id).all()
-    mentioned = [p for p in projects if p.name.lower() in low]
+    # Nomi riconosciuti a parole intere: un progetto "app" non deve
+    # combaciare con "applicazione", "d'appoggio" e simili.
+    low = text.lower()
+    mentioned = [p for p in projects
+                 if re.search(r"(?<!\w)" + re.escape(p.name.lower()) + r"(?!\w)", low)]
     if mentioned:
         return mentioned
     active = [p for p in projects if p.status == "active"]
