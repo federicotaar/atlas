@@ -1,3 +1,10 @@
+"""Schemi Pydantic delle API di ATLAS.
+
+Definisce cosa entra e cosa esce: registrazione e login, memorie (con
+fonte, confidenza e stato di sostituzione), progetti, eventi, fonti,
+previsioni ad intervallo, agenti e azioni. La validazione dei limiti
+(lunghezze, intervalli, valori ammessi) vive qui, prima del database.
+"""
 import uuid
 from datetime import date, datetime
 from typing import Literal
