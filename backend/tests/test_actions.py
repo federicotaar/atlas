@@ -245,3 +245,32 @@ def test_create_event_rejects_invalid_dates(client):
         assert r.status_code == 400, r.text
         assert r.json()["error"]["code"] == "invalid_payload"
     assert client.get("/actions", headers=h).json() == []
+
+
+def test_confirm_failure_is_recorded(client, monkeypatch):
+    """Se l'esecuzione fallisce alla conferma, l'azione resta 'failed'
+    (invece di restare per sempre in attesa) e l'errore arriva al chiamante."""
+    from app.errors import AtlasError
+    from app.services import actions as actions_svc
+
+    u = make_user(client, "act-confirm-fail")
+    h = u["headers"]
+    _connector(client, h, kind="email_mock")
+    r = client.post("/actions", json={
+        "kind": "email.create_draft",
+        "payload": {"to": "a@b.c", "subject": "s", "body": "b"},
+        "idempotency_key": "cf1",
+    }, headers=h)
+    assert r.status_code == 201, r.text
+    assert r.json()["status"] == "pending_confirm"
+    action_id = r.json()["id"]
+
+    def _boom(db, action):
+        raise AtlasError("mock_failure", "Connettore in errore.", status=502)
+
+    monkeypatch.setattr(actions_svc, "_execute", _boom)
+    r = client.post(f"/actions/{action_id}/confirm", headers=h)
+    assert r.status_code == 502
+    assert r.json()["error"]["code"] == "mock_failure"
+    r = client.get(f"/actions/{action_id}", headers=h)
+    assert r.json()["status"] == "failed"
