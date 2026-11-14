@@ -1,3 +1,10 @@
+"""Router `/memories`: la memoria verificabile.
+
+Creazione con fonte obbligatoria (ogni dato dichiara da dove arriva),
+ricerca ibrida per significato/testo/recenza/confidenza, lettura singola
+e rilevamento delle contraddizioni aperte. Le risposte includono gli id
+delle fonti cosi ogni affermazione resta controllabile.
+"""
 import uuid
 
 from fastapi import APIRouter, Depends
