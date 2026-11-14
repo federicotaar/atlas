@@ -198,6 +198,18 @@ def _validate_payload(kind: str, payload: dict) -> None:
     if missing:
         raise AtlasError("invalid_payload",
                          f"Campi mancanti per {kind}: {', '.join(missing)}.")
+    if kind == "calendar.create_event":
+        try:
+            starts = _aware(datetime.fromisoformat(payload["starts_at"]))
+            ends = _aware(datetime.fromisoformat(payload["ends_at"]))
+        except (TypeError, ValueError):
+            raise AtlasError(
+                "invalid_payload",
+                "starts_at/ends_at devono essere date ISO 8601 valide.") from None
+        if ends <= starts:
+            raise AtlasError(
+                "invalid_payload",
+                "L'evento non puo finire prima o nello stesso istante in cui inizia.")
 
 
 def request_action(db: Session, user_id: uuid.UUID, kind: str,
