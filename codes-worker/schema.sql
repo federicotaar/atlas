@@ -1,3 +1,10 @@
+-- Schema D1 del codes worker ATLAS.
+--
+-- Tabelle:
+--   codes         - codici OTP a 6 cifre (hash SHA-256 con pepper, TTL, tentativi)
+--   code_requests - finestra rate limit per email e per IP
+--   daily_sends   - budget invii giornaliero (protezione quota Brevo)
+-- Il dettaglio del trust boundary e' in README.md.
 CREATE TABLE IF NOT EXISTS codes (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   email TEXT NOT NULL,
