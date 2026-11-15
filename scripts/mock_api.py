@@ -1,3 +1,10 @@
+"""API ATLAS fittizia per demo frontend (zero backend reale).
+
+Risponde su 127.0.0.1:8000 con dati dimostrativi inventati (nessun riferimento
+a persone o progetti reali): auth sempre valida, /ask con citazioni fittizie,
+/dashboard con pannelli dimostrativi. Serve a mostrare la UI senza avviare il
+backend, le migrazioni e i servizi esterni.
+"""
 import json
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
