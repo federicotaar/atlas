@@ -48,9 +48,16 @@ async function sha256hex(text) {
   return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, "0")).join("");
 }
 
-function newCode() {
-  const n = crypto.getRandomValues(new Uint32Array(1))[0] % 10 ** CODE_LEN;
-  return String(n).padStart(CODE_LEN, "0");
+// Rejection sampling: 2^32 % 10^6 != 0, so a plain modulo would slightly
+// favor the lowest codes. Redraw while the value is past the largest
+// multiple of 10^6 (same reason makeCode in car-flopper does this).
+export function newCode() {
+  const limit = Math.floor(2 ** 32 / 10 ** CODE_LEN) * 10 ** CODE_LEN;
+  let n;
+  do {
+    n = crypto.getRandomValues(new Uint32Array(1))[0];
+  } while (n >= limit);
+  return String(n % 10 ** CODE_LEN).padStart(CODE_LEN, "0");
 }
 
 // Firma Ed25519 dell'attestazione: la chiave privata resta nel worker (secret),
