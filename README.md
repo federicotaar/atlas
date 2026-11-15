@@ -42,7 +42,7 @@ esce dalla macchina senza permesso.
 
 Lo stato onesto di ogni fase è in
 [`docs/ROADMAP-STATUS.md`](docs/ROADMAP-STATUS.md): le fasi 0–6 sono
-implementate e testate in CI (277 test backend raccolti — 264 verdi in locale
+implementate e testate in CI (278 test backend raccolti — 265 verdi in locale
 su SQLite, verificato il 2026-11-15 — più frontend, job Ollama reale,
 compose e smoke desktop end-to-end). La fase 6 si chiude solo con la beta
 con persone reali, che **resta aperta**; il Counterfactual Engine (ricerca
