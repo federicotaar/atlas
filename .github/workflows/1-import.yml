@@ -1,3 +1,6 @@
+# Imports a source zip pushed to the repo root (legacy import route). Runs only
+# # when a push touches *.zip and exits cleanly when there is nothing to import.
+
 name: import
 on:
   push:
