@@ -13,6 +13,10 @@ un'istanza avviata.
 | GET | `/health` | Stato del servizio e del database |
 | POST | `/auth/register` | Crea account, ritorna `token` (201) |
 | POST | `/auth/login` | Login, ritorna `token` |
+| GET | `/auth/modes` | Metodi auth di QUESTA istanza (`local_password` su desktop, `email_code` + `password` in hosted): il frontend li legge prima di mostrare scelte impossibili |
+| POST | `/auth/codes/request` | Invia il codice email a 6 cifre (`purpose`: register\|login; 409 email già registrata, 404 nessun account) |
+| POST | `/auth/codes/check` | Verifica il codice di signup e rilascia un `signup_token` (prova server-held di 5 minuti) che `/auth/register` consuma |
+| POST | `/auth/login-code` | Login via codice email invece della password, ritorna `token` |
 
 ## Fonti, progetti, eventi, memorie
 
