@@ -92,6 +92,13 @@ un'istanza avviata.
 |---|---|---|
 | GET | `/dashboard` | Pannelli: progetti, attività imminenti, eventi recenti, previsioni e scadenze, agenti, automazioni, memorie importanti, richieste di autorizzazione. Ogni elemento espone `derived_from` con gli id sorgente |
 
+## Impostazioni modello (BYOK)
+
+| Metodo | Percorso | Descrizione |
+|---|---|---|
+| GET/PUT | `/settings/model` | Provider e modello scelti dall'utente, con i metadati della chiave (mai la chiave) |
+| GET | `/settings/models?provider=...` | Modelli disponibili per quel provider |
+
 ## Dati dell'utente
 
 | Metodo | Percorso | Descrizione |
