@@ -92,6 +92,15 @@ un'istanza avviata.
 |---|---|---|
 | GET | `/dashboard` | Pannelli: progetti, attività imminenti, eventi recenti, previsioni e scadenze, agenti, automazioni, memorie importanti, richieste di autorizzazione. Ogni elemento espone `derived_from` con gli id sorgente |
 
+## Setup desktop e migrazione
+
+| Metodo | Percorso | Descrizione |
+|---|---|---|
+| GET | `/setup/migration-status` | Stato della migrazione dal Postgres precedente |
+| POST | `/setup/migration-probe` | Rilevamento SU RICHIESTA di un'istanza legacy (nessuna scansione automatica) |
+| POST | `/setup/migration-import` | Importa i dati dalla sorgente legacy (scelta esplicita dell'utente) |
+| POST | `/setup/migration-dismiss` | Continua senza migrare |
+
 ## Impostazioni modello (BYOK)
 
 | Metodo | Percorso | Descrizione |
