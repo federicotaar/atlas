@@ -92,6 +92,18 @@ un'istanza avviata.
 |---|---|---|
 | GET | `/dashboard` | Pannelli: progetti, attività imminenti, eventi recenti, previsioni e scadenze, agenti, automazioni, memorie importanti, richieste di autorizzazione. Ogni elemento espone `derived_from` con gli id sorgente |
 
+## Connettori Telegram e WhatsApp
+
+| Metodo | Percorso | Descrizione |
+|---|---|---|
+| POST | `/connectors/telegram/connect` | Collega il bot (201) |
+| GET | `/connectors/telegram/status` | Stato del collegamento |
+| POST | `/connectors/telegram/pairing-code` | Ruota il codice di pairing |
+| POST | `/connectors/telegram/disconnect` | Scollega (204) |
+| POST | `/connectors/whatsapp/connect` | Avvia il collegamento linked-device: il pairing è sempre uno scan QR esplicito dell'utente (201) |
+| GET | `/connectors/whatsapp/status` | Stato, incluse restrizioni/ban |
+| POST | `/connectors/whatsapp/disconnect` | Scollega (204) |
+
 ## Setup desktop e migrazione
 
 | Metodo | Percorso | Descrizione |
