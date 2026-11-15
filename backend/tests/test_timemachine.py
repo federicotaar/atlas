@@ -223,3 +223,22 @@ def test_timemachine_requires_auth(client):
     ]:
         r = client.get(path, params=params)
         assert r.status_code == 401, (path, r.status_code)
+
+
+def test_timeline_long_range_uses_weekly_gap_buckets(client):
+    """Oltre 62 giorni di intervallo le lacune si misurano a settimane,
+    non a giorni: un evento ogni ~10 giorni non deve segnalare lacune."""
+    u = make_user(client, "tm-weekly-buckets")
+    h = u["headers"]
+    for days_ago in (100, 90, 80, 70, 60, 50, 40, 30, 20, 10):
+        _event(client, h, "lavoro", days_ago)
+    start = (NOW - timedelta(days=105)).isoformat()
+    end = NOW.isoformat()
+    r = client.get("/timemachine/timeline", params={"from": start, "to": end}, headers=h)
+    assert r.status_code == 200, r.text
+    gaps = r.json()["gaps"]
+    # con bucket settimanali ogni lacuna e un multiplo esatto di 7 giorni
+    # (l'intervallo di 105 giorni cade esatto sui confini dei bucket);
+    # con bucket giornalieri questi stessi eventi darebbero lacune di ~9
+    assert gaps, "eventi ogni 10 giorni su 15 settimane: qualche settimana vuota ci deve essere"
+    assert all(g["days"] >= 7 and g["days"] % 7 == 0 for g in gaps)
