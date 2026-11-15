@@ -1,3 +1,7 @@
+# Main backend CI: runs on every push except Markdown-only changes, on pull
+# # requests and on manual dispatch. Boots a pgvector Postgres service container
+# # for the backend job.
+
 name: CI
 
 on:
