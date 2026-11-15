@@ -274,3 +274,17 @@ def test_confirm_failure_is_recorded(client, monkeypatch):
     assert r.json()["error"]["code"] == "mock_failure"
     r = client.get(f"/actions/{action_id}", headers=h)
     assert r.json()["status"] == "failed"
+
+
+def test_audit_log_records_the_action_not_the_content(client, db_session):
+    """L'audit trail registra tipo e contesto minimo: mai contenuti personali."""
+    from app.models import ActionLog, User
+    u = make_user(client, "audit-log")
+    h = u["headers"]
+    _connector(client, h, kind="calendar_mock", authorize=False)
+    uid = db_session.query(User).filter_by(email=u["email"]).one().id
+    rows = db_session.query(ActionLog).filter_by(user_id=uid).all()
+    actions = {r.action: r.detail for r in rows}
+    assert "auth.register" in actions  # l'audit copre anche la registrazione
+    # la creazione del connettore registra solo il kind: mai token o contenuti
+    assert actions["connector.created"] == {"kind": "calendar_mock"}
