@@ -2,6 +2,7 @@
 name = "atlas-desktop"
 version = "2.1.3"
 edition = "2021"
+description = "App desktop ATLAS (Tauri): avvia il backend Python come sidecar e riusa solo istanze ATLAS compatibili"
 
 [lib]
 name = "atlas_desktop_lib"
