@@ -1,3 +1,7 @@
+# Desktop app pipeline: builds the desktop/frontend bundle on pushes that touch
+# # desktop, frontend or backend code, on published releases and on manual
+# # dispatch. Has contents:write so release builds can attach artifacts.
+
 name: desktop
 
 permissions:
