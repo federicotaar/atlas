@@ -1,3 +1,10 @@
+"""Configurazione centralizzata del backend ATLAS.
+
+Ogni campo di Settings si sovrascrive con una variabile d'ambiente
+ATLAS_<NOME> o con una riga del file .env (vedi .env.example per quelle
+principali). get_settings() e' cacheata: i cambi a runtime non sono
+previsti, il processo va riavviato.
+"""
 from functools import lru_cache
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
