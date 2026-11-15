@@ -11,7 +11,7 @@ principale del repository.
   previsioni), `models.py` (tabelle), `schemas.py` (validazione I/O),
   `cli.py` (CLI `atlas`).
 - `alembic/` — migrazioni dello schema (generiche, escluse dal lint).
-- `tests/` — suite pytest (276 test raccolti).
+- `tests/` — suite pytest (277 test raccolti).
 - `scripts/` — benchmark di recupero e strumenti di verifica.
 
 ## Avvio locale (senza Docker)
