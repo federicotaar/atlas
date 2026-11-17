@@ -140,20 +140,20 @@ def test_extractive_answer_lists_memories_with_citations():
 def test_action_words_do_not_match_inside_unrelated_words():
     from app.services.classifier import classify
     for text in ('What is a bookmark?', 'How does a paycheck work?', 'When is the sender available?'):
-        assert classify(text)=='question' 
+        assert classify(text)=='question'
 
 def test_actions_match_at_punctuation_boundaries():
     from app.services.classifier import classify
     for text in ('send: hello','Please BUY milk','manda, per favore'):
-        assert classify(text)=='action_request' 
+        assert classify(text)=='action_request'
 
 def test_standard_analysis_spellings():
     from app.services.classifier import classify
     for text in ('analyze this text','analyse this text','summarise this text'):
-        assert classify(text)=='analysis' 
+        assert classify(text)=='analysis'
 
 def test_statement_prefix_preserves_the_fact():
     from app.services.classifier import extract_statement
     assert extract_statement('Remember that I like tea')=='I like tea'
     assert extract_statement('  a plain fact  ')=='a plain fact'
-    assert extract_statement('ricorda che domani studio')=='domani studio' 
+    assert extract_statement('ricorda che domani studio')=='domani studio'
