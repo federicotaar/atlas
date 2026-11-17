@@ -136,3 +136,8 @@ def test_extractive_answer_lists_memories_with_citations():
                                               {"content": "il server e Oracle"}])
     assert "1. il deploy e venerdi [M1]" in out
     assert "2. il server e Oracle [M2]" in out
+
+def test_action_words_do_not_match_inside_unrelated_words():
+    from app.services.classifier import classify
+    for text in ('What is a bookmark?', 'How does a paycheck work?', 'When is the sender available?'):
+        assert classify(text)=='question' 
