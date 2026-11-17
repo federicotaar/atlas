@@ -141,3 +141,8 @@ def test_action_words_do_not_match_inside_unrelated_words():
     from app.services.classifier import classify
     for text in ('What is a bookmark?', 'How does a paycheck work?', 'When is the sender available?'):
         assert classify(text)=='question' 
+
+def test_actions_match_at_punctuation_boundaries():
+    from app.services.classifier import classify
+    for text in ('send: hello','Please BUY milk','manda, per favore'):
+        assert classify(text)=='action_request' 
