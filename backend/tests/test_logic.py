@@ -151,3 +151,9 @@ def test_standard_analysis_spellings():
     from app.services.classifier import classify
     for text in ('analyze this text','analyse this text','summarise this text'):
         assert classify(text)=='analysis' 
+
+def test_statement_prefix_preserves_the_fact():
+    from app.services.classifier import extract_statement
+    assert extract_statement('Remember that I like tea')=='I like tea'
+    assert extract_statement('  a plain fact  ')=='a plain fact'
+    assert extract_statement('ricorda che domani studio')=='domani studio' 
