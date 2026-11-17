@@ -30,7 +30,7 @@ PROJECT_STATUS_HINTS = (
 
 def classify(text: str) -> str:
     t = text.strip().lower()
-    if any(k in t for k in ACTION_HINTS):
+    if any(re.search(r"(?<!\w)"+re.escape(k)+r"(?!\w)",t) for k in ACTION_HINTS):
         return "action_request"
     if any(t.startswith(k) or f" {k}" in t for k in SAVE_HINTS):
         return "new_info"
