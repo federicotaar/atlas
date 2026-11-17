@@ -20,7 +20,7 @@ SAVE_HINTS = (
     "remember", "save", "note that", "don't forget",
 )
 ANALYSIS_HINTS = (
-    "analizza", "riassumi", "riepilogo", "sintetizza", "analize", "summarize", "riepiloga",
+    "analizza", "riassumi", "riepilogo", "sintetizza", "analize", "analyze", "analyse", "summarize", "summarise", "riepiloga",
 )
 PROJECT_STATUS_HINTS = (
     "a che punto", "stato del progetto", "come va il progetto", "come procede",
