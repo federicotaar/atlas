@@ -146,3 +146,8 @@ def test_actions_match_at_punctuation_boundaries():
     from app.services.classifier import classify
     for text in ('send: hello','Please BUY milk','manda, per favore'):
         assert classify(text)=='action_request' 
+
+def test_standard_analysis_spellings():
+    from app.services.classifier import classify
+    for text in ('analyze this text','analyse this text','summarise this text'):
+        assert classify(text)=='analysis' 
