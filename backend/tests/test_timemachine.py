@@ -242,3 +242,14 @@ def test_timeline_long_range_uses_weekly_gap_buckets(client):
     # con bucket giornalieri questi stessi eventi darebbero lacune di ~9
     assert gaps, "eventi ogni 10 giorni su 15 settimane: qualche settimana vuota ci deve essere"
     assert all(g["days"] >= 7 and g["days"] % 7 == 0 for g in gaps)
+
+def test_timeline_mixed_naive_and_aware_dates(client):
+    u = make_user(client, "tm-mixed")
+    r = client.get("/timemachine/timeline", params={"from": "2026-01-01T00:00:00",
+                   "to": "2026-01-02T00:00:00Z"}, headers=u["headers"])
+    assert r.status_code == 200, r.text
+    assert r.json()["from"].endswith("+00:00")
+    r = client.get("/timemachine/compare", params={"a_start": "2026-01-01T00:00:00",
+                   "a_end": "2026-01-02T00:00:00Z", "b_start": "2026-01-03T00:00:00Z",
+                   "b_end": "2026-01-04T00:00:00"}, headers=u["headers"])
+    assert r.status_code == 200, r.text
