@@ -8,6 +8,7 @@ disgiunti). Niente fusione o risoluzione automatica: sono proposte per
 l'utente, che risolve con una sostituzione (supersedes)."""
 import re
 import uuid
+from decimal import Decimal
 
 from sqlalchemy.orm import Session
 
@@ -25,24 +26,35 @@ _STOPWORDS = {
     "del", "dei", "dal", "dai", "nel", "nei", "non", "più", "piu", "mario",
     "luigi", "giorni", "progetto",
 }
-_WEEKDAYS = ("lunedì", "martedì", "mercoledì", "giovedì", "venerdì", "sabato", "domenica",
-             "lunedi", "martedi", "mercoledi", "giovedi", "venerdi")
-_MONTHS = ("gennaio", "febbraio", "marzo", "aprile", "maggio", "giugno",
-           "luglio", "agosto", "settembre", "ottobre", "novembre", "dicembre")
+_DAY_ALIASES = {
+    "lunedì": "monday", "lunedi": "monday", "monday": "monday",
+    "martedì": "tuesday", "martedi": "tuesday", "tuesday": "tuesday",
+    "mercoledì": "wednesday", "mercoledi": "wednesday", "wednesday": "wednesday",
+    "giovedì": "thursday", "giovedi": "thursday", "thursday": "thursday",
+    "venerdì": "friday", "venerdi": "friday", "friday": "friday",
+    "sabato": "saturday", "saturday": "saturday", "domenica": "sunday", "sunday": "sunday",
+}
+_MONTH_ALIASES = dict(zip(
+    ("gennaio", "febbraio", "marzo", "aprile", "maggio", "giugno", "luglio", "agosto",
+     "settembre", "ottobre", "novembre", "dicembre"),
+    ("january", "february", "march", "april", "may", "june", "july", "august",
+     "september", "october", "november", "december"),
+))
+_MONTH_ALIASES.update({value: value for value in tuple(_MONTH_ALIASES.values())})
 
 
 def _content_words(text: str) -> set[str]:
     return {w.lower() for w in _WORD.findall(text) if len(w) >= 4 and w.lower() not in _STOPWORDS}
 
 
-def _value_sets(text: str) -> list[set[str]]:
+def _value_sets(text: str) -> list[set]:
     """Valori per categoria: numeri, giorni, mesi. I nomi propri non contano:
     il soggetto condiviso e gia misurato dalle parole di contenuto."""
-    low = text.lower()
+    words = set(_WORD.findall(text.lower()))
     return [
-        set(_NUM.findall(text)),
-        {d for d in _WEEKDAYS if d in low},
-        {m for m in _MONTHS if m in low},
+        {Decimal(n.replace(",", ".")) for n in _NUM.findall(text)},
+        {_DAY_ALIASES[w] for w in words if w in _DAY_ALIASES},
+        {_MONTH_ALIASES[w] for w in words if w in _MONTH_ALIASES},
     ]
 
 
