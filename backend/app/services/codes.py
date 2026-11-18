@@ -66,7 +66,7 @@ def _post(path: str, payload: dict) -> tuple[int, dict]:
         body = resp.json()
     except ValueError:
         body = {}
-    return resp.status_code, body
+    return resp.status_code, body if isinstance(body, dict) else {}
 
 
 def _map_error(status: int, error: str | None) -> AtlasError:
