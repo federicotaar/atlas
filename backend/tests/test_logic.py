@@ -157,3 +157,25 @@ def test_statement_prefix_preserves_the_fact():
     assert extract_statement('Remember that I like tea')=='I like tea'
     assert extract_statement('  a plain fact  ')=='a plain fact'
     assert extract_statement('ricorda che domani studio')=='domani studio'
+
+def test_contradiction_calendar_aliases_and_boundaries():
+    from app.services.contradictions import is_possible_contradiction
+    for first, second in (("lunedì", "lunedi"), ("lunedì", "monday"),
+                          ("marzo", "march"), ("MARCH", "march")):
+        assert not is_possible_contradiction("Consegna database prevista " + first,
+                                             "Consegna database prevista " + second)[0]
+    assert is_possible_contradiction("Consegna database prevista monday",
+                                      "Consegna database prevista tuesday")[0]
+    assert is_possible_contradiction("Consegna database prevista aprile",
+                                      "Consegna database prevista march")[0]
+    assert not is_possible_contradiction("Consegna database prevista marciano",
+                                         "Consegna database prevista aprile")[0]
+
+
+def test_contradiction_equivalent_decimal_values():
+    from app.services.contradictions import is_possible_contradiction
+    for first, second in (("1.0", "1"), ("1,50", "1.5"), ("01", "1")):
+        assert not is_possible_contradiction("Budget progetto database " + first,
+                                             "Budget progetto database " + second)[0]
+    assert is_possible_contradiction("Budget progetto database 1.5",
+                                      "Budget progetto database 2.5")[0]
