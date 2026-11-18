@@ -2,7 +2,7 @@
 confronto tra periodi, obiettivi abbandonati, attivita ricorrenti. Le lacune
 sono sempre esplicitate, mai riempite."""
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
@@ -19,7 +19,7 @@ router = APIRouter(prefix="/timemachine", tags=["timemachine"])
 def _parse(dt: datetime | None, name: str) -> datetime:
     if dt is None:
         raise AtlasError("missing_param", f"Parametro '{name}' obbligatorio.", status=422)
-    return dt
+    return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt
 
 
 def _check_project(db: Session, user: User, project_id: uuid.UUID | None) -> None:
