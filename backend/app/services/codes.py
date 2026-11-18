@@ -101,12 +101,18 @@ def verify_attestation(attestation: str, email: str, purpose: str) -> dict:
     except (ValueError, InvalidSignature, json.JSONDecodeError):
         raise AtlasError("attestation_invalid", "Verifica non valida. Richiedi un nuovo codice.", status=400)
     now = int(time.time())
+    if not isinstance(claims, dict):
+        raise AtlasError("attestation_invalid", "Verifica non valida. Richiedi un nuovo codice.", status=400)
+    expiry = claims.get("exp")
     if (
         claims.get("iss") != "atlas-codes"
         or claims.get("email") != email.lower()
         or claims.get("purpose") != purpose
-        or not claims.get("jti")
-        or int(claims.get("exp", 0)) < now
+        or not isinstance(claims.get("jti"), str)
+        or not claims["jti"].strip()
+        or len(claims["jti"]) > 256
+        or type(expiry) is not int
+        or expiry <= now
     ):
         raise AtlasError("attestation_invalid", "Verifica non valida. Richiedi un nuovo codice.", status=400)
     return claims
