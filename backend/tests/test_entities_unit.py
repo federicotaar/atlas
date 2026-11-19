@@ -37,3 +37,19 @@ def test_candidates_drop_sentence_opener():
 
 def test_candidates_skip_known_non_entities():
     assert _candidates("Domani Marco arriva") == []
+
+def test_extract_relations_returns_pure_triples():
+    from app.services.entities import extract_relations
+    assert extract_relations("Sara fa parte del team Atlas") == [
+        ("Sara", "fa_parte_di", "team Atlas")]
+    assert extract_relations("Federico abita a Modena") == [
+        ("Federico", "abita_a", "Modena")]
+    assert extract_relations("Giulia studia al Copernico") == [
+        ("Giulia", "studia_a", "Copernico")]
+    assert extract_relations("Il cielo e sereno") == []
+
+
+def test_extract_relations_strips_trailing_period():
+    from app.services.entities import extract_relations
+    assert extract_relations("Marco porta avanti Atlas.") == [
+        ("Marco", "porta_avanti", "Atlas")]
