@@ -1,0 +1,17 @@
+# Changelog
+
+Modifiche rilevanti di ATLAS, dalle piu recenti.
+
+## 2026-11-19
+
+- Backend: nuovi pattern relazionali nel grafo (`studia_a`, `abita_a`, `fa_parte_di`).
+- Backend: `extract_relations()` estratta come funzione pura e coperta da test.
+- Backend: piu avverbi e indicazioni temporali esclusi dalle entita candidate
+  ("Forse ...", "Ecco ...", "Stasera ...").
+- Backend: "Progetto X" non viene piu classificato come persona.
+- Backend: i promemoria ("ricordami di ...", "non dimenticare ...") si salvano
+  come nuova informazione invece di essere classificati come azioni.
+- Backend: il classifier riconosce "dimmi ..." come domanda.
+- Backend: numeri con punto migliaia ("1.000") letti bene nel rilevamento
+  contraddizioni: "1.000 euro" e "1000 euro" non sono piu un falso conflitto.
+- Test: copertura unitaria pura per entities, contradictions ed embeddings.
