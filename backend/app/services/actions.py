@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from ..errors import AtlasError
 from ..models import Connector, EngineAction, Memory, MockCalendarEvent, MockEmailDraft, Source
+from .dates import aware as _aware
 
 CONNECTOR_KINDS = {"calendar_mock", "email_mock", "google_calendar", "google_gmail"}
 
@@ -36,8 +37,6 @@ FIXTURE_EVENTS = [
 ]
 
 
-def _aware(dt: datetime) -> datetime:
-    return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
 
 
 def get_or_create_connector(db: Session, user_id: uuid.UUID, kind: str) -> Connector:
