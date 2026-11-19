@@ -37,3 +37,11 @@ quasi mai significa codice rotto: prima controllare `ATLAS_DATABASE_URL`.
 
 - I connettori Google e WhatsApp reali: validati solo con fixture sintetiche.
 - L'accuratezza longitudinale delle previsioni: serve utilizzo reale di mesi.
+
+## Test unitari puri (2026-11-19)
+
+`tests/test_entities_unit.py`, `tests/test_contradictions_unit.py` e
+`tests/test_embeddings_unit.py` coprono la logica dichiarata (pattern
+relazionali, euristica contraddizioni, cosine) senza database: girano
+ovunque e non saltano mai. `test_logic.py` copre ora anche i promemoria
+("ricordami di ...") e le domande "dimmi ...".
