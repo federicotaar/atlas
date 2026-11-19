@@ -18,3 +18,7 @@ Modifiche rilevanti di ATLAS, dalle piu recenti.
 - Backend: matematica delle stime (`_interval`) e curva di calibrazione
   (`calibration_buckets`) estratte come funzioni pure e coperte da test
   (brier_score, chiave settimana ISO incluse).
+- Backend: `_choose_bucket_days` e `_gap_runs` della time machine estratte
+  come funzioni pure e testate.
+- Backend: nuovo endpoint `GET /graph/stats` con i conteggi del grafo
+  (entita e relazioni per tipo/stato), coperto da test su DB reale.
