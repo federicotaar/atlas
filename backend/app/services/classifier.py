@@ -16,7 +16,8 @@ ACTION_HINTS = (
     "send", "delete", "pay", "book", "buy", "email",
 )
 SAVE_HINTS = (
-    "ricorda", "ricordati", "salva", "annota", "segna", "tieni presente",
+    "ricorda", "ricordati", "ricordami", "non dimenticare", "salva", "annota",
+    "segna", "tieni presente",
     "remember", "save", "note that", "don't forget",
 )
 ANALYSIS_HINTS = (
@@ -30,10 +31,12 @@ PROJECT_STATUS_HINTS = (
 
 def classify(text: str) -> str:
     t = text.strip().lower()
-    if any(re.search(r"(?<!\w)"+re.escape(k)+r"(?!\w)",t) for k in ACTION_HINTS):
-        return "action_request"
+    # Prima il salvataggio: "ricordami di comprare il latte" chiede un
+    # promemoria, non l'azione (le azioni sono fase 4 e non si eseguono).
     if any(t.startswith(k) or f" {k}" in t for k in SAVE_HINTS):
         return "new_info"
+    if any(re.search(r"(?<!\w)"+re.escape(k)+r"(?!\w)",t) for k in ACTION_HINTS):
+        return "action_request"
     if any(k in t for k in PROJECT_STATUS_HINTS):
         return "project_status"
     if any(k in t for k in ANALYSIS_HINTS):
@@ -45,7 +48,7 @@ def classify(text: str) -> str:
 
 
 _STATEMENT_STRIP = re.compile(
-    r"^(ricorda(ti)?( che)?|salva|annota|segna|tieni presente( che)?|remember( that)?|save|note that|don't forget( that)?)[,:;]?\s+",
+    r"^(ricorda(ti|mi)?( che| di)?|non dimenticare( che| di)?|salva|annota|segna|tieni presente( che)?|remember( that)?|save|note that|don't forget( that)?)[,:;]?\s+",
     re.IGNORECASE,
 )
 
