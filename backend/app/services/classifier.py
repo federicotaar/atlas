@@ -8,6 +8,7 @@ import re
 
 QUESTION_HINTS = (
     "che ", "cosa", "cos'", "quando", "dove", "chi ", "perché", "perche",
+    "dimmi",
     "quanto", "quanti", "quante", "come ", "quale", "quali", "a che punto",
     "what", "when", "where", "who", "why", "how", "which",
 )
