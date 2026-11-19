@@ -23,6 +23,9 @@ _NON_ENTITY = {
     "Oggi", "Ieri", "Mentre", "Dopo", "Prima", "Poi", "Attenzione", "Salvato",
     "Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica",
     "Lunedi", "Martedi", "Mercoledi", "Giovedi", "Venerdi",
+    "Anche", "Quindi", "Perciò", "Percio", "Inoltre", "Allora", "Ecco",
+    "Forse", "Anzi", "Comunque", "Infatti", "Invece",
+    "Stasera", "Stamattina", "Stanotte", "Stamani",
     "Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno",
     "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre",
 }
