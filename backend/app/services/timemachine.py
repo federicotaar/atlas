@@ -12,12 +12,9 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy.orm import Session
 
 from ..models import Event, Memory, Prediction, Project
+from .dates import aware as _aware
 
 
-def _aware(dt: datetime) -> datetime:
-    if dt.tzinfo is None:
-        return dt.replace(tzinfo=timezone.utc)
-    return dt
 
 
 def _choose_bucket_days(span_days: int) -> int:
