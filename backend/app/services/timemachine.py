@@ -20,6 +20,27 @@ def _aware(dt: datetime) -> datetime:
     return dt
 
 
+def _choose_bucket_days(span_days: int) -> int:
+    """Bucket giornalieri fino a 62 giorni di intervallo, settimanali oltre."""
+    return 1 if span_days <= 62 else 7
+
+
+def _gap_runs(n_buckets: int, filled: set[int]) -> list[tuple[int, int]]:
+    """Intervalli [start, end) di indici di bucket senza dati. Pura."""
+    runs: list[tuple[int, int]] = []
+    run_start: int | None = None
+    for i in range(n_buckets):
+        if i in filled:
+            if run_start is not None:
+                runs.append((run_start, i))
+                run_start = None
+        elif run_start is None:
+            run_start = i
+    if run_start is not None:
+        runs.append((run_start, n_buckets))
+    return runs
+
+
 def find_gaps(db: Session, user_id: uuid.UUID, start: datetime, end: datetime,
               bucket_days: int | None = None) -> list[dict]:
     """Lacune: intervalli dentro [start, end] senza alcun evento.
@@ -32,7 +53,7 @@ def find_gaps(db: Session, user_id: uuid.UUID, start: datetime, end: datetime,
         return []
     span_days = (end - start).days
     if bucket_days is None:
-        bucket_days = 1 if span_days <= 62 else 7
+        bucket_days = _choose_bucket_days(span_days)
     rows = (db.query(Event.event_at)
             .filter(Event.user_id == user_id,
                     Event.event_at >= start, Event.event_at <= end)
@@ -43,21 +64,11 @@ def find_gaps(db: Session, user_id: uuid.UUID, start: datetime, end: datetime,
         buckets_with_data.add(idx)
     n_buckets = int((end - start).total_seconds() // (bucket_days * 86400)) + 1
     gaps: list[dict] = []
-    run_start: int | None = None
-    for i in range(n_buckets):
-        if i in buckets_with_data:
-            if run_start is not None:
-                g0 = start + timedelta(days=run_start * bucket_days)
-                g1 = min(start + timedelta(days=i * bucket_days), end)
-                gaps.append({"from": g0.isoformat(), "to": g1.isoformat(),
-                             "days": round((g1 - g0).total_seconds() / 86400, 2)})
-                run_start = None
-        elif run_start is None:
-            run_start = i
-    if run_start is not None:
-        g0 = start + timedelta(days=run_start * bucket_days)
-        gaps.append({"from": g0.isoformat(), "to": end.isoformat(),
-                     "days": round((end - g0).total_seconds() / 86400, 2)})
+    for g0i, g1i in _gap_runs(n_buckets, buckets_with_data):
+        g0 = start + timedelta(days=g0i * bucket_days)
+        g1 = min(start + timedelta(days=g1i * bucket_days), end)
+        gaps.append({"from": g0.isoformat(), "to": g1.isoformat(),
+                     "days": round((g1 - g0).total_seconds() / 86400, 2)})
     return gaps
 
 
