@@ -15,6 +15,18 @@ VALID_KINDS = ("fact", "opinion", "decision", "hypothesis", "task")
 VALID_ORIGINS = ("stated", "inferred", "imported")
 
 
+def validate_memory_input(kind: str, origin: str, confidence: float, content: str) -> None:
+    """Valida i campi di una nuova memoria. Pura: solleva AtlasError."""
+    if kind not in VALID_KINDS:
+        raise AtlasError("invalid_kind", f"kind deve essere uno di {VALID_KINDS}.")
+    if origin not in VALID_ORIGINS:
+        raise AtlasError("invalid_origin", f"origin deve essere uno di {VALID_ORIGINS}.")
+    if not 0.0 <= confidence <= 1.0:
+        raise AtlasError("invalid_confidence", "confidence deve essere tra 0 e 1.")
+    if not content.strip():
+        raise AtlasError("empty_content", "content non puo essere vuoto.")
+
+
 def create_memory(
     db: Session,
     settings: Settings,
@@ -29,14 +41,7 @@ def create_memory(
     embedding: list[float] | None,
 ) -> tuple[Memory, list[Memory]]:
     """Crea una memoria. Ritorna (memoria, possibili_duplicati)."""
-    if kind not in VALID_KINDS:
-        raise AtlasError("invalid_kind", f"kind deve essere uno di {VALID_KINDS}.")
-    if origin not in VALID_ORIGINS:
-        raise AtlasError("invalid_origin", f"origin deve essere uno di {VALID_ORIGINS}.")
-    if not 0.0 <= confidence <= 1.0:
-        raise AtlasError("invalid_confidence", "confidence deve essere tra 0 e 1.")
-    if not content.strip():
-        raise AtlasError("empty_content", "content non puo essere vuoto.")
+    validate_memory_input(kind, origin, confidence, content)
 
     source = db.get(Source, source_id)
     if source is None or source.user_id != user_id:
