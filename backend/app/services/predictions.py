@@ -120,6 +120,24 @@ def brier_score(probability: float, happened: bool) -> float:
     return round((probability - (1.0 if happened else 0.0)) ** 2, 4)
 
 
+def calibration_buckets(pairs: list[tuple[float, float]]) -> dict[str, dict]:
+    """Curva di calibrazione a bucket da 0.1: per fascia, conteggio,
+    probabilita media dichiarata e frequenza reale degli esiti. Pura."""
+    buckets: dict[str, dict] = {}
+    for prob, outcome in pairs:
+        b = min(int(prob * 10), 9)
+        key = f"{b / 10:.1f}-{(b + 1) / 10:.1f}"
+        buck = buckets.setdefault(key, {"count": 0, "avg_probability": 0.0, "frequency": 0.0})
+        buck["count"] += 1
+        buck["avg_probability"] += prob
+        buck["frequency"] += 1.0 if outcome == 1.0 else 0.0
+    for buck in buckets.values():
+        n = buck["count"]
+        buck["avg_probability"] = round(buck["avg_probability"] / n, 3)
+        buck["frequency"] = round(buck["frequency"] / n, 3)
+    return buckets
+
+
 def metrics(db: Session, user_id: uuid.UUID) -> dict:
     """Accuratezza storica (spec 5E: errore assoluto, Brier, calibrazione)."""
     verified = (db.query(Prediction)
@@ -127,20 +145,8 @@ def metrics(db: Session, user_id: uuid.UUID) -> dict:
                 .all())
     abs_errors = [p.error for p in verified if p.error is not None]
     briers = [p.brier for p in verified if p.brier is not None]
-    buckets: dict[str, dict] = {}
-    for p in verified:
-        if p.probability is None or p.outcome is None:
-            continue
-        b = min(int(p.probability * 10), 9)
-        key = f"{b / 10:.1f}-{(b + 1) / 10:.1f}"
-        buck = buckets.setdefault(key, {"count": 0, "avg_probability": 0.0, "frequency": 0.0})
-        buck["count"] += 1
-        buck["avg_probability"] += p.probability
-        buck["frequency"] += 1.0 if p.outcome == 1.0 else 0.0
-    for buck in buckets.values():
-        n = buck["count"]
-        buck["avg_probability"] = round(buck["avg_probability"] / n, 3)
-        buck["frequency"] = round(buck["frequency"] / n, 3)
+    buckets = calibration_buckets([(p.probability, p.outcome) for p in verified
+                                   if p.probability is not None and p.outcome is not None])
     return {
         "verified_count": len(verified),
         "mean_absolute_error": round(statistics.fmean(abs_errors), 3) if abs_errors else None,
