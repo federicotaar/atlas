@@ -174,3 +174,17 @@ def project_links(db: Session, user_id: uuid.UUID) -> list[Relationship]:
     rels = db.query(Relationship).filter(Relationship.user_id == user_id,
                                          Relationship.status == "confirmed").all()
     return [r for r in rels if r.from_entity.kind == "project" or r.to_entity.kind == "project"]
+
+def graph_stats(db: Session, user_id: uuid.UUID) -> dict:
+    """Conteggi del grafo: entita per (kind, status) e relazioni per
+    (relation, status). Vista riassuntiva per dashboard e diagnostica."""
+    ent_rows = (db.query(Entity.kind, Entity.status, func.count())
+                .filter(Entity.user_id == user_id)
+                .group_by(Entity.kind, Entity.status).all())
+    rel_rows = (db.query(Relationship.relation, Relationship.status, func.count())
+                .filter(Relationship.user_id == user_id)
+                .group_by(Relationship.relation, Relationship.status).all())
+    return {
+        "entities": {f"{kind}/{status}": n for kind, status, n in ent_rows},
+        "relationships": {f"{rel}/{status}": n for rel, status, n in rel_rows},
+    }
