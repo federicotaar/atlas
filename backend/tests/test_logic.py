@@ -179,3 +179,13 @@ def test_contradiction_equivalent_decimal_values():
                                              "Budget progetto database " + second)[0]
     assert is_possible_contradiction("Budget progetto database 1.5",
                                       "Budget progetto database 2.5")[0]
+
+def test_reminder_is_saved_not_actioned():
+    assert classify("Ricordami di comprare il latte") == "new_info"
+    assert classify("Ricorda di inviare il report") == "new_info"
+    assert classify("Non dimenticare di pagare la bolletta") == "new_info"
+
+
+def test_extract_statement_ricordami():
+    assert extract_statement("Ricordami di chiamare mamma") == "chiamare mamma"
+    assert extract_statement("Non dimenticare: il treno parte alle 8") == "il treno parte alle 8"
