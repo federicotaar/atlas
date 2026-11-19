@@ -15,3 +15,6 @@ Modifiche rilevanti di ATLAS, dalle piu recenti.
 - Backend: numeri con punto migliaia ("1.000") letti bene nel rilevamento
   contraddizioni: "1.000 euro" e "1000 euro" non sono piu un falso conflitto.
 - Test: copertura unitaria pura per entities, contradictions ed embeddings.
+- Backend: matematica delle stime (`_interval`) e curva di calibrazione
+  (`calibration_buckets`) estratte come funzioni pure e coperte da test
+  (brier_score, chiave settimana ISO incluse).
