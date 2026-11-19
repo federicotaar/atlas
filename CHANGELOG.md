@@ -27,3 +27,5 @@ Modifiche rilevanti di ATLAS, dalle piu recenti.
 - Backend: `LocalHashEmbedder` rifiuta dimensioni non positive invece di
   fallire con una divisione per zero al primo testo.
 - Test: copertura pura per LocalHashEmbedder ed ExtractiveGenerator.
+- Backend: il helper `_aware` (naive = UTC), copiato in tre servizi, vive
+  ora in `app/services/dates.py` come `aware()` condiviso e testato.
