@@ -189,3 +189,7 @@ def test_reminder_is_saved_not_actioned():
 def test_extract_statement_ricordami():
     assert extract_statement("Ricordami di chiamare mamma") == "chiamare mamma"
     assert extract_statement("Non dimenticare: il treno parte alle 8") == "il treno parte alle 8"
+
+def test_dimmi_is_a_question():
+    assert classify("Dimmi quando e la scadenza") == "question"
+    assert classify("Dimmi che database usa il progetto") == "question"
