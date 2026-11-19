@@ -17,6 +17,7 @@ from ..models import Memory
 
 _WORD = re.compile(r"[a-zàèéìòù0-9]+", re.IGNORECASE)
 _NUM = re.compile(r"\b\d+(?:[.,]\d+)?\b")
+_NUM_GROUPED = re.compile(r"\b\d{1,3}(?:\.\d{3})+(?:,\d+)?\b")
 _NAME = re.compile(r"\b[A-ZÀÈÉÌÒÙ][a-zàèéìòù]{2,}\b")
 
 _STOPWORDS = {
@@ -47,12 +48,22 @@ def _content_words(text: str) -> set[str]:
     return {w.lower() for w in _WORD.findall(text) if len(w) >= 4 and w.lower() not in _STOPWORDS}
 
 
+def _numbers(text: str) -> set:
+    """Numeri in formato italiano: '1.000' vale mille (punto migliaia) e
+    '2,5' vale due e mezzo (virgola decimale). Senza questa distinzione
+    '1.000 euro' e '1000 euro' risultavano valori diversi (1 vs 1000)."""
+    out = {Decimal(g.replace(".", "").replace(",", ".")) for g in _NUM_GROUPED.findall(text)}
+    rest = _NUM_GROUPED.sub(" ", text)
+    out |= {Decimal(n.replace(",", ".")) for n in _NUM.findall(rest)}
+    return out
+
+
 def _value_sets(text: str) -> list[set]:
     """Valori per categoria: numeri, giorni, mesi. I nomi propri non contano:
     il soggetto condiviso e gia misurato dalle parole di contenuto."""
     words = set(_WORD.findall(text.lower()))
     return [
-        {Decimal(n.replace(",", ".")) for n in _NUM.findall(text)},
+        _numbers(text),
         {_DAY_ALIASES[w] for w in words if w in _DAY_ALIASES},
         {_MONTH_ALIASES[w] for w in words if w in _MONTH_ALIASES},
     ]
