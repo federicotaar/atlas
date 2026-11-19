@@ -66,6 +66,9 @@ def _candidates(text: str) -> list[str]:
 def _guess_kind(name: str, project_names: set[str]) -> str:
     if name.lower() in project_names:
         return "project"
+    # "Progetto Mercurio" ha due parole ma non e' una persona.
+    if name.split()[0].lower() in ("progetto", "project"):
+        return "concept"
     if len(name.split()) >= 2:
         return "person"
     return "concept"
