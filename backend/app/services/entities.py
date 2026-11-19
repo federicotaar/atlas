@@ -84,6 +84,21 @@ def _get_or_propose(db: Session, user_id: uuid.UUID, name: str, kind: str,
     return ent
 
 
+def extract_relations(text: str) -> list[tuple[str, str, str]]:
+    """Triplette (soggetto, relazione, oggetto) candidate dal testo.
+
+    Pura (nessun DB): propose_from_text la usa e i test la coprono da sola."""
+    out: list[tuple[str, str, str]] = []
+    for pattern, relation in _REL_PATTERNS:
+        m = pattern.match(text.strip())
+        if not m:
+            continue
+        left = m.group(1).strip()
+        right = m.group(2).strip().rstrip(".")
+        out.append((left, relation, right))
+    return out
+
+
 def propose_from_text(db: Session, user_id: uuid.UUID, text: str,
                       memory_id: uuid.UUID | None = None,
                       source_id: uuid.UUID | None = None) -> tuple[list[Entity], list[Relationship]]:
@@ -99,11 +114,7 @@ def propose_from_text(db: Session, user_id: uuid.UUID, text: str,
         by_name[name.lower()] = ent
 
     relationships: list[Relationship] = []
-    for pattern, relation in _REL_PATTERNS:
-        m = pattern.match(text.strip())
-        if not m:
-            continue
-        left, right = m.group(1).strip(), m.group(2).strip().rstrip(".")
+    for left, relation, right in extract_relations(text):
         left_names = [n for n in _candidates(left)] or ([left] if 2 <= len(left) <= 60 else [])
         right_names = [n for n in _candidates(right)] or ([right] if 2 <= len(right) <= 60 else [])
         for ln in left_names:
