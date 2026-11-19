@@ -13,14 +13,11 @@ from sqlalchemy.orm import Session
 from ..models import AgentRun, Connector, EngineAction, Event, Memory, Prediction, Project
 from .predictions import due_predictions
 from .predictions import metrics as prediction_metrics
+from .dates import aware as _aware
 
 IMPORTANT_CONFIDENCE = 0.85
 
 
-def _aware(dt: datetime) -> datetime:
-    if dt.tzinfo is None:
-        return dt.replace(tzinfo=timezone.utc)
-    return dt
 
 
 def build_dashboard(db: Session, user_id: uuid.UUID,
