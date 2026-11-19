@@ -53,3 +53,12 @@ def test_extract_relations_strips_trailing_period():
     from app.services.entities import extract_relations
     assert extract_relations("Marco porta avanti Atlas.") == [
         ("Marco", "porta_avanti", "Atlas")]
+
+def test_candidates_skip_discourse_openers():
+    assert _candidates("Forse Maria Rossi viene") == []
+    assert _candidates("Ecco Marco Rossi arriva") == []
+    assert _candidates("Invece Giulia Bianchi resta") == []
+
+
+def test_candidates_keep_real_names():
+    assert _candidates("Maria Rossi viene") == ["Maria Rossi"]
