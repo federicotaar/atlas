@@ -31,6 +31,9 @@ _REL_PATTERNS = (
     (re.compile(r"^(.+?)\s+usa\s+(.+)$", re.IGNORECASE), "usa"),
     (re.compile(r"^(.+?)\s+dipende\s+da\s+(.+)$", re.IGNORECASE), "dipende_da"),
     (re.compile(r"^(.+?)\s+porta\s+avanti\s+(.+)$", re.IGNORECASE), "porta_avanti"),
+    (re.compile(r"^(.+?)\s+studia\s+(?:(?:a|da|presso|in|al|alla)\s+|all')(.+)$", re.IGNORECASE), "studia_a"),
+    (re.compile(r"^(.+?)\s+abita\s+(?:a|in|presso)\s+(.+)$", re.IGNORECASE), "abita_a"),
+    (re.compile(r"^(.+?)\s+fa\s+parte\s+(?:(?:di|del|della|dei|degli|delle)\s+|dell')(.+)$", re.IGNORECASE), "fa_parte_di"),
 )
 
 
