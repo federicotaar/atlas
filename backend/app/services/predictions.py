@@ -20,6 +20,7 @@ from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 
 from ..models import Memory, Prediction
+from .dates import aware as _aware
 
 MIN_WEEKS = 2
 
@@ -158,8 +159,6 @@ def metrics(db: Session, user_id: uuid.UUID) -> dict:
 MANUAL_SOURCE = "dichiarata dall'utente"
 
 
-def _aware(dt: datetime) -> datetime:
-    return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
 
 
 def due_predictions(db: Session, user_id: uuid.UUID,
