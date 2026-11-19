@@ -62,3 +62,9 @@ def test_candidates_skip_discourse_openers():
 
 def test_candidates_keep_real_names():
     assert _candidates("Maria Rossi viene") == ["Maria Rossi"]
+
+def test_guess_kind():
+    assert _guess_kind("Mercurio", {"mercurio"}) == "project"
+    assert _guess_kind("Progetto Mercurio", set()) == "concept"
+    assert _guess_kind("Maria Rossi", set()) == "person"
+    assert _guess_kind("PostgreSQL", set()) == "concept"
