@@ -22,3 +22,8 @@ Modifiche rilevanti di ATLAS, dalle piu recenti.
   come funzioni pure e testate.
 - Backend: nuovo endpoint `GET /graph/stats` con i conteggi del grafo
   (entita e relazioni per tipo/stato), coperto da test su DB reale.
+- Backend: validazione delle memorie estratta in `validate_memory_input`
+  (pura) e coperta da test.
+- Backend: `LocalHashEmbedder` rifiuta dimensioni non positive invece di
+  fallire con una divisione per zero al primo testo.
+- Test: copertura pura per LocalHashEmbedder ed ExtractiveGenerator.
