@@ -1,0 +1,17 @@
+"""Test unitari puri per il generatore estrattivo."""
+from app.services.generation import ExtractiveGenerator
+
+
+def test_extractive_lists_memories_with_citations():
+    out = ExtractiveGenerator().answer(
+        "Che database uso?",
+        [{"content": "Il progetto usa PostgreSQL."},
+         {"content": "Il server e su Oracle Cloud."}])
+    lines = out.splitlines()
+    assert lines[0] == "Dalle tue memorie:"
+    assert "1. Il progetto usa PostgreSQL. [M1]" in lines
+    assert "2. Il server e su Oracle Cloud. [M2]" in lines
+
+
+def test_extractive_empty_memories():
+    assert ExtractiveGenerator().answer("q", []) == "Dalle tue memorie:"
