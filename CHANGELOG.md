@@ -29,3 +29,5 @@ Modifiche rilevanti di ATLAS, dalle piu recenti.
 - Test: copertura pura per LocalHashEmbedder ed ExtractiveGenerator.
 - Backend: il helper `_aware` (naive = UTC), copiato in tre servizi, vive
   ora in `app/services/dates.py` come `aware()` condiviso e testato.
+- Backend: anche l'Action Engine usa il helper condiviso `aware()`.
+- Test: fallback locale del ModelRouter e forma d'errore API stabile.
