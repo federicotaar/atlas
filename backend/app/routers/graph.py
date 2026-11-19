@@ -105,3 +105,9 @@ def confirmed(db: Session = Depends(get_db), user: User = Depends(get_current_us
 def project_links(db: Session = Depends(get_db),
                   user: User = Depends(get_current_user)) -> list[RelationshipDetailOut]:
     return [_rel_detail(r) for r in graph.project_links(db, user.id)]
+
+@router.get("/graph/stats")
+def graph_stats(db: Session = Depends(get_db),
+                user: User = Depends(get_current_user)) -> dict:
+    """Conteggi del grafo dell'utente (entita e relazioni per tipo/stato)."""
+    return graph.graph_stats(db, user.id)
