@@ -70,6 +70,19 @@ def open_tasks(db: Session, user_id: uuid.UUID) -> int:
             .count())
 
 
+def _interval(remaining: int, rates: list[float]) -> tuple[float, float, float]:
+    """Settimane al completamento (centrale, bassa, alta) da velocita osservate.
+
+    L'intervallo viene dalla variabilita delle settimane: la stima rapida usa
+    media+spread, quella lenta media-spread (mai sotto zero). Pura: niente DB."""
+    mean_rate = statistics.fmean(rates)
+    spread = statistics.pstdev(rates) if len(rates) > 1 else 0.0
+    central = remaining / mean_rate
+    slow = max(mean_rate - spread, 1e-9)
+    fast = mean_rate + spread
+    return round(central, 1), round(remaining / fast, 1), round(remaining / slow, 1)
+
+
 def estimate_completion(db: Session, user_id: uuid.UUID) -> Estimate:
     """Stima le settimane al completamento delle attivita aperte."""
     weekly = weekly_completion(db, user_id)
@@ -91,18 +104,12 @@ def estimate_completion(db: Session, user_id: uuid.UUID) -> Estimate:
             data=data,
         )
     rates = list(weekly.values())
-    mean_rate = statistics.fmean(rates)
-    spread = statistics.pstdev(rates) if len(rates) > 1 else 0.0
-    central = remaining / mean_rate
-    slow = max(mean_rate - spread, 1e-9)
-    fast = mean_rate + spread
-    low = remaining / fast
-    high = remaining / slow
+    central, low, high = _interval(remaining, rates)
     return Estimate(
         possible=True,
-        central=round(central, 1),
-        low=round(low, 1),
-        high=round(high, 1),
+        central=central,
+        low=low,
+        high=high,
         data=data,
         assumptions=("Velocita futura simile alla media delle settimane osservate; "
                      "l'insieme delle attivita aperte non cambia."),
