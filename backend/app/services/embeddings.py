@@ -44,6 +44,8 @@ class LocalHashEmbedder:
     name = "local-hash"
 
     def __init__(self, dim: int = 768):
+        if dim < 1:
+            raise ValueError("dim deve essere >= 1")
         self.dim = dim
 
     def embed(self, text: str) -> list[float]:
