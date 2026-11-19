@@ -23,3 +23,31 @@ def test_same_amount_two_spellings_no_conflict():
         "Il budget del progetto e 1.000 euro",
         "Il budget del progetto e 1000 euro")
     assert not conflict
+
+def test_weekday_change_conflicts():
+    conflict, shared = is_possible_contradiction(
+        "Allenamento in palestra lunedi",
+        "Allenamento in palestra giovedi")
+    assert conflict
+    assert "allenamento" in shared and "palestra" in shared
+
+
+def test_month_change_conflicts():
+    conflict, _ = is_possible_contradiction(
+        "La scadenza del bando arriva a gennaio",
+        "La scadenza del bando arriva a marzo")
+    assert conflict
+
+
+def test_different_subjects_no_conflict():
+    conflict, _ = is_possible_contradiction(
+        "La scadenza del bando arriva a gennaio",
+        "Il compleanno di Sara e a gennaio")
+    assert not conflict
+
+
+def test_no_values_no_conflict():
+    conflict, _ = is_possible_contradiction(
+        "Il gatto di Marco dorme sempre",
+        "Il gatto di Marco gioca sempre")
+    assert not conflict
