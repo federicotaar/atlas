@@ -109,3 +109,16 @@ def test_sources_filter_by_kind(client):
     rows=client.get("/sources?kind=file",headers=h).json()
     assert [r["id"] for r in rows] == [sid]
     assert client.get("/sources?kind=absent",headers=h).json() == []
+
+
+def test_source_pagination_and_bounds(client):
+    from .conftest import make_user,make_source
+    h=make_user(client,"sourcepages")["headers"]
+    ids=[make_source(client,h,label=str(i)) for i in range(3)]
+    first=client.get("/sources?limit=2",headers=h).json()
+    last=client.get("/sources?limit=2&offset=2",headers=h).json()
+    assert len(first)==2 and len(last)==1
+    assert {r["id"] for r in first+last}==set(ids)
+    assert len(client.get("/sources",headers=h).json())==3
+    assert client.get("/sources?limit=1001",headers=h).status_code==422
+    assert client.get("/sources?offset=-1",headers=h).status_code==422
