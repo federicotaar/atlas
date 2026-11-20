@@ -60,3 +60,14 @@ def require_source(db: Session, user: User, source_id) -> Source:
 def get_source(source_id: uuid.UUID, db: Session = Depends(get_db),
                user: User = Depends(get_current_user)) -> SourceOut:
     return SourceOut.model_validate(require_source(db, user, source_id))
+
+
+@router.get("/{source_id}/usage")
+def source_usage(source_id: uuid.UUID, db: Session = Depends(get_db),
+                 user: User = Depends(get_current_user)) -> dict:
+    from ..models import Memory, Event
+    require_source(db, user, source_id)
+    q = db.query(Memory).filter(Memory.user_id == user.id, Memory.source_id == source_id)
+    return {"memories": q.count(),
+            "active_memories": q.filter(Memory.superseded_by.is_(None)).count(),
+            "events": db.query(Event).filter(Event.user_id == user.id, Event.source_id == source_id).count()}
