@@ -49,6 +49,9 @@ def list_events(
     limit: int = Query(default=100, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
 ) -> list[EventOut]:
+    from ..services.dates import aware
+    if from_ts is not None and to_ts is not None and aware(from_ts) > aware(to_ts):
+        raise AtlasError("invalid_range", "La data iniziale supera quella finale.")
     q = db.query(Event).filter(Event.user_id == user.id)
     if type is not None:
         q = q.filter(Event.type == type)
