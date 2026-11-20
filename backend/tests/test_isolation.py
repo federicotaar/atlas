@@ -100,3 +100,12 @@ def test_source_usage_counts_and_ownership(client):
     assert r.status_code == 201
     assert client.get(f"/sources/{sid}/usage",headers=h).json()=={"memories":2,"active_memories":1,"events":1}
     assert client.get(f"/sources/{sid}/usage",headers=b["headers"]).status_code == 404
+
+
+def test_sources_filter_by_kind(client):
+    from .conftest import make_user,make_source
+    h=make_user(client,"sourcefilter")["headers"]
+    make_source(client,h,kind="chat");sid=make_source(client,h,kind="file")
+    rows=client.get("/sources?kind=file",headers=h).json()
+    assert [r["id"] for r in rows] == [sid]
+    assert client.get("/sources?kind=absent",headers=h).json() == []
