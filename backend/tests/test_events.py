@@ -105,3 +105,14 @@ def test_event_statistics_owner_and_project_filter(client):
     assert client.get("/events/stats",headers=h).json()=={"total":2,"by_type":{"note":2}}
     assert client.get("/events/stats",headers=h,params={"project_id":pid}).json()["total"]==1
     assert client.get("/events/stats",headers=b["headers"]).json()["total"]==0
+
+
+def test_event_detail_owner_and_static_stats_route(client):
+    from .conftest import make_user
+    a,b=make_user(client,"eventdetaila"),make_user(client,"eventdetailb");h=a["headers"]
+    event=client.post("/events",headers=h,json={"type":"note","payload":{"text":"my event"},"event_at":"2026-11-20T10:00:00Z"}).json()
+    url=f"/events/{event['id']}"
+    assert client.get(url,headers=h).json()["payload"]=={"text":"my event"}
+    assert client.get(url,headers=b["headers"]).status_code==404
+    assert client.get("/events/00000000-0000-0000-0000-000000000000",headers=h).status_code==404
+    assert client.get("/events/stats",headers=h).status_code==200
