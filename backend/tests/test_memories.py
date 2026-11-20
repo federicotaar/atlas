@@ -141,3 +141,16 @@ def test_browse_memories_filters_and_isolation(client):
     assert get(origin="bad").status_code == 400
     assert get(limit=0).status_code == 422
     assert get(offset=-1).status_code == 422
+
+
+def test_memory_statistics_active_and_superseded(client):
+    from .conftest import make_user, make_source, make_memory
+    u=make_user(client,"memorystats");h=u["headers"];s=make_source(client,h)
+    assert client.get("/memories/stats",headers=h).json()["total"] == 0
+    old=make_memory(client,h,s,"old")
+    make_memory(client,h,s,"new",supersedes=old["id"],kind="decision")
+    stats=client.get("/memories/stats",headers=h).json()
+    assert stats == {"total":2,"active":1,"superseded":1,
+                     "by_kind":{"decision":1},"by_origin":{"stated":1}}
+    other=make_user(client,"memorystatsother")
+    assert client.get("/memories/stats",headers=other["headers"]).json()["total"] == 0
