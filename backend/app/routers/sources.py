@@ -5,6 +5,8 @@ Ogni memoria punta a una fonte (una chat, un documento, un connettore).
 legarla a nuovi dati; `get_or_create_chat_source` fornisce la fonte
 standard delle conversazioni con l'assistente.
 """
+import uuid
+
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
@@ -52,3 +54,9 @@ def require_source(db: Session, user: User, source_id) -> Source:
     if source is None or source.user_id != user.id:
         raise AtlasError("source_not_found", "Fonte non trovata.", status=404)
     return source
+
+
+@router.get("/{source_id}", response_model=SourceOut)
+def get_source(source_id: uuid.UUID, db: Session = Depends(get_db),
+               user: User = Depends(get_current_user)) -> SourceOut:
+    return SourceOut.model_validate(require_source(db, user, source_id))
