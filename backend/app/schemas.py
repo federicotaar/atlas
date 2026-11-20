@@ -318,3 +318,13 @@ class ActionOut(BaseModel):
     confirmed_at: datetime | None
     executed_at: datetime | None
     cancelled_at: datetime | None
+
+
+class ProjectPatch(BaseModel):
+    """Omitted fields are unchanged; null explicitly clears optional dates."""
+    model_config = ConfigDict(extra="forbid")
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    description: str | None = None
+    status: str | None = Field(default=None, min_length=1, max_length=100)
+    start_date: date | None = None
+    target_date: date | None = None
