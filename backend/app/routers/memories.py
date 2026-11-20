@@ -7,7 +7,7 @@ delle fonti cosi ogni affermazione resta controllabile.
 """
 import uuid
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from ..config import get_settings
@@ -58,6 +58,31 @@ def open_contradictions(db: Session = Depends(get_db),
         )
         for a, b, shared in pairs
     ]
+
+
+@router.get("", response_model=list[MemoryOut])
+def list_memories(db: Session = Depends(get_db), user: User = Depends(get_current_user),
+                  kind: str | None = None, origin: str | None = None,
+                  source_id: uuid.UUID | None = None, include_superseded: bool = False,
+                  limit: int = Query(default=100, ge=1, le=1000),
+                  offset: int = Query(default=0, ge=0)) -> list[MemoryOut]:
+    """Browse recorded facts without requiring a semantic search or model call."""
+    from ..services.memory import VALID_KINDS, VALID_ORIGINS
+    if kind is not None and kind not in VALID_KINDS:
+        raise AtlasError("invalid_kind", "Tipo memoria non valido.")
+    if origin is not None and origin not in VALID_ORIGINS:
+        raise AtlasError("invalid_origin", "Origine memoria non valida.")
+    q = db.query(Memory).filter(Memory.user_id == user.id)
+    if not include_superseded:
+        q = q.filter(Memory.superseded_by.is_(None))
+    if kind is not None:
+        q = q.filter(Memory.kind == kind)
+    if origin is not None:
+        q = q.filter(Memory.origin == origin)
+    if source_id is not None:
+        q = q.filter(Memory.source_id == source_id)
+    rows = q.order_by(Memory.recorded_at.desc(), Memory.id.desc()).offset(offset).limit(limit).all()
+    return [MemoryOut.model_validate(row) for row in rows]
 
 
 @router.get("/{memory_id}", response_model=MemoryOut)
