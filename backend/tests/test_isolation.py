@@ -79,3 +79,12 @@ def test_deleted_user_token_rejected(client):
     make_memory(client, a["headers"], sid, "Da cancellare")
     assert client.delete("/me", headers=a["headers"]).status_code == 204
     assert client.get("/projects", headers=a["headers"]).status_code == 401
+
+
+def test_source_detail_is_owned(client):
+    from .conftest import make_user,make_source
+    a,b=make_user(client,"sourcea"),make_user(client,"sourceb")
+    sid=make_source(client,a["headers"],label="my document")
+    assert client.get(f"/sources/{sid}",headers=a["headers"]).json()["label"] == "my document"
+    assert client.get(f"/sources/{sid}",headers=b["headers"]).status_code == 404
+    assert client.get("/sources/00000000-0000-0000-0000-000000000000",headers=a["headers"]).status_code == 404
