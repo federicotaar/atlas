@@ -72,3 +72,16 @@ def test_events_append_only_no_update_delete(client):
     e = _mk_event(client, u["headers"])
     assert client.put(f"/events/{e['id']}", json={}, headers=u["headers"]).status_code in (404, 405)
     assert client.delete(f"/events/{e['id']}", headers=u["headers"]).status_code in (404, 405)
+
+
+def test_event_pagination_stable_for_equal_timestamps(client):
+    from .conftest import make_user
+    h=make_user(client,"eventpages")["headers"]
+    for i in range(4):
+        assert client.post("/events",headers=h,json={"type":"note","payload":{"n":i},"event_at":"2026-11-20T10:00:00Z"}).status_code==201
+    def page(offset):return client.get("/events",headers=h,params={"limit":2,"offset":offset}).json()
+    a,b=page(0),page(2)
+    assert len(a)==len(b)==2
+    assert not ({r["id"] for r in a} & {r["id"] for r in b})
+    assert a==page(0) and b==page(2)
+    assert client.get("/events?offset=-1",headers=h).status_code==422
