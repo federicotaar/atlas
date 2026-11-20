@@ -74,3 +74,12 @@ def event_stats(db: Session = Depends(get_db), user: User = Depends(get_current_
         q = q.filter(Event.project_id == project_id)
     counts = q.with_entities(Event.type, func.count()).group_by(Event.type).all()
     return {"total": sum(n for _, n in counts), "by_type": dict(counts)}
+
+
+@router.get("/{event_id}", response_model=EventOut)
+def get_event(event_id: uuid.UUID, db: Session = Depends(get_db),
+              user: User = Depends(get_current_user)) -> EventOut:
+    event=db.get(Event,event_id)
+    if event is None or event.user_id != user.id:
+        raise AtlasError("event_not_found", "Evento non trovato.", status=404)
+    return EventOut.model_validate(event)
