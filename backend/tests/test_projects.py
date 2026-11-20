@@ -84,3 +84,15 @@ def test_project_patch_rejects_invalid_merged_state_atomically(client):
         assert client.get(url,headers=h).json()["name"]=="Unchanged"
     other=make_user(client,"patchother")["headers"]
     assert client.patch(url,headers=other,json={"name":"stolen"}).status_code==404
+
+
+def test_project_update_audit_omits_private_values(client,db_session):
+    import uuid
+    from app.models import ActionLog
+    h=make_user(client,"patchaudit")["headers"]
+    pid=client.post("/projects",headers=h,json={"name":"original"}).json()["id"]
+    assert client.patch(f"/projects/{pid}",headers=h,json={"description":"private project notes"}).status_code==200
+    rows=db_session.query(ActionLog).filter(ActionLog.action=="project.update").all()
+    row=next(r for r in rows if r.detail.get("project_id")==pid)
+    assert row.detail=={"project_id":pid,"fields":["description"]}
+    assert 'private project notes' not in str(row.detail)
