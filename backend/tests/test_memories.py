@@ -119,3 +119,25 @@ def test_superseded_memory_excluded_from_search(client):
     contents = [h["memory"]["content"] for h in r.json()]
     assert "La password del router e balena-rossa-7" in contents
     assert "La password del router e squalo-verde-42" not in contents
+
+
+def test_browse_memories_filters_and_isolation(client):
+    from .conftest import make_user, make_source, make_memory
+    a, b = make_user(client, "browsea"), make_user(client, "browseb")
+    sa, sb = make_source(client, a["headers"]), make_source(client, b["headers"])
+    old = make_memory(client, a["headers"], sa, "old fact")
+    new = make_memory(client, a["headers"], sa, "new fact", supersedes=old["id"])
+    task = make_memory(client, a["headers"], sa, "read the book", kind="task", origin="inferred")
+    make_memory(client, b["headers"], sb, "not yours")
+    def get(**params):
+        return client.get("/memories", headers=a["headers"], params=params)
+    assert {x["id"] for x in get().json()} == {new["id"],task["id"]}
+    assert len(get(include_superseded=True).json()) == 3
+    assert get(kind="task", origin="inferred").json()[0]["id"] == task["id"]
+    assert get(source_id=sb).json() == []
+    first, second = get(limit=1).json(), get(limit=1,offset=1).json()
+    assert len(first)==len(second)==1 and first[0]["id"] != second[0]["id"]
+    assert get(kind="bad").status_code == 400
+    assert get(origin="bad").status_code == 400
+    assert get(limit=0).status_code == 422
+    assert get(offset=-1).status_code == 422
