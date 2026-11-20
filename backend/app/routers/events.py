@@ -63,3 +63,14 @@ def list_events(
         q = q.filter(Event.event_at <= to_ts)
     events = q.order_by(Event.event_at.desc(), Event.id.desc()).offset(offset).limit(limit).all()
     return [EventOut.model_validate(e) for e in events]
+
+
+@router.get("/stats")
+def event_stats(db: Session = Depends(get_db), user: User = Depends(get_current_user),
+                project_id: uuid.UUID | None = None) -> dict:
+    from sqlalchemy import func
+    q = db.query(Event).filter(Event.user_id == user.id)
+    if project_id is not None:
+        q = q.filter(Event.project_id == project_id)
+    counts = q.with_entities(Event.type, func.count()).group_by(Event.type).all()
+    return {"total": sum(n for _, n in counts), "by_type": dict(counts)}
