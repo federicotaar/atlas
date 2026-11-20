@@ -85,3 +85,12 @@ def test_event_pagination_stable_for_equal_timestamps(client):
     assert not ({r["id"] for r in a} & {r["id"] for r in b})
     assert a==page(0) and b==page(2)
     assert client.get("/events?offset=-1",headers=h).status_code==422
+
+
+def test_event_time_range_validation(client):
+    from .conftest import make_user
+    h=make_user(client,"eventrange")["headers"]
+    r=client.get("/events",headers=h,params={"from":"2026-11-21T00:00:00Z","to":"2026-11-20T00:00:00Z"})
+    assert r.status_code==400 and r.json()["error"]["code"]=="invalid_range"
+    # Equal instants in different zones are not a reversed range.
+    assert client.get("/events",headers=h,params={"from":"2026-11-20T10:00:00+02:00","to":"2026-11-20T08:00:00Z"}).status_code==200
