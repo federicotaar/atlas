@@ -30,8 +30,12 @@ def create_source(body: SourceIn, db: Session = Depends(get_db),
 
 
 @router.get("", response_model=list[SourceOut])
-def list_sources(db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> list[SourceOut]:
-    sources = db.query(Source).filter(Source.user_id == user.id).order_by(Source.created_at).all()
+def list_sources(db: Session = Depends(get_db), user: User = Depends(get_current_user),
+                 kind: str | None = None) -> list[SourceOut]:
+    q = db.query(Source).filter(Source.user_id == user.id)
+    if kind is not None:
+        q = q.filter(Source.kind == kind)
+    sources = q.order_by(Source.created_at).all()
     return [SourceOut.model_validate(s) for s in sources]
 
 
