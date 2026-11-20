@@ -88,3 +88,15 @@ def test_source_detail_is_owned(client):
     assert client.get(f"/sources/{sid}",headers=a["headers"]).json()["label"] == "my document"
     assert client.get(f"/sources/{sid}",headers=b["headers"]).status_code == 404
     assert client.get("/sources/00000000-0000-0000-0000-000000000000",headers=a["headers"]).status_code == 404
+
+
+def test_source_usage_counts_and_ownership(client):
+    from .conftest import make_user,make_source,make_memory
+    a,b=make_user(client,"usagea"),make_user(client,"usageb");h=a["headers"]
+    sid=make_source(client,h)
+    old=make_memory(client,h,sid,"old source fact")
+    make_memory(client,h,sid,"replacement source fact",supersedes=old["id"])
+    r=client.post("/events",headers=h,json={"type":"note","payload":{},"source_id":sid,"event_at":"2026-11-20T10:00:00Z"})
+    assert r.status_code == 201
+    assert client.get(f"/sources/{sid}/usage",headers=h).json()=={"memories":2,"active_memories":1,"events":1}
+    assert client.get(f"/sources/{sid}/usage",headers=b["headers"]).status_code == 404
