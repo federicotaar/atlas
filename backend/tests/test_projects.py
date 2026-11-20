@@ -62,3 +62,25 @@ def test_project_activity_summary(client):
     assert out["events"]==3 and out["by_type"]=={"note":2,"milestone":1}
     assert out["first_event_at"] and out["last_event_at"]
     assert client.get(url,headers=b["headers"]).status_code==404
+
+
+def test_project_partial_updates_and_date_clearing(client):
+    h=make_user(client,"projectpatch")["headers"]
+    p=client.post("/projects",headers=h,json={"name":"Before","description":"keep","start_date":"2026-11-01","target_date":"2026-12-01"}).json()
+    url=f"/projects/{p['id']}"
+    r=client.patch(url,headers=h,json={"name":" After ","status":"completed"})
+    assert r.status_code==200 and r.json()["name"]=="After"
+    assert r.json()["description"]=="keep" and r.json()["target_date"]=="2026-12-01"
+    r=client.patch(url,headers=h,json={"target_date":None,"description":""})
+    assert r.status_code==200 and r.json()["target_date"] is None and r.json()["description"]==""
+
+
+def test_project_patch_rejects_invalid_merged_state_atomically(client):
+    h=make_user(client,"badprojectpatch")["headers"]
+    pid=client.post("/projects",headers=h,json={"name":"Unchanged","start_date":"2026-11-01","target_date":"2026-12-01"}).json()["id"]
+    url=f"/projects/{pid}"
+    for data,status in [({},400),({"name":None},400),({"description":None},400),({"name":" "},400),({"unknown":"x"},422),({"name":"changed","start_date":"2026-12-02"},400)]:
+        assert client.patch(url,headers=h,json=data).status_code==status
+        assert client.get(url,headers=h).json()["name"]=="Unchanged"
+    other=make_user(client,"patchother")["headers"]
+    assert client.patch(url,headers=other,json={"name":"stolen"}).status_code==404
