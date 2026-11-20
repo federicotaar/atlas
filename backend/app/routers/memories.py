@@ -85,6 +85,18 @@ def list_memories(db: Session = Depends(get_db), user: User = Depends(get_curren
     return [MemoryOut.model_validate(row) for row in rows]
 
 
+@router.get("/stats")
+def memory_stats(db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> dict:
+    from sqlalchemy import func
+    q = db.query(Memory).filter(Memory.user_id == user.id)
+    active = q.filter(Memory.superseded_by.is_(None))
+    by_kind = active.with_entities(Memory.kind, func.count()).group_by(Memory.kind).all()
+    by_origin = active.with_entities(Memory.origin, func.count()).group_by(Memory.origin).all()
+    total, current = q.count(), active.count()
+    return {"total": total, "active": current, "superseded": total-current,
+            "by_kind": dict(by_kind), "by_origin": dict(by_origin)}
+
+
 @router.get("/{memory_id}", response_model=MemoryOut)
 def get_one(memory_id: uuid.UUID, db: Session = Depends(get_db),
             user: User = Depends(get_current_user)) -> MemoryOut:
