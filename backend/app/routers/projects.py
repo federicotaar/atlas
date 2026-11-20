@@ -30,8 +30,12 @@ def create_project(body: ProjectIn, db: Session = Depends(get_db),
 
 
 @router.get("", response_model=list[ProjectOut])
-def list_projects(db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> list[ProjectOut]:
-    projects = db.query(Project).filter(Project.user_id == user.id).order_by(Project.created_at).all()
+def list_projects(db: Session = Depends(get_db), user: User = Depends(get_current_user),
+                  status: str | None = None) -> list[ProjectOut]:
+    q = db.query(Project).filter(Project.user_id == user.id)
+    if status is not None:
+        q = q.filter(Project.status == status)
+    projects = q.order_by(Project.created_at).all()
     return [ProjectOut.model_validate(p) for p in projects]
 
 
