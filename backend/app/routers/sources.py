@@ -7,7 +7,7 @@ standard delle conversazioni con l'assistente.
 """
 import uuid
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from ..db import get_db
@@ -31,11 +31,16 @@ def create_source(body: SourceIn, db: Session = Depends(get_db),
 
 @router.get("", response_model=list[SourceOut])
 def list_sources(db: Session = Depends(get_db), user: User = Depends(get_current_user),
-                 kind: str | None = None) -> list[SourceOut]:
+                 kind: str | None = None,
+                 limit: int | None = Query(default=None, ge=1, le=1000),
+                 offset: int = Query(default=0, ge=0)) -> list[SourceOut]:
     q = db.query(Source).filter(Source.user_id == user.id)
     if kind is not None:
         q = q.filter(Source.kind == kind)
-    sources = q.order_by(Source.created_at).all()
+    q = q.order_by(Source.created_at).offset(offset)
+    if limit is not None:
+        q = q.limit(limit)
+    sources = q.all()
     return [SourceOut.model_validate(s) for s in sources]
 
 
