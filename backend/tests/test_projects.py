@@ -48,3 +48,17 @@ def test_project_status_filter(client):
     rows=client.get("/projects?status=completed",headers=h).json()
     assert len(rows)==1 and rows[0]["name"]=="completed"
     assert client.get("/projects?status=absent",headers=h).json()==[]
+
+
+def test_project_activity_summary(client):
+    from .conftest import make_user
+    a,b=make_user(client,"summarya"),make_user(client,"summaryb");h=a["headers"]
+    pid=client.post("/projects",headers=h,json={"name":"summary"}).json()["id"]
+    url=f"/projects/{pid}/activity-summary"
+    assert client.get(url,headers=h).json()["events"]==0
+    for kind in ("note","note","milestone"):
+        assert client.post("/events",headers=h,json={"type":kind,"project_id":pid,"payload":{},"event_at":"2026-11-20T10:00:00Z"}).status_code==201
+    out=client.get(url,headers=h).json()
+    assert out["events"]==3 and out["by_type"]=={"note":2,"milestone":1}
+    assert out["first_event_at"] and out["last_event_at"]
+    assert client.get(url,headers=b["headers"]).status_code==404
