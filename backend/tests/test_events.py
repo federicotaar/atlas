@@ -94,3 +94,14 @@ def test_event_time_range_validation(client):
     assert r.status_code==400 and r.json()["error"]["code"]=="invalid_range"
     # Equal instants in different zones are not a reversed range.
     assert client.get("/events",headers=h,params={"from":"2026-11-20T10:00:00+02:00","to":"2026-11-20T08:00:00Z"}).status_code==200
+
+
+def test_event_statistics_owner_and_project_filter(client):
+    from .conftest import make_user
+    a,b=make_user(client,"eventstatsa"),make_user(client,"eventstatsb");h=a["headers"]
+    pid=client.post("/projects",headers=h,json={"name":"counts"}).json()["id"]
+    for project in (pid,None):
+        assert client.post("/events",headers=h,json={"type":"note","project_id":project,"payload":{},"event_at":"2026-11-20T10:00:00Z"}).status_code==201
+    assert client.get("/events/stats",headers=h).json()=={"total":2,"by_type":{"note":2}}
+    assert client.get("/events/stats",headers=h,params={"project_id":pid}).json()["total"]==1
+    assert client.get("/events/stats",headers=b["headers"]).json()["total"]==0
