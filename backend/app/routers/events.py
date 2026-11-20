@@ -47,6 +47,7 @@ def list_events(
     from_ts: datetime | None = Query(default=None, alias="from"),
     to_ts: datetime | None = Query(default=None, alias="to"),
     limit: int = Query(default=100, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
 ) -> list[EventOut]:
     q = db.query(Event).filter(Event.user_id == user.id)
     if type is not None:
@@ -57,5 +58,5 @@ def list_events(
         q = q.filter(Event.event_at >= from_ts)
     if to_ts is not None:
         q = q.filter(Event.event_at <= to_ts)
-    events = q.order_by(Event.event_at.desc()).limit(limit).all()
+    events = q.order_by(Event.event_at.desc(), Event.id.desc()).offset(offset).limit(limit).all()
     return [EventOut.model_validate(e) for e in events]
