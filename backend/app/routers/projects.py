@@ -46,3 +46,18 @@ def get_project(project_id: uuid.UUID, db: Session = Depends(get_db),
     if project is None or project.user_id != user.id:
         raise AtlasError("project_not_found", "Progetto non trovato.", status=404)
     return ProjectOut.model_validate(project)
+
+
+@router.get("/{project_id}/activity-summary")
+def project_activity_summary(project_id: uuid.UUID, db: Session = Depends(get_db),
+                             user: User = Depends(get_current_user)) -> dict:
+    from sqlalchemy import func
+    from ..models import Event
+    project = db.get(Project, project_id)
+    if project is None or project.user_id != user.id:
+        raise AtlasError("project_not_found", "Progetto non trovato.", status=404)
+    q = db.query(Event).filter(Event.user_id == user.id, Event.project_id == project_id)
+    counts = q.with_entities(Event.type, func.count()).group_by(Event.type).all()
+    first, last = q.with_entities(func.min(Event.event_at), func.max(Event.event_at)).one()
+    return {"events": sum(n for _, n in counts), "by_type": dict(counts),
+            "first_event_at": first, "last_event_at": last}
