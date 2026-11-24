@@ -65,3 +65,9 @@ def test_to_iso_z_converts_offset_to_utc():
 def test_to_iso_z_naive_is_utc():
     from app.services.dates import to_iso_z
     assert to_iso_z(datetime(2026, 11, 19, 8, 0)) == "2026-11-19T08:00:00Z"
+
+
+def test_aware_does_not_mutate_input():
+    naive = datetime(2026, 11, 19, 9, 0)
+    aware(naive)
+    assert naive.tzinfo is None
