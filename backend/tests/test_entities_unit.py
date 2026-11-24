@@ -73,3 +73,8 @@ def test_guess_kind():
 def test_collabora_con_pattern():
     assert _match("Giulia Bianchi collabora con Marco Rossi.") == ("collabora_con", "Giulia Bianchi", "Marco Rossi")
     assert _match("Giulia collabora a Roma") is None
+
+
+def test_candidates_skip_greetings():
+    assert _candidates("Ciao Giulia Bianchi, grazie") == []
+    assert "Giulia Bianchi" in _candidates("Ho scritto a Giulia Bianchi")
