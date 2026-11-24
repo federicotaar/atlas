@@ -26,6 +26,7 @@ _NON_ENTITY = {
     "Anche", "Quindi", "Perciò", "Percio", "Inoltre", "Allora", "Ecco",
     "Forse", "Anzi", "Comunque", "Infatti", "Invece",
     "Stasera", "Stamattina", "Stanotte", "Stamani",
+    "Ciao", "Grazie", "Prego", "Salve", "Buongiorno", "Buonasera",
     "Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno",
     "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre",
 }
