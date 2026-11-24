@@ -10,3 +10,8 @@ def aware(dt: datetime) -> datetime:
     if dt.tzinfo is None:
         return dt.replace(tzinfo=timezone.utc)
     return dt
+
+
+def days_between(start: datetime, end: datetime) -> int:
+    """Giorni interi tra due datetime (naive = UTC); negativo se end precede start."""
+    return (aware(end) - aware(start)).days
