@@ -54,3 +54,14 @@ def test_week_start_is_monday_midnight():
 def test_week_start_crosses_year_boundary():
     from app.services.dates import week_start
     assert week_start(datetime(2027, 1, 1)) == datetime(2026, 12, 28, tzinfo=timezone.utc)
+
+
+def test_to_iso_z_converts_offset_to_utc():
+    from app.services.dates import to_iso_z
+    tz = timezone(timedelta(hours=2))
+    assert to_iso_z(datetime(2026, 11, 19, 12, 30, 5, 123456, tzinfo=tz)) == "2026-11-19T10:30:05Z"
+
+
+def test_to_iso_z_naive_is_utc():
+    from app.services.dates import to_iso_z
+    assert to_iso_z(datetime(2026, 11, 19, 8, 0)) == "2026-11-19T08:00:00Z"
