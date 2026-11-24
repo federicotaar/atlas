@@ -31,3 +31,15 @@ def test_days_between_mixes_naive_and_aware():
 def test_days_between_drops_partial_days():
     from app.services.dates import days_between
     assert days_between(datetime(2026, 11, 1, 12), datetime(2026, 11, 2, 11, 59)) == 0
+
+
+def test_start_of_day_zeroes_time_and_keeps_tz():
+    from app.services.dates import start_of_day
+    tz = timezone(timedelta(hours=1))
+    out = start_of_day(datetime(2026, 11, 19, 15, 42, 7, 999, tzinfo=tz))
+    assert out == datetime(2026, 11, 19, 0, 0, tzinfo=tz)
+
+
+def test_start_of_day_naive_becomes_utc():
+    from app.services.dates import start_of_day
+    assert start_of_day(datetime(2026, 11, 19, 23, 59)).tzinfo is timezone.utc
