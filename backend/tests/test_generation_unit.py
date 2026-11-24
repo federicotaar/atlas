@@ -15,3 +15,11 @@ def test_extractive_lists_memories_with_citations():
 
 def test_extractive_empty_memories():
     assert ExtractiveGenerator().answer("q", []) == "Dalle tue memorie:"
+
+
+def test_build_generator_default_is_extractive():
+    from types import SimpleNamespace
+
+    from app.services.generation import build_generator
+    gen = build_generator(SimpleNamespace(llm_provider="extractive"))
+    assert gen.name == "extractive"
