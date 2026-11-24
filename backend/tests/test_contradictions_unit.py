@@ -61,3 +61,8 @@ def test_content_words_skip_short_and_stopwords():
 def test_single_shared_word_is_not_a_conflict():
     conflict, shared = is_possible_contradiction("Riunione giovedi", "Riunione venerdi")
     assert conflict is False and shared == []
+
+
+def test_english_and_italian_weekday_agree():
+    conflict, _ = is_possible_contradiction("Riunione settimanale progetto giovedi", "Weekly progetto riunione thursday")
+    assert conflict is False
