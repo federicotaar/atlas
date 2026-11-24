@@ -43,3 +43,13 @@ def test_wrong_key_is_rejected():
     with pytest.raises(AtlasError) as exc:
         decrypt_secret(token, Fernet.generate_key().decode())
     assert exc.value.code == "credentials_decrypt_failed"
+
+
+def test_invalid_key_is_config_error():
+    import pytest
+
+    from app.errors import AtlasError
+    from app.services.credentials import encrypt_secret
+    with pytest.raises(AtlasError) as exc:
+        encrypt_secret("x", "not-a-fernet-key")
+    assert exc.value.code == "credentials_key_invalid"
