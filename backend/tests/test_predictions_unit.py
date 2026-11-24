@@ -53,3 +53,9 @@ def test_week_key_naive_is_utc():
 def test_week_key_iso_year_boundary():
     # 2021-01-01 appartiene alla settimana 53 dell'anno ISO 2020.
     assert _week_key(datetime(2021, 1, 1, tzinfo=timezone.utc)) == (2020, 53)
+
+
+def test_brier_extremes():
+    assert brier_score(1.0, True) == 0.0
+    assert brier_score(0.0, True) == 1.0
+    assert brier_score(0.5, False) == 0.25
