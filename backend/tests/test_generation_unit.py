@@ -46,3 +46,24 @@ def test_ollama_http_error_is_model_unavailable(monkeypatch):
     monkeypatch.setattr(generation.httpx, "post", boom)
     with pytest.raises(ModelUnavailable):
         generation.OllamaGenerator("http://x", "m").answer("q", [{"content": "c"}])
+
+
+def test_ollama_prompt_and_response_strip(monkeypatch):
+    from app.services import generation
+    seen = {}
+
+    class Resp:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {"response": "  Risposta [M1]  \n"}
+
+    def fake_post(url, json, timeout):
+        seen.update(url=url, json=json, timeout=timeout)
+        return Resp()
+    monkeypatch.setattr(generation.httpx, "post", fake_post)
+    out = generation.OllamaGenerator("http://x/", "mod", timeout=3).answer("Dove?", [{"content": "A Roma"}])
+    assert out == "Risposta [M1]"
+    assert seen["url"] == "http://x/api/generate" and seen["json"]["stream"] is False
+    assert "[M1] A Roma" in seen["json"]["prompt"] and "Domanda: Dove?" in seen["json"]["prompt"]
