@@ -15,3 +15,8 @@ def aware(dt: datetime) -> datetime:
 def days_between(start: datetime, end: datetime) -> int:
     """Giorni interi tra due datetime (naive = UTC); negativo se end precede start."""
     return (aware(end) - aware(start)).days
+
+
+def start_of_day(dt: datetime) -> datetime:
+    """Mezzanotte (stesso fuso) del giorno di dt; i naive restano UTC."""
+    return aware(dt).replace(hour=0, minute=0, second=0, microsecond=0)
