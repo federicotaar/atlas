@@ -43,3 +43,14 @@ def test_start_of_day_zeroes_time_and_keeps_tz():
 def test_start_of_day_naive_becomes_utc():
     from app.services.dates import start_of_day
     assert start_of_day(datetime(2026, 11, 19, 23, 59)).tzinfo is timezone.utc
+
+
+def test_week_start_is_monday_midnight():
+    from app.services.dates import week_start
+    assert week_start(datetime(2026, 11, 22, 18, 0)) == datetime(2026, 11, 16, tzinfo=timezone.utc)
+    assert week_start(datetime(2026, 11, 16, 0, 0)) == datetime(2026, 11, 16, tzinfo=timezone.utc)
+
+
+def test_week_start_crosses_year_boundary():
+    from app.services.dates import week_start
+    assert week_start(datetime(2027, 1, 1)) == datetime(2026, 12, 28, tzinfo=timezone.utc)
