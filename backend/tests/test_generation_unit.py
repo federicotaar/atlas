@@ -23,3 +23,12 @@ def test_build_generator_default_is_extractive():
     from app.services.generation import build_generator
     gen = build_generator(SimpleNamespace(llm_provider="extractive"))
     assert gen.name == "extractive"
+
+
+def test_build_generator_ollama_uses_settings():
+    from types import SimpleNamespace
+
+    from app.services.generation import build_generator
+    gen = build_generator(SimpleNamespace(llm_provider="ollama", ollama_base_url="http://h:11434/",
+                                          ollama_llm_model="m", model_call_timeout_s=7.0))
+    assert gen.name == "ollama" and gen.base_url == "http://h:11434" and gen.model == "m" and gen.timeout == 7.0
