@@ -31,3 +31,15 @@ def test_wrong_key_cannot_decrypt():
     with pytest.raises(AtlasError) as exc:
         decrypt_secret(enc, Fernet.generate_key().decode())
     assert exc.value.code == "credentials_decrypt_failed"
+
+
+def test_wrong_key_is_rejected():
+    import pytest
+    from cryptography.fernet import Fernet
+
+    from app.errors import AtlasError
+    from app.services.credentials import decrypt_secret, encrypt_secret
+    token = encrypt_secret("segreto", Fernet.generate_key().decode())
+    with pytest.raises(AtlasError) as exc:
+        decrypt_secret(token, Fernet.generate_key().decode())
+    assert exc.value.code == "credentials_decrypt_failed"
