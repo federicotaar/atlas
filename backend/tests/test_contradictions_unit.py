@@ -56,3 +56,8 @@ def test_no_values_no_conflict():
 def test_content_words_skip_short_and_stopwords():
     from app.services.contradictions import _content_words
     assert _content_words("Il server con la porta aperta") == {"server", "porta", "aperta"}
+
+
+def test_single_shared_word_is_not_a_conflict():
+    conflict, shared = is_possible_contradiction("Riunione giovedi", "Riunione venerdi")
+    assert conflict is False and shared == []
