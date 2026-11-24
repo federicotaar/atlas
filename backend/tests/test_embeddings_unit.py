@@ -68,3 +68,8 @@ def test_local_hash_empty_text_is_zero_vector():
     vec = LocalHashEmbedder(16).embed("")
     assert vec == [0.0] * 16
     assert LocalHashEmbedder(16).embed("   ...  ") == [0.0] * 16
+
+
+def test_local_hash_ignores_case():
+    emb = LocalHashEmbedder(64)
+    assert emb.embed("Progetto ATLAS") == emb.embed("progetto atlas")
