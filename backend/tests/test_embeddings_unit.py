@@ -73,3 +73,11 @@ def test_local_hash_empty_text_is_zero_vector():
 def test_local_hash_ignores_case():
     emb = LocalHashEmbedder(64)
     assert emb.embed("Progetto ATLAS") == emb.embed("progetto atlas")
+
+
+def test_cosine_basic_cases():
+    from app.services.embeddings import cosine
+    assert abs(cosine([1.0, 2.0], [2.0, 4.0]) - 1.0) < 1e-12
+    assert abs(cosine([1.0, 0.0], [-1.0, 0.0]) + 1.0) < 1e-12
+    assert cosine([1.0, 0.0], [0.0, 1.0]) == 0.0
+    assert cosine([0.0, 0.0], [1.0, 1.0]) == 0.0
