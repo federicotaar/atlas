@@ -36,6 +36,7 @@ _REL_PATTERNS = (
     (re.compile(r"^(.+?)\s+porta\s+avanti\s+(.+)$", re.IGNORECASE), "porta_avanti"),
     (re.compile(r"^(.+?)\s+studia\s+(?:(?:a|da|presso|in|al|alla)\s+|all')(.+)$", re.IGNORECASE), "studia_a"),
     (re.compile(r"^(.+?)\s+abita\s+(?:a|in|presso)\s+(.+)$", re.IGNORECASE), "abita_a"),
+    (re.compile(r"^(.+?)\s+collabora\s+con\s+(.+)$", re.IGNORECASE), "collabora_con"),
     (re.compile(r"^(.+?)\s+fa\s+parte\s+(?:(?:di|del|della|dei|degli|delle)\s+|dell')(.+)$", re.IGNORECASE), "fa_parte_di"),
 )
 
