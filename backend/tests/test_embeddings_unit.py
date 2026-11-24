@@ -62,3 +62,9 @@ def test_local_hash_vectors_have_unit_norm():
     import math
     vec = LocalHashEmbedder(128).embed("una frase abbastanza lunga per riempire il vettore")
     assert abs(math.sqrt(sum(v * v for v in vec)) - 1.0) < 1e-9
+
+
+def test_local_hash_empty_text_is_zero_vector():
+    vec = LocalHashEmbedder(16).embed("")
+    assert vec == [0.0] * 16
+    assert LocalHashEmbedder(16).embed("   ...  ") == [0.0] * 16
