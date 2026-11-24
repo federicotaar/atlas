@@ -73,3 +73,8 @@ def test_decimal_comma_values():
     assert _numbers("pesa 2,5 kg") == {Decimal("2.5")}
     conflict, shared = is_possible_contradiction("Il pacco pesa 2,5 chili", "Il pacco pesa 3,5 chili")
     assert conflict is True and "pacco" in shared
+
+
+def test_shared_terms_are_sorted():
+    _, shared = is_possible_contradiction("Il bonifico affitto costa 500 euro", "Il bonifico affitto costa 600 euro")
+    assert shared == sorted(shared) and "affitto" in shared
