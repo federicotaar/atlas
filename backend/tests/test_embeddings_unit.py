@@ -51,3 +51,8 @@ def test_local_hash_rejects_bad_dim():
     import pytest
     with pytest.raises(ValueError):
         LocalHashEmbedder(0)
+
+
+def test_local_hash_is_deterministic():
+    emb = LocalHashEmbedder(64)
+    assert emb.embed("il server e su Oracle") == emb.embed("il server e su Oracle")
