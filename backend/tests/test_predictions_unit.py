@@ -59,3 +59,10 @@ def test_brier_extremes():
     assert brier_score(1.0, True) == 0.0
     assert brier_score(0.0, True) == 1.0
     assert brier_score(0.5, False) == 0.25
+
+
+def test_calibration_rounds_to_three_decimals():
+    out = calibration_buckets([(0.11, 1.0), (0.12, 0.0), (0.13, 0.0)])
+    assert out["0.1-0.2"]["count"] == 3
+    assert out["0.1-0.2"]["avg_probability"] == 0.12
+    assert out["0.1-0.2"]["frequency"] == 0.333
