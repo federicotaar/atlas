@@ -27,3 +27,9 @@ def week_start(dt: datetime) -> datetime:
     from datetime import timedelta
     day = start_of_day(dt)
     return day - timedelta(days=day.weekday())
+
+
+def to_iso_z(dt: datetime) -> str:
+    """ISO 8601 in UTC con suffisso Z, senza microsecondi."""
+    from datetime import timezone as _tz
+    return aware(dt).astimezone(_tz.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
