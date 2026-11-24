@@ -32,3 +32,17 @@ def test_build_generator_ollama_uses_settings():
     gen = build_generator(SimpleNamespace(llm_provider="ollama", ollama_base_url="http://h:11434/",
                                           ollama_llm_model="m", model_call_timeout_s=7.0))
     assert gen.name == "ollama" and gen.base_url == "http://h:11434" and gen.model == "m" and gen.timeout == 7.0
+
+
+def test_ollama_http_error_is_model_unavailable(monkeypatch):
+    import httpx
+    import pytest
+
+    from app.services import generation
+    from app.services.embeddings import ModelUnavailable
+
+    def boom(*a, **k):
+        raise httpx.ConnectError("no route")
+    monkeypatch.setattr(generation.httpx, "post", boom)
+    with pytest.raises(ModelUnavailable):
+        generation.OllamaGenerator("http://x", "m").answer("q", [{"content": "c"}])
