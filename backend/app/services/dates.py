@@ -20,3 +20,10 @@ def days_between(start: datetime, end: datetime) -> int:
 def start_of_day(dt: datetime) -> datetime:
     """Mezzanotte (stesso fuso) del giorno di dt; i naive restano UTC."""
     return aware(dt).replace(hour=0, minute=0, second=0, microsecond=0)
+
+
+def week_start(dt: datetime) -> datetime:
+    """Lunedi' alle 00:00 della settimana ISO di dt."""
+    from datetime import timedelta
+    day = start_of_day(dt)
+    return day - timedelta(days=day.weekday())
