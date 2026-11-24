@@ -2,6 +2,12 @@
 
 Modifiche rilevanti di ATLAS, dalle piu recenti.
 
+## 2026-11-24
+
+- Backend: helper date condivisi `days_between`, `start_of_day`, `week_start` e `to_iso_z`.
+- Backend: nuova relazione `collabora_con` nel grafo; saluti ("Ciao", "Grazie", ...) esclusi dalle entita candidate.
+- Test unitari aggiunti per embeddings, generatori (Ollama simulato), predizioni, contraddizioni, router e credenziali.
+
 ## 2026-11-19
 
 - Backend: nuovi pattern relazionali nel grafo (`studia_a`, `abita_a`, `fa_parte_di`).
