@@ -67,3 +67,20 @@ def test_ollama_prompt_and_response_strip(monkeypatch):
     assert out == "Risposta [M1]"
     assert seen["url"] == "http://x/api/generate" and seen["json"]["stream"] is False
     assert "[M1] A Roma" in seen["json"]["prompt"] and "Domanda: Dove?" in seen["json"]["prompt"]
+
+
+def test_ollama_missing_response_key_is_unavailable(monkeypatch):
+    import pytest
+
+    from app.services import generation
+    from app.services.embeddings import ModelUnavailable
+
+    class Resp:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {"unexpected": 1}
+    monkeypatch.setattr(generation.httpx, "post", lambda *a, **k: Resp())
+    with pytest.raises(ModelUnavailable):
+        generation.OllamaGenerator("http://x", "m").answer("q", [])
