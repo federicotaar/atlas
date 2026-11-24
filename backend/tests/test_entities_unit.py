@@ -68,3 +68,8 @@ def test_guess_kind():
     assert _guess_kind("Progetto Mercurio", set()) == "concept"
     assert _guess_kind("Maria Rossi", set()) == "person"
     assert _guess_kind("PostgreSQL", set()) == "concept"
+
+
+def test_collabora_con_pattern():
+    assert _match("Giulia Bianchi collabora con Marco Rossi.") == ("collabora_con", "Giulia Bianchi", "Marco Rossi")
+    assert _match("Giulia collabora a Roma") is None
