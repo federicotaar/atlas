@@ -56,3 +56,9 @@ def test_local_hash_rejects_bad_dim():
 def test_local_hash_is_deterministic():
     emb = LocalHashEmbedder(64)
     assert emb.embed("il server e su Oracle") == emb.embed("il server e su Oracle")
+
+
+def test_local_hash_vectors_have_unit_norm():
+    import math
+    vec = LocalHashEmbedder(128).embed("una frase abbastanza lunga per riempire il vettore")
+    assert abs(math.sqrt(sum(v * v for v in vec)) - 1.0) < 1e-9
