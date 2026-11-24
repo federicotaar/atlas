@@ -47,3 +47,7 @@ def test_answer_falls_back_to_extractive(router):
     out, used = router.answer("q", [{"content": "fatto"}])
     assert used == "broken-gen->extractive-fallback"
     assert out.startswith("Dalle tue memorie:")
+
+
+def test_log_is_skipped_without_db(router):
+    assert router._log(None, None, "embed", "m", 0.0, "testo") is None
