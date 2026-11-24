@@ -81,3 +81,8 @@ def test_cosine_basic_cases():
     assert abs(cosine([1.0, 0.0], [-1.0, 0.0]) + 1.0) < 1e-12
     assert cosine([1.0, 0.0], [0.0, 1.0]) == 0.0
     assert cosine([0.0, 0.0], [1.0, 1.0]) == 0.0
+
+
+def test_word_order_matters_via_bigrams():
+    emb = LocalHashEmbedder(256)
+    assert emb.embed("cane morde uomo") != emb.embed("uomo morde cane")
