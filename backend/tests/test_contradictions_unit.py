@@ -66,3 +66,10 @@ def test_single_shared_word_is_not_a_conflict():
 def test_english_and_italian_weekday_agree():
     conflict, _ = is_possible_contradiction("Riunione settimanale progetto giovedi", "Weekly progetto riunione thursday")
     assert conflict is False
+
+
+def test_decimal_comma_values():
+    from decimal import Decimal
+    assert _numbers("pesa 2,5 kg") == {Decimal("2.5")}
+    conflict, shared = is_possible_contradiction("Il pacco pesa 2,5 chili", "Il pacco pesa 3,5 chili")
+    assert conflict is True and "pacco" in shared
