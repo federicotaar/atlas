@@ -78,3 +78,8 @@ def test_collabora_con_pattern():
 def test_candidates_skip_greetings():
     assert _candidates("Ciao Giulia Bianchi, grazie") == []
     assert "Giulia Bianchi" in _candidates("Ho scritto a Giulia Bianchi")
+
+
+def test_candidates_are_deduplicated():
+    out = _candidates("Ho visto Giulia Bianchi. Poi ho chiamato Giulia Bianchi")
+    assert out == ["Giulia Bianchi"]
