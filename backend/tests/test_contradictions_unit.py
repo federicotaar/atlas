@@ -51,3 +51,8 @@ def test_no_values_no_conflict():
         "Il gatto di Marco dorme sempre",
         "Il gatto di Marco gioca sempre")
     assert not conflict
+
+
+def test_content_words_skip_short_and_stopwords():
+    from app.services.contradictions import _content_words
+    assert _content_words("Il server con la porta aperta") == {"server", "porta", "aperta"}
