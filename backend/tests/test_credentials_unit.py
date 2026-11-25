@@ -53,3 +53,16 @@ def test_invalid_key_is_config_error():
     with pytest.raises(AtlasError) as exc:
         encrypt_secret("x", "not-a-fernet-key")
     assert exc.value.code == "credentials_key_invalid"
+
+
+def test_mask_secret_shows_only_tail():
+    from app.services.credentials import mask_secret
+    assert mask_secret("sk-1234567890abcd") == "****abcd"
+    assert mask_secret("") == ""
+
+
+def test_mask_secret_hides_short_values_entirely():
+    from app.services.credentials import mask_secret
+    assert mask_secret("abcde") == "********"
+    assert "abc" not in mask_secret("abc")
+    assert mask_secret("abcdefgh", visible=0) == "********"
