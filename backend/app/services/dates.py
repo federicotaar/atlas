@@ -53,3 +53,8 @@ def parse_iso_z(value: str) -> datetime:
     if text.endswith(("Z", "z")):
         text = text[:-1] + "+00:00"
     return aware(datetime.fromisoformat(text))
+
+
+def is_same_day(a: datetime, b: datetime) -> bool:
+    """True se i due datetime cadono nello stesso giorno UTC (naive = UTC)."""
+    return aware(a).astimezone(timezone.utc).date() == aware(b).astimezone(timezone.utc).date()
