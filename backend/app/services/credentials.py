@@ -39,3 +39,13 @@ def decrypt_secret(token_enc: str, key: str) -> str:
         raise AtlasError("credentials_decrypt_failed",
                          "Credenziali illeggibili: chiave diversa da quella usata "
                          "per salvarle. Ricollegare il connettore.", status=500) from exc
+
+
+def mask_secret(secret: str, visible: int = 4) -> str:
+    """Versione mascherata per UI e log: '****abcd'. Mai il segreto intero:
+    se e' corto di `visible` + 2 caratteri non ne mostra nessuno."""
+    if not secret:
+        return ""
+    if visible < 1 or len(secret) < visible + 2:
+        return "*" * 8
+    return "*" * 4 + secret[-visible:]
