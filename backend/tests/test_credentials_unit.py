@@ -66,3 +66,10 @@ def test_mask_secret_hides_short_values_entirely():
     assert mask_secret("abcde") == "********"
     assert "abc" not in mask_secret("abc")
     assert mask_secret("abcdefgh", visible=0) == "********"
+
+
+def test_is_valid_key():
+    from app.services.credentials import is_valid_key
+    assert is_valid_key(KEY)
+    assert not is_valid_key("")
+    assert not is_valid_key("non-una-chiave")
