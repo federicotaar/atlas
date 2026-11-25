@@ -80,3 +80,9 @@ def test_end_of_day_is_last_microsecond():
     assert out.tzinfo is timezone.utc
     tz = timezone(timedelta(hours=1))
     assert end_of_day(datetime(2026, 11, 19, 8, 30, tzinfo=tz)).tzinfo is tz
+
+
+def test_month_start_resets_day_and_time():
+    from app.services.dates import month_start
+    assert month_start(datetime(2026, 11, 30, 23, 59)) == datetime(2026, 11, 1, tzinfo=timezone.utc)
+    assert month_start(datetime(2026, 1, 1)) == datetime(2026, 1, 1, tzinfo=timezone.utc)
