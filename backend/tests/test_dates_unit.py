@@ -113,3 +113,20 @@ def test_is_same_day_compares_utc_dates():
     assert not is_same_day(datetime(2026, 11, 19, 23, 59), datetime(2026, 11, 20, 0, 0))
     late = datetime(2026, 11, 19, 23, 30, tzinfo=timezone(timedelta(hours=-3)))
     assert is_same_day(late, datetime(2026, 11, 20, 2, 30))
+
+
+def test_humanize_age_buckets():
+    from app.services.dates import humanize_age
+    now = datetime(2026, 11, 25, 15, 0)
+    assert humanize_age(datetime(2026, 11, 25, 1, 0), now) == "oggi"
+    assert humanize_age(datetime(2026, 11, 24, 23, 0), now) == "ieri"
+    assert humanize_age(datetime(2026, 11, 22), now) == "3 giorni fa"
+    assert humanize_age(datetime(2026, 11, 4), now) == "3 settimane fa"
+    assert humanize_age(datetime(2026, 8, 25), now) == "3 mesi fa"
+
+
+def test_humanize_age_future():
+    from app.services.dates import humanize_age
+    now = datetime(2026, 11, 25, 15, 0)
+    assert humanize_age(datetime(2026, 11, 26), now) == "domani"
+    assert humanize_age(datetime(2026, 11, 30), now) == "tra 5 giorni"
