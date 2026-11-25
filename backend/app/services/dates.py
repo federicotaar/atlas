@@ -78,3 +78,11 @@ def humanize_age(start: datetime, now: datetime) -> str:
     if days < 60:
         return f"{days // 7} settimane fa"
     return f"{days // 30} mesi fa"
+
+
+def iter_days(start: datetime, end: datetime) -> list[datetime]:
+    """Mezzanotte di ogni giorno tra start ed end inclusi; vuoto se end precede start."""
+    from datetime import timedelta
+    first, last = start_of_day(start), start_of_day(end)
+    count = (last - first).days
+    return [first + timedelta(days=i) for i in range(count + 1)] if count >= 0 else []
