@@ -60,6 +60,10 @@ class LocalHashEmbedder:
             return vec
         return [v / norm for v in vec]
 
+    def embed_many(self, texts: list[str]) -> list[list[float]]:
+        """Embedding di piu' testi, nello stesso ordine di input."""
+        return [self.embed(t) for t in texts]
+
 
 class OllamaEmbedder:
     name = "ollama"
