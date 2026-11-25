@@ -38,3 +38,8 @@ def to_iso_z(dt: datetime) -> str:
 def end_of_day(dt: datetime) -> datetime:
     """Ultimo istante (23:59:59.999999) del giorno di dt, nello stesso fuso."""
     return aware(dt).replace(hour=23, minute=59, second=59, microsecond=999999)
+
+
+def month_start(dt: datetime) -> datetime:
+    """Primo giorno del mese di dt alle 00:00, nello stesso fuso."""
+    return start_of_day(dt).replace(day=1)
