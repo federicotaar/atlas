@@ -71,3 +71,12 @@ def test_aware_does_not_mutate_input():
     naive = datetime(2026, 11, 19, 9, 0)
     aware(naive)
     assert naive.tzinfo is None
+
+
+def test_end_of_day_is_last_microsecond():
+    from app.services.dates import end_of_day
+    out = end_of_day(datetime(2026, 11, 19, 8, 30))
+    assert (out.hour, out.minute, out.second, out.microsecond) == (23, 59, 59, 999999)
+    assert out.tzinfo is timezone.utc
+    tz = timezone(timedelta(hours=1))
+    assert end_of_day(datetime(2026, 11, 19, 8, 30, tzinfo=tz)).tzinfo is tz
