@@ -49,3 +49,14 @@ def mask_secret(secret: str, visible: int = 4) -> str:
     if visible < 1 or len(secret) < visible + 2:
         return "*" * 8
     return "*" * 4 + secret[-visible:]
+
+
+def is_valid_key(key: str) -> bool:
+    """True se la chiave e' una chiave Fernet utilizzabile (nessuna eccezione)."""
+    if not key:
+        return False
+    try:
+        Fernet(key.encode())
+    except Exception:
+        return False
+    return True
