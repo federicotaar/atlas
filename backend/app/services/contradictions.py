@@ -126,3 +126,19 @@ def find_open_contradictions(db: Session, settings: Settings, user_id: uuid.UUID
             if conflict:
                 pairs.append((a, b, shared))
     return pairs
+
+
+def describe_conflict(a: str, b: str) -> str:
+    """Frase breve per la UI: quali valori divergono tra due memorie.
+
+    Ritorna stringa vuota se l'euristica non vede un conflitto."""
+    conflict, shared = is_possible_contradiction(a, b)
+    if not conflict:
+        return ""
+    labels = ("numeri", "giorni", "mesi")
+    for label, va, vb in zip(labels, _value_sets(a), _value_sets(b)):
+        if va and vb and va.isdisjoint(vb):
+            left = ", ".join(sorted(str(v) for v in va))
+            right = ", ".join(sorted(str(v) for v in vb))
+            return f"Su {', '.join(shared)} i {label} non coincidono: {left} contro {right}."
+    return ""
