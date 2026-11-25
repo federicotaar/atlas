@@ -103,3 +103,24 @@ def test_euclidean_distance():
     assert euclidean([1.0], [1.0]) == 0.0
     with pytest.raises(ValueError):
         euclidean([1.0], [1.0, 2.0])
+
+
+def test_top_k_orders_by_similarity():
+    from app.services.embeddings import top_k
+    emb = LocalHashEmbedder(256)
+    items = [("a", emb.embed("progetto atlas database postgres")),
+             ("b", emb.embed("ricetta della torta al cioccolato")),
+             ("c", emb.embed("progetto atlas server oracle"))]
+    ranked = top_k(emb.embed("database del progetto atlas"), items, k=2)
+    assert [cid for cid, _ in ranked][0] == "a"
+    assert len(ranked) == 2
+    assert ranked[0][1] >= ranked[1][1]
+
+
+def test_top_k_edge_cases():
+    from app.services.embeddings import top_k
+    assert top_k([1.0, 0.0], [("x", [1.0, 0.0])], k=0) == []
+    assert top_k([1.0, 0.0], [("x", [0.0, 1.0])]) == []
+    assert top_k([1.0, 0.0], [("x", [1.0, 1.0])], min_score=0.9) == []
+    tie = top_k([1.0, 0.0], [("b", [1.0, 0.0]), ("a", [1.0, 0.0])])
+    assert [cid for cid, _ in tie] == ["a", "b"]
