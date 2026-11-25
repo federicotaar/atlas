@@ -84,6 +84,11 @@ class OllamaEmbedder:
             raise ModelUnavailable(f"Ollama embeddings non disponibili: {exc}") from exc
 
 
+def dot(a: list[float], b: list[float]) -> float:
+    """Prodotto scalare; per vettori gia' normalizzati coincide con il coseno."""
+    return sum(x * y for x, y in zip(a, b))
+
+
 def cosine(a: list[float], b: list[float]) -> float:
     dot = sum(x * y for x, y in zip(a, b))
     na = math.sqrt(sum(x * x for x in a))
