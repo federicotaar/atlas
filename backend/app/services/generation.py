@@ -4,12 +4,35 @@ ExtractiveGenerator risponde componendo le memorie recuperate, con citazioni.
 Non inventa: senza memorie pertinenti il Core risponde "Non lo so" prima di
 chiamare qualsiasi generatore.
 """
+import re
 from typing import Protocol
 
 import httpx
 
 from ..config import Settings
 from .embeddings import ModelUnavailable
+
+
+_CITATION = re.compile(r"\[M(\d+)\]")
+
+
+def cited_indexes(answer: str) -> list[int]:
+    """Numeri delle memorie citate come [M1], [M2], in ordine di prima comparsa."""
+    seen: list[int] = []
+    for match in _CITATION.finditer(answer):
+        n = int(match.group(1))
+        if n not in seen:
+            seen.append(n)
+    return seen
+
+
+def strip_unknown_citations(answer: str, memory_count: int) -> str:
+    """Toglie le citazioni a memorie che non esistono (es. [M9] con 3 memorie):
+    un modello puo' inventarle e l'interfaccia non deve mostrare fonti false."""
+    def keep(match: re.Match) -> str:
+        return match.group(0) if 1 <= int(match.group(1)) <= memory_count else ""
+    cleaned = _CITATION.sub(keep, answer)
+    return re.sub(r"[ \t]{2,}", " ", cleaned).replace(" .", ".").replace(" ,", ",").strip()
 
 
 class Generator(Protocol):
