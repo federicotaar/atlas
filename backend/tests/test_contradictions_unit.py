@@ -78,3 +78,17 @@ def test_decimal_comma_values():
 def test_shared_terms_are_sorted():
     _, shared = is_possible_contradiction("Il bonifico affitto costa 500 euro", "Il bonifico affitto costa 600 euro")
     assert shared == sorted(shared) and "affitto" in shared
+
+
+def test_describe_conflict_names_the_values():
+    from app.services.contradictions import describe_conflict
+    out = describe_conflict("La riunione settimanale del team e al lunedi",
+                            "La riunione settimanale del team e al giovedi")
+    assert "monday" in out and "thursday" in out
+    assert out.startswith("Su ")
+
+
+def test_describe_conflict_empty_when_consistent():
+    from app.services.contradictions import describe_conflict
+    assert describe_conflict("Il server ha 4 CPU virtuali", "Il server ha 4 CPU virtuali") == ""
+    assert describe_conflict("Pizza margherita", "Torta cioccolato") == ""
