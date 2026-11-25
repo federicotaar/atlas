@@ -124,3 +124,10 @@ def test_top_k_edge_cases():
     assert top_k([1.0, 0.0], [("x", [1.0, 1.0])], min_score=0.9) == []
     tie = top_k([1.0, 0.0], [("b", [1.0, 0.0]), ("a", [1.0, 0.0])])
     assert [cid for cid, _ in tie] == ["a", "b"]
+
+
+def test_embed_many_matches_single_calls():
+    emb = LocalHashEmbedder(32)
+    texts = ["uno", "due tre", ""]
+    assert emb.embed_many(texts) == [emb.embed(t) for t in texts]
+    assert emb.embed_many([]) == []
