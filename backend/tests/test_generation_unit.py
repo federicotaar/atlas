@@ -84,3 +84,16 @@ def test_ollama_missing_response_key_is_unavailable(monkeypatch):
     monkeypatch.setattr(generation.httpx, "post", lambda *a, **k: Resp())
     with pytest.raises(ModelUnavailable):
         generation.OllamaGenerator("http://x", "m").answer("q", [])
+
+
+def test_cited_indexes_dedupes_in_order():
+    from app.services.generation import cited_indexes
+    assert cited_indexes("Usa PostgreSQL [M2] su Oracle [M1] [M2].") == [2, 1]
+    assert cited_indexes("nessuna fonte") == []
+
+
+def test_strip_unknown_citations_keeps_valid_ones():
+    from app.services.generation import strip_unknown_citations
+    out = strip_unknown_citations("Postgres [M1] e Oracle [M7].", 2)
+    assert "[M1]" in out and "[M7]" not in out
+    assert strip_unknown_citations("Testo [M0] [M3]", 2) == "Testo"
