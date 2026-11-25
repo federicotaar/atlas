@@ -97,3 +97,19 @@ def test_strip_unknown_citations_keeps_valid_ones():
     out = strip_unknown_citations("Postgres [M1] e Oracle [M7].", 2)
     assert "[M1]" in out and "[M7]" not in out
     assert strip_unknown_citations("Testo [M0] [M3]", 2) == "Testo"
+
+
+def test_ollama_answer_drops_invented_citations(monkeypatch):
+    import httpx
+    from app.services.generation import OllamaGenerator
+
+    class Resp:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {"response": "Usa PostgreSQL [M1] e Redis [M5]."}
+
+    monkeypatch.setattr(httpx, "post", lambda *a, **k: Resp())
+    out = OllamaGenerator("http://x", "m").answer("db?", [{"content": "Usa PostgreSQL."}])
+    assert "[M1]" in out and "[M5]" not in out
