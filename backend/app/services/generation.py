@@ -76,7 +76,7 @@ class OllamaGenerator:
                 timeout=self.timeout,
             )
             resp.raise_for_status()
-            return str(resp.json()["response"]).strip()
+            return strip_unknown_citations(str(resp.json()["response"]).strip(), len(memories))
         except Exception as exc:
             raise ModelUnavailable(f"Ollama generate non disponibile: {exc}") from exc
 
