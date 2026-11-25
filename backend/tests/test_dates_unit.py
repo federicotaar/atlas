@@ -86,3 +86,22 @@ def test_month_start_resets_day_and_time():
     from app.services.dates import month_start
     assert month_start(datetime(2026, 11, 30, 23, 59)) == datetime(2026, 11, 1, tzinfo=timezone.utc)
     assert month_start(datetime(2026, 1, 1)) == datetime(2026, 1, 1, tzinfo=timezone.utc)
+
+
+def test_parse_iso_z_round_trip():
+    from app.services.dates import parse_iso_z, to_iso_z
+    original = datetime(2026, 11, 19, 12, 5, 9, tzinfo=timezone.utc)
+    assert parse_iso_z(to_iso_z(original)) == original
+
+
+def test_parse_iso_z_accepts_offsets_and_naive_text():
+    from app.services.dates import parse_iso_z
+    assert parse_iso_z("2026-11-19T12:00:00+02:00").utcoffset() == timedelta(hours=2)
+    assert parse_iso_z("2026-11-19T12:00:00").tzinfo is timezone.utc
+
+
+def test_parse_iso_z_rejects_garbage():
+    import pytest
+    from app.services.dates import parse_iso_z
+    with pytest.raises(ValueError):
+        parse_iso_z("domani")
