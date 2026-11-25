@@ -86,3 +86,11 @@ def test_cosine_basic_cases():
 def test_word_order_matters_via_bigrams():
     emb = LocalHashEmbedder(256)
     assert emb.embed("cane morde uomo") != emb.embed("uomo morde cane")
+
+
+def test_dot_equals_cosine_for_normalized_vectors():
+    from app.services.embeddings import cosine, dot
+    emb = LocalHashEmbedder(128)
+    a, b = emb.embed("memoria di prova uno"), emb.embed("memoria di prova due")
+    assert abs(dot(a, b) - cosine(a, b)) < 1e-9
+    assert dot([1.0, 2.0], [3.0, 4.0]) == 11.0
