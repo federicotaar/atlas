@@ -98,6 +98,13 @@ def cosine(a: list[float], b: list[float]) -> float:
     return dot / (na * nb)
 
 
+def euclidean(a: list[float], b: list[float]) -> float:
+    """Distanza euclidea tra due vettori della stessa dimensione."""
+    if len(a) != len(b):
+        raise ValueError("i vettori devono avere la stessa dimensione")
+    return math.sqrt(sum((x - y) ** 2 for x, y in zip(a, b)))
+
+
 def build_embedder(settings: Settings) -> EmbeddingProvider:
     if settings.embed_provider == "ollama":
         return OllamaEmbedder(settings.ollama_base_url, settings.ollama_embed_model, settings.model_call_timeout_s)
