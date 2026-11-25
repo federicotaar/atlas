@@ -43,3 +43,13 @@ def end_of_day(dt: datetime) -> datetime:
 def month_start(dt: datetime) -> datetime:
     """Primo giorno del mese di dt alle 00:00, nello stesso fuso."""
     return start_of_day(dt).replace(day=1)
+
+
+def parse_iso_z(value: str) -> datetime:
+    """Legge un ISO 8601 (anche con suffisso Z) e ritorna un datetime aware.
+
+    Solleva ValueError su testo non valido, come datetime.fromisoformat."""
+    text = value.strip()
+    if text.endswith(("Z", "z")):
+        text = text[:-1] + "+00:00"
+    return aware(datetime.fromisoformat(text))
