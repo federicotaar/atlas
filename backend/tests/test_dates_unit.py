@@ -105,3 +105,11 @@ def test_parse_iso_z_rejects_garbage():
     from app.services.dates import parse_iso_z
     with pytest.raises(ValueError):
         parse_iso_z("domani")
+
+
+def test_is_same_day_compares_utc_dates():
+    from app.services.dates import is_same_day
+    assert is_same_day(datetime(2026, 11, 19, 0, 0), datetime(2026, 11, 19, 23, 59))
+    assert not is_same_day(datetime(2026, 11, 19, 23, 59), datetime(2026, 11, 20, 0, 0))
+    late = datetime(2026, 11, 19, 23, 30, tzinfo=timezone(timedelta(hours=-3)))
+    assert is_same_day(late, datetime(2026, 11, 20, 2, 30))
