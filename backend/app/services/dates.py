@@ -58,3 +58,23 @@ def parse_iso_z(value: str) -> datetime:
 def is_same_day(a: datetime, b: datetime) -> bool:
     """True se i due datetime cadono nello stesso giorno UTC (naive = UTC)."""
     return aware(a).astimezone(timezone.utc).date() == aware(b).astimezone(timezone.utc).date()
+
+
+def humanize_age(start: datetime, now: datetime) -> str:
+    """Eta' in italiano: 'oggi', 'ieri', '3 giorni fa', '2 settimane fa'.
+
+    Per date nel futuro ritorna 'tra N giorni' ('domani' per un solo giorno)."""
+    days = days_between(start_of_day(start), start_of_day(now))
+    if days == 0:
+        return "oggi"
+    if days == 1:
+        return "ieri"
+    if days == -1:
+        return "domani"
+    if days < 0:
+        return f"tra {-days} giorni"
+    if days < 14:
+        return f"{days} giorni fa"
+    if days < 60:
+        return f"{days // 7} settimane fa"
+    return f"{days // 30} mesi fa"
