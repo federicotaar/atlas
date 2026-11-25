@@ -130,3 +130,16 @@ def test_humanize_age_future():
     now = datetime(2026, 11, 25, 15, 0)
     assert humanize_age(datetime(2026, 11, 26), now) == "domani"
     assert humanize_age(datetime(2026, 11, 30), now) == "tra 5 giorni"
+
+
+def test_iter_days_inclusive_range():
+    from app.services.dates import iter_days
+    days = iter_days(datetime(2026, 11, 28, 18, 0), datetime(2026, 12, 1, 2, 0))
+    assert [d.day for d in days] == [28, 29, 30, 1]
+    assert all(d.hour == 0 for d in days)
+
+
+def test_iter_days_single_and_reversed():
+    from app.services.dates import iter_days
+    assert len(iter_days(datetime(2026, 11, 28), datetime(2026, 11, 28, 23))) == 1
+    assert iter_days(datetime(2026, 11, 29), datetime(2026, 11, 28)) == []
