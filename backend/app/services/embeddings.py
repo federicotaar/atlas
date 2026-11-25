@@ -109,3 +109,15 @@ def build_embedder(settings: Settings) -> EmbeddingProvider:
     if settings.embed_provider == "ollama":
         return OllamaEmbedder(settings.ollama_base_url, settings.ollama_embed_model, settings.model_call_timeout_s)
     return LocalHashEmbedder(settings.embedding_dim)
+
+
+def top_k(query: list[float], candidates: list[tuple[str, list[float]]], k: int = 5,
+          min_score: float = 0.0) -> list[tuple[str, float]]:
+    """I k candidati (id, vettore) piu' simili alla query per coseno, in ordine
+    decrescente. Scarta chi sta sotto min_score; parita' risolte per id."""
+    if k < 1:
+        return []
+    scored = [(cid, cosine(query, vec)) for cid, vec in candidates]
+    scored = [(cid, s) for cid, s in scored if s >= min_score and s > 0.0]
+    scored.sort(key=lambda item: (-item[1], item[0]))
+    return scored[:k]
