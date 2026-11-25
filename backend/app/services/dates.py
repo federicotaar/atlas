@@ -33,3 +33,8 @@ def to_iso_z(dt: datetime) -> str:
     """ISO 8601 in UTC con suffisso Z, senza microsecondi."""
     from datetime import timezone as _tz
     return aware(dt).astimezone(_tz.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def end_of_day(dt: datetime) -> datetime:
+    """Ultimo istante (23:59:59.999999) del giorno di dt, nello stesso fuso."""
+    return aware(dt).replace(hour=23, minute=59, second=59, microsecond=999999)
