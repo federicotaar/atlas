@@ -12,7 +12,6 @@ import httpx
 from ..config import Settings
 from .embeddings import ModelUnavailable
 
-
 _CITATION = re.compile(r"\[M(\d+)\]")
 
 
