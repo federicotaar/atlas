@@ -101,6 +101,7 @@ def test_strip_unknown_citations_keeps_valid_ones():
 
 def test_ollama_answer_drops_invented_citations(monkeypatch):
     import httpx
+
     from app.services.generation import OllamaGenerator
 
     class Resp:
