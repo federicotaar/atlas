@@ -98,6 +98,7 @@ def test_dot_equals_cosine_for_normalized_vectors():
 
 def test_euclidean_distance():
     import pytest
+
     from app.services.embeddings import euclidean
     assert euclidean([0.0, 0.0], [3.0, 4.0]) == 5.0
     assert euclidean([1.0], [1.0]) == 0.0
