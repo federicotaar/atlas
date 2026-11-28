@@ -102,6 +102,7 @@ def test_parse_iso_z_accepts_offsets_and_naive_text():
 
 def test_parse_iso_z_rejects_garbage():
     import pytest
+
     from app.services.dates import parse_iso_z
     with pytest.raises(ValueError):
         parse_iso_z("domani")
